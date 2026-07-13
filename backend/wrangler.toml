@@ -1,0 +1,11 @@
+name = "gemglasses-backend"
+main = "src/index.ts"
+compatibility_date = "2024-09-09"
+
+# Secrets (set with `wrangler secret put <NAME>`), never committed:
+#   GEMINI_API_KEY    — Google AI Studio API key
+#   TOKEN_APP_SECRET  — shared secret the Android app sends in X-App-Secret
+#
+# For local dev, create backend/.dev.vars (gitignored):
+#   GEMINI_API_KEY="..."
+#   TOKEN_APP_SECRET="dev-secret"

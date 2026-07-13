@@ -1,0 +1,31 @@
+# Android / Gradle
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+app/build/
+build/
+
+# Secrets — never commit
+*.keystore
+*.jks
+.dev.vars
+google-services.json
+
+# Node / Cloudflare (backend)
+backend/node_modules/
+backend/.wrangler/
+backend/dist/
+node_modules/
+
+# Keep the Gradle wrapper jar tracked (do not ignore it)
+!gradle/wrapper/gradle-wrapper.jar
+
+# OMC operational state (not part of the project)
+.omc/
