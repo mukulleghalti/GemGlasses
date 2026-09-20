@@ -113,7 +113,8 @@ dependencies {
 
     // Real Meta DAT SDK linkage
     if (useRealGlasses) {
-        implementation(libs.meta.wearables.dat)
+        implementation("com.meta.wearable:mwdat-core:0.9.0")
+                implementation("com.meta.wearable:mwdat-camera:0.9.0")
     }
 
     testImplementation(libs.junit)
