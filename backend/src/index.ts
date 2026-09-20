@@ -17,7 +17,6 @@ export interface Env {
 }
 
 const GEMINI_API = "https://generativelanguage.googleapis.com/v1beta";
-const LIVE_MODEL = "models/gemini-2.0-flash-live-001";
 const GROUNDING_MODEL = "gemini-2.5-flash";
 
 export default {
@@ -94,10 +93,6 @@ async function mintToken(env: Env): Promise<Response> {
     expireTime: new Date(now + 30 * 60_000).toISOString(),
     newSessionExpireTime: new Date(now + 2 * 60_000).toISOString(),
     uses: 1,
-    liveConnectConstraints: {
-      model: LIVE_MODEL,
-      config: { responseModalities: ["AUDIO"] },
-    },
   };
 
   const res = await fetch(
