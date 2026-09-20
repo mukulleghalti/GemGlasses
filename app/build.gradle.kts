@@ -82,10 +82,13 @@ dependencies {
 
     implementation("com.facebook.soloader:soloader:0.10.5")
     implementation("com.google.code.gson:gson:2.10.1")
-
+    implementation("com.facebook.infer.annotation:infer-annotation:0.18.0")
+    implementation("com.facebook.fresco:fbcore:2.6.0") // Provides Facebook LoggingDelegates & debug loggers
     // HARD-PLACED META SDK (Points to your local app/libs folder)
-    implementation(files("libs/mwdat-core-0.9.0.aar"))
-    implementation(files("libs/mwdat-camera-0.9.0.aar"))
+    // implementation(files("libs/mwdat-core-0.9.0.aar"))
+    // implementation(files("libs/mwdat-camera-0.9.0.aar"))
+    implementation("com.meta.wearable:mwdat-core:0.9.0")
+    implementation("com.meta.wearable:mwdat-camera:0.9.0")
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
