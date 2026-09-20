@@ -128,3 +128,9 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
                     freeCompilerArgs.add("-Xskip-metadata-version-check")
         }
 }
+
+// This specifically helps Hilt/KSP handle the Meta SDK metadata
+ksp {
+        arg("error_prone_annotations", "true")
+}
+}
