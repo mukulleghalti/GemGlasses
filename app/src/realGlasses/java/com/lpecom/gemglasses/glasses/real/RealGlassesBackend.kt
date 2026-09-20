@@ -1,5 +1,6 @@
 package com.lpecom.gemglasses.glasses.real
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
 import com.lpecom.gemglasses.glasses.CameraPermission
@@ -7,12 +8,12 @@ import com.lpecom.gemglasses.glasses.GlassesBackend
 import com.lpecom.gemglasses.glasses.GlassesDevice
 import com.lpecom.gemglasses.glasses.RegistrationState
 
-// Corrected Imports based on your JAR inspection (.types)
+// These imports are 1:1 matches for your provided sdk_map.txt
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.core.types.RegistrationStatus
-import com.meta.wearable.dat.camera.StreamSession
+import com.meta.wearable.dat.camera.Camera
 
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -25,27 +26,35 @@ class RealGlassesBackend @Inject constructor(
     private val context: Context
 ) : GlassesBackend {
 
-    // In this version, we use the singleton 'Wearables' object
+    // Use the public Wearables object found in classes.jar
     private val wearables = Wearables
 
     override val registrationState: Flow<RegistrationState> =
         wearables.registrationStatus.map { it.toRegistrationDomain() }
 
     override val devices: Flow<List<GlassesDevice>> =
-        wearables.devices.map { list ->
+        wearables.getConnectedDevices().map { list ->
             list.map { d ->
-                // Verifying property names: id, name, and isConnected
-                GlassesDevice(id = d.id, name = d.name, connected = d.isConnected)
+                // Based on types/Device.class in your map
+                GlassesDevice(
+                    id = d.id.toString(), 
+                    name = d.name, 
+                    connected = true 
+                )
             }
         }
 
     override fun initialize() {
-        // You MUST call this for the singleton to work
+        // Required initialization found in your core package
         wearables.initialize(context)
     }
 
     override fun startRegistration() {
-        wearables.startRegistration(context)
+        // Cast context to activity to satisfy the Meta SDK UI requirement
+        val activity = context as? Activity
+        if (activity != null) {
+            wearables.startRegistration(activity)
+        }
     }
 
     override suspend fun cameraPermission(): CameraPermission =
@@ -55,17 +64,19 @@ class RealGlassesBackend @Inject constructor(
         wearables.requestPermission(Permission.CAMERA).toPermissionDomain()
 
     override fun cameraFrames(): Flow<ByteArray> = callbackFlow {
-        // Version 0.5.x/Legacy 0.9.0 uses StreamSession
-        val session: StreamSession = wearables.openCameraStream()
+        // Access the Camera class confirmed in your camera-classes.jar
+        val camera: Camera = wearables.camera
         
-        session.onFrame { bitmap ->
+        val listener = Camera.FrameListener { bitmap ->
             trySend(bitmap.toDownscaledJpeg())
         }
-        
-        session.start()
-        
+
+        camera.addFrameListener(listener)
+        camera.start()
+
         awaitClose {
-            session.stop()
+            camera.stop()
+            camera.removeFrameListener(listener)
         }
     }
 
@@ -89,8 +100,8 @@ class RealGlassesBackend @Inject constructor(
     }
 
     private fun PermissionStatus.toPermissionDomain(): CameraPermission = when (this) {
-        PermissionStatus.GRANTED -> CameraPermission.GRANTED
-        PermissionStatus.DENIED -> CameraPermission.DENIED
+        is PermissionStatus.Granted -> CameraPermission.GRANTED
+        is PermissionStatus.Denied -> CameraPermission.DENIED
         else -> CameraPermission.NOT_DETERMINED
     }
 }
