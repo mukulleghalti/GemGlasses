@@ -6,11 +6,10 @@ import com.lpecom.gemglasses.glasses.CameraPermission
 import com.lpecom.gemglasses.glasses.GlassesBackend
 import com.lpecom.gemglasses.glasses.GlassesDevice
 import com.lpecom.gemglasses.glasses.RegistrationState
-// Updated 0.9.0 Package Paths
-import com.meta.wearable.mwdat.core.Wearables
-import com.meta.wearable.mwdat.core.Permission
-import com.meta.wearable.mwdat.core.PermissionStatus
-import com.meta.wearable.mwdat.core.RegistrationStatus
+import com.meta.wearable.mwdat.Wearables
+import com.meta.wearable.mwdat.Permission
+import com.meta.wearable.mwdat.PermissionStatus
+import com.meta.wearable.mwdat.RegistrationStatus
 import com.meta.wearable.mwdat.camera.CameraClient
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -20,90 +19,91 @@ import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 
 class RealGlassesBackend @Inject constructor(
-        private val context: Context
+    private val context: Context
 ) : GlassesBackend {
 
-        // In 0.9.0, we use an instance of the Wearables SDK
-            private val wearables = Wearables.getInstance(context)
+    // 0.9.0 requires an instance via getInstance()
+    private val wearables = Wearables.getInstance(context)
 
-                override val registrationState: Flow<RegistrationState> =
-                        wearables.registrationStatus.map { it.toRegistrationDomain() }
+    override val registrationState: Flow<RegistrationState> =
+        wearables.registrationStatus.map { it.toRegistrationDomain() }
 
-                            override val devices: Flow<List<GlassesDevice>> =
-                                    wearables.getConnectedDevices().map { list ->
-                                                list.map { d ->
-                                                                GlassesDevice(id = d.id, name = d.name, connected = true)
-                                                                            }
-                                                                                    }
+    override val devices: Flow<List<GlassesDevice>> =
+        wearables.getConnectedDevices().map { list ->
+            list.map { d ->
+                GlassesDevice(id = d.id, name = d.name, connected = true)
+            }
+        }
 
-                                                                                        override fun initialize() {
-                                                                                                    // Initialization is handled by getInstance
-                                                                                        }
+    override fun initialize() {
+        // Initialization is handled internally by Wearables.getInstance()
+    }
 
-                                                                                            override fun startRegistration() {
-                                                                                                        wearables.requestRegistration()
-                                                                                            }
+    override fun startRegistration() {
+        // Triggers the Meta View app registration flow
+        wearables.requestRegistration()
+    }
 
-                                                                                                override suspend fun cameraPermission(): CameraPermission =
-                                                                                                        wearables.checkPermissionStatus(Permission.CAMERA).toPermissionDomain()
+    override suspend fun cameraPermission(): CameraPermission =
+        wearables.checkPermissionStatus(Permission.CAMERA).toPermissionDomain()
 
-                                                                                                            override suspend fun requestCameraPermission(): CameraPermission =
-                                                                                                                    wearables.requestPermission(Permission.CAMERA).toPermissionDomain()
+    override suspend fun requestCameraPermission(): CameraPermission =
+        wearables.requestPermission(Permission.CAMERA).toPermissionDomain()
 
-                                                                                                                        override fun cameraFrames(): Flow<ByteArray> = callbackFlow {
-                                                                                                                                    // 0.9.0 uses a CameraClient obtained from the wearables instance
-                                                                                                                                            val cameraClient = wearables.createCameraClient()
-                                                                                                                                                    
-                                                                                                                                                            val listener = CameraClient.FrameListener { bitmap ->
-                                                                                                                                                                        trySend(bitmap.toDownscaledJpeg())
-                                                                                                                                                                                }
+    override fun cameraFrames(): Flow<ByteArray> = callbackFlow {
+        // 0.9.0 uses CameraClient for frame streaming
+        val cameraClient = wearables.createCameraClient()
+        
+        val listener = CameraClient.FrameListener { bitmap ->
+            trySend(bitmap.toDownscaledJpeg())
+        }
 
-                                                                                                                                                                                        cameraClient.addFrameListener(listener)
-                                                                                                                                                                                                cameraClient.startStreaming()
+        cameraClient.addFrameListener(listener)
+        cameraClient.startStreaming()
 
-                                                                                                                                                                                                        awaitClose {
-                                                                                                                                                                                                                        cameraClient.stopStreaming()
-                                                                                                                                                                                                                                    cameraClient.removeFrameListener(listener)
-                                                                                                                                                                                                                                                cameraClient.close()
-                                                                                                                                                                                                        }
-                                                                                                                        }
+        awaitClose {
+            cameraClient.stopStreaming()
+            cameraClient.removeFrameListener(listener)
+            cameraClient.close()
+        }
+    }
 
-                                                                                                                            private fun Bitmap.toDownscaledJpeg(): ByteArray {
-                                                                                                                                        val longest = maxOf(width, height)
-                                                                                                                                                val scaled = if (longest > MAX_SIDE) {
-                                                                                                                                                                val ratio = MAX_SIDE.toFloat() / longest
-                                                                                                                                                                            Bitmap.createScaledBitmap(
-                                                                                                                                                                                                this,
-                                                                                                                                                                                                                (width * ratio).toInt(),
-                                                                                                                                                                                                                                (height * ratio).toInt(),
-                                                                                                                                                                                                                                                true,
-                                                                                                                                                                            )
-                                                                                                                                                } else {
-                                                                                                                                                                this
-                                                                                                                                                }
-                                                                                                                                                        return ByteArrayOutputStream().use { out ->
-                                                                                                                                                                    scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
-                                                                                                                                                                                if (scaled !== this) scaled.recycle()
-                                                                                                                                                                                            out.toByteArray()
-                                                                                                                                                        }
-                                                                                                                            }
+    private fun Bitmap.toDownscaledJpeg(): ByteArray {
+        val longest = maxOf(width, height)
+        val scaled = if (longest > MAX_SIDE) {
+            val ratio = MAX_SIDE.toFloat() / longest
+            Bitmap.createScaledBitmap(
+                this,
+                (width * ratio).toInt(),
+                (height * ratio).toInt(),
+                true,
+            )
+        } else {
+            this
+        }
+        return ByteArrayOutputStream().use { out ->
+            scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+            if (scaled !== this) scaled.recycle()
+            out.toByteArray()
+        }
+    }
 
-                                                                                                                                // Renamed to avoid "Overload resolution ambiguity"
-                                                                                                                                    private fun RegistrationStatus.toRegistrationDomain(): RegistrationState = when (this) {
-                                                                                                                                                RegistrationStatus.REGISTERED -> RegistrationState.REGISTERED
-                                                                                                                                                        RegistrationStatus.REGISTERING -> RegistrationState.REGISTERING
-                                                                                                                                                                else -> RegistrationState.NOT_REGISTERED
-                                                                                                                                    }
+    // Explicitly named to prevent Overload Resolution Ambiguity
+    private fun RegistrationStatus.toRegistrationDomain(): RegistrationState = when (this) {
+        RegistrationStatus.REGISTERED -> RegistrationState.REGISTERED
+        RegistrationStatus.REGISTERING -> RegistrationState.REGISTERING
+        else -> RegistrationState.NOT_REGISTERED
+    }
 
-                                                                                                                                        // Renamed to avoid "Overload resolution ambiguity"
-                                                                                                                                            private fun PermissionStatus.toPermissionDomain(): CameraPermission = when (this) {
-                                                                                                                                                        PermissionStatus.GRANTED -> CameraPermission.GRANTED
-                                                                                                                                                                PermissionStatus.DENIED -> CameraPermission.DENIED
-                                                                                                                                                                        else -> CameraPermission.NOT_DETERMINED
-                                                                                                                                            }
+    // Explicitly named to prevent Overload Resolution Ambiguity
+    private fun PermissionStatus.toPermissionDomain(): CameraPermission = when (this) {
+        PermissionStatus.GRANTED -> CameraPermission.GRANTED
+        PermissionStatus.DENIED -> CameraPermission.DENIED
+        else -> CameraPermission.NOT_DETERMINED
+    }
 
-                                                                                                                                                private companion object {
-                                                                                                                                                            const val MAX_SIDE = 768
-                                                                                                                                                                    const val JPEG_QUALITY = 70
-                                                                                                                                                }
-}                                                         
+    private companion object {
+        const val MAX_SIDE = 768
+        const val JPEG_QUALITY = 70
+    }
+}
