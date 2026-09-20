@@ -16,6 +16,8 @@ jobs:
       - name: Setup
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "github_actor=${{ github.actor }}" >> local.properties
+          echo "github_token=${{ secrets.GH_PACKAGES_TOKEN }}" >> local.properties
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> local.properties
           echo "TOKEN_APP_SECRET=${{ secrets.TOKEN_APP_SECRET }}" >> local.properties
           echo "META_APPLICATION_ID=${{ secrets.META_APP_ID }}" >> local.properties
