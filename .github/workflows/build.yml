@@ -23,7 +23,7 @@ jobs:
           echo "GEMGLASSES_BACKEND_URL=${{ secrets.GEMGLASSES_BACKEND_URL }}" >> local.properties
       - run: chmod +x gradlew
       - name: Build
-        run: ./gradlew clean assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
