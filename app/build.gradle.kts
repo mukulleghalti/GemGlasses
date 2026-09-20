@@ -103,7 +103,7 @@ dependencies {
     implementation("com.facebook.infer.annotation:infer-annotation:0.18.0")
     implementation("com.facebook.fresco:fbcore:2.6.0")
 
-    ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.2.0")
+    ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.2.20")
 
     // Meta Wearables DAT SDK 0.9.0 (Pulled automatically from Maven Central via version catalog)
     implementation(libs.mwdat.core)
