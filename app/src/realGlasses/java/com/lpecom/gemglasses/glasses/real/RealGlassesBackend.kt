@@ -2,66 +2,72 @@ package com.lpecom.gemglasses.glasses.real
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.util.Log
 import com.lpecom.gemglasses.glasses.CameraPermission
 import com.lpecom.gemglasses.glasses.GlassesBackend
 import com.lpecom.gemglasses.glasses.GlassesDevice
 import com.lpecom.gemglasses.glasses.RegistrationState
-import com.meta.wearable.mwdat.Wearables
-import com.meta.wearable.mwdat.Permission
-import com.meta.wearable.mwdat.RegistrationStatus
-import com.meta.wearable.mwdat.StreamSession
+import com.meta.wearable.mwdat.core.Wearables
+import com.meta.wearable.mwdat.core.Permission
+import com.meta.wearable.mwdat.core.PermissionStatus
+import com.meta.wearable.mwdat.core.RegistrationStatus
+import com.meta.wearable.mwdat.camera.CameraClient
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import java.io.ByteArrayOutputStream
+import javax.inject.Inject
 
-/**
- * Real integration with the Meta Wearables Device Access Toolkit.
- *
- * Compiled only when the DAT SDK is on the classpath (see
- * `settings.gradle.kts` + `gemglasses.useRealGlasses`). Instantiated reflectively
- * by the DI layer so `src/main` never hard-references the SDK. The method bodies
- * follow the DAT surface described in the Meta Wearables developer docs; verify
- * against your installed SDK version, as the API is still evolving.
- */
-@Suppress("unused")
-class RealGlassesBackend(private val context: Context) : GlassesBackend {
+class RealGlassesBackend @Inject constructor(
+    private val context: Context
+) : GlassesBackend {
+
+    // In 0.9.0, we use an instance of the Wearables SDK
+    private val wearables = Wearables.getInstance(context)
 
     override val registrationState: Flow<RegistrationState> =
-        Wearables.registrationState.map { it.toDomain() }
+        wearables.registrationStatus.map { it.toDomain() }
 
     override val devices: Flow<List<GlassesDevice>> =
-        Wearables.devices.map { list ->
+        wearables.getConnectedDevices().map { list ->
             list.map { d ->
-                GlassesDevice(id = d.id, name = d.name, connected = d.isConnected)
+                GlassesDevice(id = d.id, name = d.name, connected = true)
             }
         }
 
     override fun initialize() {
-        Wearables.initialize(context)
+        // Initialization is handled by getInstance, but we can warm it up here
     }
 
     override fun startRegistration() {
-        // Registration must be launched from an Activity; the app routes this
-        // through GlassesManager which holds the current Activity reference.
-        Wearables.startRegistration(context)
+        // In 0.9.0, registration is often handled by the Meta View app, 
+        // but the SDK provides a helper to trigger it.
+        wearables.requestRegistration()
     }
 
     override suspend fun cameraPermission(): CameraPermission =
-        Wearables.checkPermissionStatus(Permission.CAMERA).toDomain()
+        wearables.checkPermissionStatus(Permission.CAMERA).toDomain()
 
     override suspend fun requestCameraPermission(): CameraPermission =
-        Wearables.requestPermission(Permission.CAMERA).toDomain()
+        wearables.requestPermission(Permission.CAMERA).toDomain()
 
     override fun cameraFrames(): Flow<ByteArray> = callbackFlow {
-        val session: StreamSession = Wearables.openCameraStream()
-        session.onFrame { bitmap ->
+        // 0.9.0 uses a CameraClient obtained from the wearables instance
+        val cameraClient: CameraClient = wearables.createCameraClient()
+        
+        val listener = CameraClient.FrameListener { bitmap ->
             trySend(bitmap.toDownscaledJpeg())
         }
-        session.start()
-        awaitClose { session.stop() }
+
+        cameraClient.addFrameListener(listener)
+        cameraClient.startStreaming()
+
+        awaitClose {
+            cameraClient.stopStreaming()
+            cameraClient.removeFrameListener(listener)
+            cameraClient.close()
+        }
     }
 
     private fun Bitmap.toDownscaledJpeg(): ByteArray {
@@ -88,18 +94,16 @@ class RealGlassesBackend(private val context: Context) : GlassesBackend {
         RegistrationStatus.REGISTERED -> RegistrationState.REGISTERED
         RegistrationStatus.REGISTERING -> RegistrationState.REGISTERING
         RegistrationStatus.NOT_REGISTERED -> RegistrationState.NOT_REGISTERED
-        RegistrationStatus.REVOKED -> RegistrationState.REVOKED
         else -> RegistrationState.UNKNOWN
     }
 
-    private fun com.meta.wearable.mwdat.PermissionStatus.toDomain(): CameraPermission = when (this) {
-        com.meta.wearable.mwdat.PermissionStatus.GRANTED -> CameraPermission.GRANTED
-        com.meta.wearable.mwdat.PermissionStatus.DENIED -> CameraPermission.DENIED
+    private fun PermissionStatus.toDomain(): CameraPermission = when (this) {
+        PermissionStatus.GRANTED -> CameraPermission.GRANTED
+        PermissionStatus.DENIED -> CameraPermission.DENIED
         else -> CameraPermission.NOT_DETERMINED
     }
 
     private companion object {
-        const val TAG = "RealGlassesBackend"
         const val MAX_SIDE = 768
         const val JPEG_QUALITY = 70
     }
