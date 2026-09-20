@@ -3,6 +3,7 @@
  *
  *   POST /token   → mint a short-lived ephemeral token for the Gemini Live API
  *   POST /places  → proxy a grounded `generateContent` (Maps grounding) call
+ *   GET /         → diagnostics & health check
  *
  * The Google API key lives ONLY here (as a Worker secret) and never reaches the
  * Android client. Both endpoints are gated by a shared app secret.
@@ -10,9 +11,9 @@
 
 export interface Env {
   /** Google AI Studio API key. `wrangler secret put GEMINI_API_KEY` */
-  GEMINI_API_KEY: string;
+  GEMINI_API_KEY?: string;
   /** Shared secret the app sends in `X-App-Secret`. `wrangler secret put TOKEN_APP_SECRET` */
-  TOKEN_APP_SECRET: string;
+  TOKEN_APP_SECRET?: string;
 }
 
 const GEMINI_API = "https://generativelanguage.googleapis.com/v1beta";
@@ -22,30 +23,57 @@ const GROUNDING_MODEL = "gemini-2.5-flash";
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    // Normalize path (handles //token, /token/, etc.)
+    const pathname = url.pathname.replace(/\/+/g, "/").replace(/\/$/, "") || "/";
 
+    // 1. Health check & Diagnostics for browser visits
+    if (request.method === "GET") {
+      return json({
+        service: "GemGlasses Backend",
+        status: "online",
+        geminiApiKeyConfigured: Boolean(env.GEMINI_API_KEY && env.GEMINI_API_KEY.trim().length > 0),
+        tokenAppSecretConfigured: Boolean(env.TOKEN_APP_SECRET && env.TOKEN_APP_SECRET.trim().length > 0),
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // 2. Reject non-POST requests for API routes
     if (request.method !== "POST") {
       return json({ error: "method_not_allowed" }, 405);
     }
+
+    // 3. Authenticate with X-App-Secret
     if (!authorized(request, env)) {
+      console.warn(
+        `[Auth] 401 Unauthorized request to ${pathname}. Header present: ${Boolean(
+          request.headers.get("X-App-Secret")
+        )}`
+      );
       return json({ error: "unauthorized" }, 401);
     }
 
     try {
-      switch (url.pathname) {
+      switch (pathname) {
         case "/token":
           return await mintToken(env);
         case "/places":
           return await searchPlaces(request, env);
         default:
-          return json({ error: "not_found" }, 404);
+          console.warn(`[Route] 404 Not Found: ${pathname}`);
+          return json({ error: "not_found", requestedPath: pathname }, 404);
       }
     } catch (err) {
+      console.error(`[Internal Error] ${err}`);
       return json({ error: "internal", detail: String(err) }, 500);
     }
   },
 };
 
 function authorized(request: Request, env: Env): boolean {
+  if (!env.TOKEN_APP_SECRET) {
+    console.error("[Auth] TOKEN_APP_SECRET is not configured in Cloudflare Worker secrets!");
+    return false;
+  }
   const provided = request.headers.get("X-App-Secret") ?? "";
   return timingSafeEqual(provided, env.TOKEN_APP_SECRET);
 }
@@ -55,6 +83,11 @@ function authorized(request: Request, env: Env): boolean {
  * The token is single-session, short-TTL, and safe to hand to the client.
  */
 async function mintToken(env: Env): Promise<Response> {
+  if (!env.GEMINI_API_KEY) {
+    console.error("[Token] GEMINI_API_KEY is not configured in Cloudflare Worker secrets!");
+    return json({ error: "missing_gemini_api_key_in_worker" }, 502);
+  }
+
   const now = Date.now();
   const body = {
     // ~30 min window to start a session; a single new session may be opened.
@@ -73,17 +106,21 @@ async function mintToken(env: Env): Promise<Response> {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
-    },
+    }
   );
 
   if (!res.ok) {
-    return json({ error: "token_upstream", status: res.status, detail: await res.text() }, 502);
+    const errorText = await res.text();
+    console.error(`[Token Upstream Error] Status: ${res.status}, Body: ${errorText}`);
+    return json({ error: "token_upstream", status: res.status, detail: errorText }, 502);
   }
 
   const data = (await res.json()) as { name?: string; token?: string; expireTime?: string };
-  // The API returns the token as `name` (tokens/xxx) or `token` depending on version.
   const token = data.token ?? data.name;
-  if (!token) return json({ error: "token_missing" }, 502);
+  if (!token) {
+    console.error("[Token] Google returned 200 but token was missing from response");
+    return json({ error: "token_missing" }, 502);
+  }
 
   return json({ token, expiresAt: data.expireTime ?? body.expireTime });
 }
@@ -93,6 +130,10 @@ async function mintToken(env: Env): Promise<Response> {
  * cited places (title + uri) the app must display per Maps ToS.
  */
 async function searchPlaces(request: Request, env: Env): Promise<Response> {
+  if (!env.GEMINI_API_KEY) {
+    return json({ error: "missing_gemini_api_key_in_worker" }, 502);
+  }
+
   const { query, latitude, longitude } = (await request.json()) as {
     query?: string;
     latitude?: number;
@@ -126,11 +167,13 @@ async function searchPlaces(request: Request, env: Env): Promise<Response> {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
-    },
+    }
   );
 
   if (!res.ok) {
-    return json({ error: "places_upstream", status: res.status, detail: await res.text() }, 502);
+    const errorText = await res.text();
+    console.error(`[Places Upstream Error] Status: ${res.status}, Body: ${errorText}`);
+    return json({ error: "places_upstream", status: res.status, detail: errorText }, 502);
   }
 
   const data = (await res.json()) as GeminiResponse;
