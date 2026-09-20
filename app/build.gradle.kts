@@ -18,12 +18,12 @@ fun secret(key: String, default: String = ""): String =
 
 android {
     namespace = "com.lpecom.gemglasses"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.lpecom.gemglasses"
         minSdk = 29
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
