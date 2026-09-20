@@ -85,14 +85,14 @@ class RealGlassesBackend @Inject constructor(
     }
 
     override fun cameraFrames(): Flow<ByteArray> = callbackFlow {
-        // 1. Create a session with connected glasses
+        // 1. Create a session using AutoDeviceSelector
         val sessionResult = wearables.createSession(AutoDeviceSelector())
         val session: DeviceSession = sessionResult.getOrNull()
             ?: throw IllegalStateException("Failed to create device session: ${sessionResult.errorOrNull()}")
 
         session.start()
 
-        // 2. Attach Camera with stream configuration
+        // 2. Attach the Camera using the 0.9.0 extension
         val streamConfig = StreamConfiguration(
             videoQuality = VideoQuality.MEDIUM,
             frameRate = 15,
@@ -107,15 +107,15 @@ class RealGlassesBackend @Inject constructor(
 
         // 3. Start streaming
         val stream = camera.stream
-        val startResult = stream.start()
-        if (startResult.isFailure()) {
+        val streamStartResult = stream.start()
+        if (streamStartResult.isFailure) {
             camera.stop()
             session.removeCamera()
             session.stop()
-            throw IllegalStateException("Failed to start stream: ${startResult.errorOrNull()}")
+            throw IllegalStateException("Failed to start stream: ${streamStartResult.errorOrNull()}")
         }
 
-        // 4. Stream video frames -> downscale to JPEG for Gemini
+        // 4. Collect video frames and emit downscaled JPEGs for Gemini
         val job = launch(Dispatchers.Default) {
             stream.videoStream.collect { frame ->
                 if (frame.isCodecConfig) return@collect
@@ -126,7 +126,7 @@ class RealGlassesBackend @Inject constructor(
             }
         }
 
-        // 5. Cleanup when consumer stops collecting
+        // 5. Cleanup on cancellation
         awaitClose {
             job.cancel()
             stream.stop()
@@ -144,12 +144,12 @@ class RealGlassesBackend @Inject constructor(
         val bytes = ByteArray(remaining)
         buf.get(bytes)
 
-        // Case 1: Already JPEG
+        // Case 1: Already encoded JPEG (starts with 0xFF, 0xD8)
         if (remaining > 3 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte()) {
             return bytes
         }
 
-        // Case 2: Uncompressed RGBA (width * height * 4)
+        // Case 2: Uncompressed RGBA_8888 (width * height * 4)
         if (remaining == width * height * 4) {
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(bytes))
@@ -170,7 +170,7 @@ class RealGlassesBackend @Inject constructor(
             }
         }
 
-        // Case 4: General compressed or encoded image buffer
+        // Case 4: General image buffer fallback
         return try {
             val bitmap = BitmapFactory.decodeByteArray(bytes, 0, remaining)
             bitmap?.toDownscaledJpeg()
