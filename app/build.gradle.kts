@@ -113,12 +113,10 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
 
     // Real Meta DAT SDK linkage
-    if (useRealGlasses) {
-        implementation(libs.mwdat.core)
-        implementation(libs.mwdat.camera)
-        implementation(libs.mwdat.display)
-        implementation(libs.mwdat.mockdevice)
-    }
+    implementation(libs.mwdat.core)
+    implementation(libs.mwdat.camera)
+    implementation(libs.mwdat.display)
+    implementation(libs.mwdat.mockdevice)
 
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
