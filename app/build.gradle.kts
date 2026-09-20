@@ -9,18 +9,12 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// Read secrets from local.properties so they never live in source control.
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
 fun secret(key: String, default: String = ""): String =
     localProps.getProperty(key) ?: System.getenv(key) ?: default
-
-// When false, the real Meta DAT SDK is not linked and the app uses the mock
-// glasses backend.
-val useRealGlasses = (project.findProperty("gemglasses.useRealGlasses") as String?)
-    ?.toBoolean() ?: true
 
 android {
     namespace = "com.lpecom.gemglasses"
@@ -32,29 +26,14 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Check if your Secret Name is TOKEN_APP_SECRET or GEMGLASSES_APP_SECRET
-        buildConfigField("String", "BACKEND_URL", "\"${secret("GEMGLASSES_BACKEND_URL", "http://10.0.2.2:8787")}\"")
-        buildConfigField("String", "APP_SECRET", "\"${secret("TOKEN_APP_SECRET", "dev-secret")}\"")
-        buildConfigField("boolean", "USE_REAL_GLASSES", useRealGlasses.toString())
+        buildConfigField("String", "BACKEND_URL", "\"${secret("GEMGLASSES_BACKEND_URL", "")}\"")
+        buildConfigField("String", "APP_SECRET", "\"${secret("TOKEN_APP_SECRET", "")}\"")
+        buildConfigField("boolean", "USE_REAL_GLASSES", "true")
 
         manifestPlaceholders["metaApplicationId"] = secret("META_APPLICATION_ID", "0")
         manifestPlaceholders["metaClientToken"] = secret("META_CLIENT_TOKEN", "")
-    }
-
-    buildTypes {
-        debug {
-            isMinifyEnabled = false
-        }
-        release {
-            isMinifyEnabled = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
     }
 
     compileOptions {
@@ -69,19 +48,10 @@ android {
         compose = true
         buildConfig = true
     }
-
     sourceSets {
         getByName("main") {
-            if (useRealGlasses) {
-                java.srcDir("src/realGlasses/java")
-            }
+            java.srcDir("src/realGlasses/java")
         }
-    }
-    packaging {
-        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
-    }
-    testOptions {
-        unitTests.isReturnDefaultValues = true
     }
 }
 
@@ -91,15 +61,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
-
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material.icons)
     implementation(libs.androidx.navigation.compose)
-    debugImplementation(libs.androidx.compose.ui.tooling)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
@@ -109,27 +75,15 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.play.services.location)
     implementation(libs.androidx.datastore.preferences)
 
-    // Real Meta DAT SDK linkage
-    implementation(libs.mwdat.core)
-    implementation(libs.mwdat.camera)
-    implementation(libs.mwdat.display)
-    implementation(libs.mwdat.mockdevice)
-
-    testImplementation(libs.junit)
-    testImplementation(libs.mockk)
-    testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.turbine)
+    // Forced 0.9.0 Meta SDK
+    implementation("com.meta.wearable:mwdat-core:0.9.0")
+    implementation("com.meta.wearable:mwdat-camera:0.9.0")
 }
+
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-        compilerOptions {
-                    freeCompilerArgs.add("-Xskip-metadata-version-check")
-        }
-}
-
-// This specifically helps Hilt/KSP handle the Meta SDK metadata
-ksp {
-        arg("error_prone_annotations", "true")
+    compilerOptions {
+        freeCompilerArgs.add("-Xskip-metadata-version-check")
+    }
 }
