@@ -2,88 +2,85 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Fix for the WakeLock crash -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Bluetooth & Nearby permissions for Meta Wearables -->
-    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <!-- Foreground Service permissions required for Android 14+ (SDK 34/35) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
+    <!-- Notifications for Android 13+ (API 33+) to display foreground service notification -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Network permissions for Gemini Live API backend communication -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Audio permissions for voice assistant -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- Location permissions (used by LocationProvider.kt) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Bluetooth permissions for Meta Ray-Ban Glasses connection -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="s" />
-    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
-        android:usesPermissionFlags="neverForLocation"
-        tools:targetApi="tiramisu" />
-
-    <!-- Package visibility queries for Meta AI (Stella) companion app -->
-    <queries>
-        <package android:name="com.facebook.stella" />
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="https" />
-        </intent>
-        <intent>
-            <action android:name="com.meta.wearable.dat.REGISTER" />
-        </intent>
-    </queries>
-
-    <!-- Foreground service keeps the Gemini Live session alive in the background -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".GemGlassesApp"
-        android:allowBackup="false"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.GemGlasses">
+        android:theme="@style/Theme.GemGlasses"
+        tools:targetApi="35">
 
-        <!-- Meta Wearables Developer Center credentials -->
+        <!-- Meta Wearables DAT SDK credentials (populated from build.gradle placeholders) -->
         <meta-data
             android:name="com.meta.wearable.mwdat.APPLICATION_ID"
             android:value="${metaApplicationId}" />
         <meta-data
             android:name="com.meta.wearable.mwdat.CLIENT_TOKEN"
             android:value="${metaClientToken}" />
-        <meta-data
-            android:name="com.meta.wearable.mwdat.ANALYTICS_OPT_OUT"
-            android:value="true" />
-            
-        <!-- Also provide core dat namespace keys in case SDK 0.9.0 checks either -->
-        <meta-data
-            android:name="com.meta.wearable.dat.APPLICATION_ID"
-            android:value="${metaApplicationId}" />
-        <meta-data
-            android:name="com.meta.wearable.dat.CLIENT_TOKEN"
-            android:value="${metaClientToken}" />
+
+        <!-- AgentForegroundService configuration with required foregroundServiceType -->
+        <service
+            android:name=".service.AgentForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|microphone" />
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTask"
             android:theme="@style/Theme.GemGlasses">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Callback from the Meta AI app after glasses registration -->
+            <!-- Deep link callback for Meta AI glasses registration handshake -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="gemglasses" android:host="callback" />
+                <data android:scheme="gemglasses" />
             </intent-filter>
         </activity>
-
-        <service
-            android:name=".service.AgentForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="microphone" />
     </application>
+
 </manifest>
