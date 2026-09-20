@@ -115,10 +115,11 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
 
     // Real Meta DAT SDK only linked when a github_token is present and the flag is on.
-    if (useRealGlasses) {
-        implementation("com.meta.wearable:mwdat-core:0.5.0")
-            implementation("com.meta.wearable:mwdat-camera:0.5.0")
-    }
+    val useRealGlasses = project.findProperty("gemglasses.useRealGlasses")?.toString()?.toBoolean() ?: false
+        if (useRealGlasses) {
+                    implementation(libs.meta.wearables.dat)
+        }
+        }
 
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
