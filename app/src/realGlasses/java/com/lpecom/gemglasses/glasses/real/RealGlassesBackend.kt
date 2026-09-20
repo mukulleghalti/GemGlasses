@@ -17,13 +17,9 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 import java.io.ByteArrayOutputStream
-import javax.inject.Inject
 
-class RealGlassesBackend @Inject constructor(
-    private val context: Context
-) : GlassesBackend {
+class RealGlassesBackend(private val context: Context) : GlassesBackend {
 
-    // In 0.9.0, we use an instance of the Wearables SDK
     private val wearables = Wearables.getInstance(context)
 
     override val registrationState: Flow<RegistrationState> =
@@ -37,12 +33,10 @@ class RealGlassesBackend @Inject constructor(
         }
 
     override fun initialize() {
-        // Initialization is handled by getInstance, but we can warm it up here
+        // 0.9.0 handles init via getInstance
     }
 
     override fun startRegistration() {
-        // In 0.9.0, registration is often handled by the Meta View app, 
-        // but the SDK provides a helper to trigger it.
         wearables.requestRegistration()
     }
 
@@ -53,16 +47,12 @@ class RealGlassesBackend @Inject constructor(
         wearables.requestPermission(Permission.CAMERA).toDomain()
 
     override fun cameraFrames(): Flow<ByteArray> = callbackFlow {
-        // 0.9.0 uses a CameraClient obtained from the wearables instance
-        val cameraClient: CameraClient = wearables.createCameraClient()
-        
+        val cameraClient = wearables.createCameraClient()
         val listener = CameraClient.FrameListener { bitmap ->
             trySend(bitmap.toDownscaledJpeg())
         }
-
         cameraClient.addFrameListener(listener)
         cameraClient.startStreaming()
-
         awaitClose {
             cameraClient.stopStreaming()
             cameraClient.removeFrameListener(listener)
@@ -72,19 +62,12 @@ class RealGlassesBackend @Inject constructor(
 
     private fun Bitmap.toDownscaledJpeg(): ByteArray {
         val longest = maxOf(width, height)
-        val scaled = if (longest > MAX_SIDE) {
-            val ratio = MAX_SIDE.toFloat() / longest
-            Bitmap.createScaledBitmap(
-                this,
-                (width * ratio).toInt(),
-                (height * ratio).toInt(),
-                true,
-            )
-        } else {
-            this
-        }
+        val scaled = if (longest > 768) {
+            val ratio = 768f / longest
+            Bitmap.createScaledBitmap(this, (width * ratio).toInt(), (height * ratio).toInt(), true)
+        } else this
         return ByteArrayOutputStream().use { out ->
-            scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+            scaled.compress(Bitmap.CompressFormat.JPEG, 70, out)
             if (scaled !== this) scaled.recycle()
             out.toByteArray()
         }
@@ -93,8 +76,7 @@ class RealGlassesBackend @Inject constructor(
     private fun RegistrationStatus.toDomain(): RegistrationState = when (this) {
         RegistrationStatus.REGISTERED -> RegistrationState.REGISTERED
         RegistrationStatus.REGISTERING -> RegistrationState.REGISTERING
-        RegistrationStatus.NOT_REGISTERED -> RegistrationState.NOT_REGISTERED
-        else -> RegistrationState.UNKNOWN
+        else -> RegistrationState.NOT_REGISTERED
     }
 
     private fun PermissionStatus.toDomain(): CameraPermission = when (this) {
@@ -102,9 +84,4 @@ class RealGlassesBackend @Inject constructor(
         PermissionStatus.DENIED -> CameraPermission.DENIED
         else -> CameraPermission.NOT_DETERMINED
     }
-
-    private companion object {
-        const val MAX_SIDE = 768
-        const val JPEG_QUALITY = 70
-    }
-}
+}            
