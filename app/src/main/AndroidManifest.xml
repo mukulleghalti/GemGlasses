@@ -46,10 +46,10 @@
         <!-- Meta Wearables Developer Center credentials -->
         <meta-data
             android:name="com.meta.wearable.mwdat.APPLICATION_ID"
-            android:value="${metaApplicationId}" />
+            android:value="\"${metaApplicationId}\""; />
         <meta-data
             android:name="com.meta.wearable.mwdat.CLIENT_TOKEN"
-            android:value="${metaClientToken}" />
+            android:value="\"${metaClientToken}\""; />
         <meta-data
             android:name="com.meta.wearable.mwdat.ANALYTICS_OPT_OUT"
             android:value="true" />
@@ -57,10 +57,10 @@
         <!-- Also provide core dat namespace keys in case SDK 0.9.0 checks either -->
         <meta-data
             android:name="com.meta.wearable.dat.APPLICATION_ID"
-            android:value="${metaApplicationId}" />
+            android:value="\"${metaApplicationId}\""; />
         <meta-data
             android:name="com.meta.wearable.dat.CLIENT_TOKEN"
-            android:value="${metaClientToken}" />
+            android:value="\"${metaClientToken}\""; />
 
         <activity
             android:name=".MainActivity"

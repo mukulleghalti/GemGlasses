@@ -61,7 +61,7 @@ fun HomeScreen(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            text = "Gemini nos seus Ray-Ban",
+            text = "Gemini on your Ray-Ban",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -91,7 +91,7 @@ fun HomeScreen(
                 else MaterialTheme.colorScheme.primary,
             ),
         ) {
-            Text(if (running) "Encerrar" else "Iniciar assistente")
+            Text(if (running) "Encerrar" else "Start Assistant")
         }
 
         if (registration != RegistrationState.REGISTERED) {
@@ -107,7 +107,7 @@ fun HomeScreen(
 private fun GlassesCard(registration: RegistrationState, deviceName: String?) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Óculos", style = MaterialTheme.typography.labelLarge)
+            Text("Glasses", style = MaterialTheme.typography.labelLarge)
             Text(
                 text = deviceName ?: "Nenhum dispositivo",
                 style = MaterialTheme.typography.bodyLarge,
@@ -124,7 +124,7 @@ private fun GlassesCard(registration: RegistrationState, deviceName: String?) {
 @Composable
 private fun StatusDot(status: AgentStatus) {
     val (color, label) = when (status) {
-        AgentStatus.IDLE -> Color.Gray to "Parado"
+        AgentStatus.IDLE -> Color.Gray to "Stopped"
         AgentStatus.CONNECTING -> Color(0xFFF59E0B) to "Conectando…"
         AgentStatus.LISTENING -> Color(0xFF22C55E) to "Ouvindo"
         AgentStatus.RECONNECTING -> Color(0xFFF59E0B) to "Reconectando…"
@@ -145,7 +145,7 @@ private fun StatusDot(status: AgentStatus) {
 }
 
 private fun RegistrationState.label(): String = when (this) {
-    RegistrationState.REGISTERED -> "Conectado ao Meta AI"
+    RegistrationState.REGISTERED -> "Connected to Meta AI"
     RegistrationState.REGISTERING -> "Registrando…"
     RegistrationState.NOT_REGISTERED -> "Não registrado"
     RegistrationState.REVOKED -> "Registro revogado — reconecte"

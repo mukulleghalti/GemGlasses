@@ -31,7 +31,7 @@ fun SettingsScreen(
     ) {
         Text("Settings", style = MaterialTheme.typography.titleLarge)
 
-        Setting(title = "Idioma da resposta") {
+        Setting(title = "Response Language") {
             LANGUAGES.forEach { (code, label) ->
                 FilterChip(
                     selected = prefs.languageCode == code,
@@ -41,7 +41,7 @@ fun SettingsScreen(
             }
         }
 
-        Setting(title = "Voz do assistente") {
+        Setting(title = "Assistant Voice") {
             VOICES.forEach { voice ->
                 FilterChip(
                     selected = prefs.voiceName == voice,

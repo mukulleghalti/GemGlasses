@@ -11,6 +11,7 @@ class GemGlassesApp : Application() {
     @Inject lateinit var glassesManager: GlassesManager
 
     override fun onCreate() {
+        com.meta.wearable.dat.core.Wearables.initialize(this)
         super.onCreate()
         // Initialise the DAT SDK once per process (per Meta's requirement).
         glassesManager.initialize()
