@@ -1,42 +1,44 @@
-name: Build GemGlasses APK
-
+name: Build-APK
 on:
   push:
-      branches: [ "main", "master" ]
-        workflow_dispatch: 
+      branches:
+            - main
+                  - master
+                    workflow_dispatch:
 
-        jobs:
-          build:
-              runs-on: ubuntu-latest
+                    jobs:
+                      build:
+                          runs-on: ubuntu-latest
+                              steps:
+                                    - name: Checkout Code
+                                            uses: actions/checkout@v4
 
-                  steps:
-                      - name: Checkout Code
-                            uses: actions/checkout@v4
+                                                  - name: Set up JDK 17
+                                                          uses: actions/setup-java@v4
+                                                                  with:
+                                                                            java-version: '17'
+                                                                                      distribution: 'temurin'
+                                                                                                cache: gradle
 
-                                - name: Set up JDK 17
-                                      uses: actions/setup-java@v4
-                                            with:
-                                                    java-version: '17'
-                                                            distribution: 'temurin'
-                                                                    cache: gradle
+                                                                                                      - name: Create local.properties
+                                                                                                              run: |
+                                                                                                                        echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+                                                                                                                                  echo "github_actor=${{ github.actor }}" >> local.properties
+                                                                                                                                            echo "github_token=${{ secrets.GH_PACKAGES_TOKEN }}" >> local.properties
+                                                                                                                                                      echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> local.properties
+                                                                                                                                                                echo "TOKEN_APP_SECRET=${{ secrets.TOKEN_APP_SECRET }}" >> local.properties
+                                                                                                                                                                          echo "META_APPLICATION_ID=${{ secrets.META_APP_ID }}" >> local.properties
+                                                                                                                                                                                    echo "META_CLIENT_TOKEN=${{ secrets.META_CLIENT_TOKEN }}" >> local.properties
+                                                                                                                                                                                              echo "GEMGLASSES_BACKEND_URL=${{ secrets.GEMGLASSES_BACKEND_URL }}" >> local.properties
 
-                                                                        - name: Create local.properties
-                                                                              run: |
-                                                                                      echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-                                                                                              echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> local.properties
-                                                                                                      echo "TOKEN_APP_SECRET=${{ secrets.TOKEN_APP_SECRET }}" >> local.properties
-                                                                                                              echo "META_APPLICATION_ID=${{ secrets.META_APP_ID }}" >> local.properties
-                                                                                                                      echo "META_CLIENT_TOKEN=${{ secrets.META_CLIENT_TOKEN }}" >> local.properties
-                                                                                                                              echo "GEMGLASSES_BACKEND_URL=${{ secrets.GEMGLASSES_BACKEND_URL }}" >> local.properties
+                                                                                                                                                                                                    - name: Grant Permission
+                                                                                                                                                                                                            run: chmod +x gradlew
 
-                                                                                                                                  - name: Grant execute permission
-                                                                                                                                        run: chmod +x gradlew
+                                                                                                                                                                                                                  - name: Run Build
+                                                                                                                                                                                                                          run: ./gradlew assembleDebug -Pgemglasses.useRealGlasses=true --no-daemon
 
-                                                                                                                                            - name: Build APK
-                                                                                                                                                  run: ./gradlew assembleDebug -Pgemglasses.useRealGlasses=true --no-daemon
-
-                                                                                                                                                      - name: Upload APK
-                                                                                                                                                            uses: actions/upload-artifact@v4
-                                                                                                                                                                  with:
-                                                                                                                                                                          name: gem-glasses-apk
-                                                                                                                                                                                  path: app/build/outputs/apk/debug/app-debug.apk
+                                                                                                                                                                                                                                - name: Upload APK
+                                                                                                                                                                                                                                        uses: actions/upload-artifact@v4
+                                                                                                                                                                                                                                                with:
+                                                                                                                                                                                                                                                          name: gem-glasses-apk
+                                                                                                                                                                                                                                                                    path: app/build/outputs/apk/debug/*.apk
