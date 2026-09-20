@@ -6,7 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
-    alias(libs.plugins.ksp)
+    alias(libs.plugins.kapt)
 }
 
 val localProps = Properties().apply {
@@ -85,7 +85,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
 
     implementation(libs.hilt.android)
-    ksp(libs.hilt.compiler)
+    kapt(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
 
     implementation(libs.okhttp)
@@ -103,7 +103,7 @@ dependencies {
     implementation("com.facebook.infer.annotation:infer-annotation:0.18.0")
     implementation("com.facebook.fresco:fbcore:2.6.0")
 
-    ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.2.20")
+    kapt("org.jetbrains.kotlin:kotlin-metadata-jvm:2.2.20")
 
     // Meta Wearables DAT SDK 0.9.0 (Pulled automatically from Maven Central via version catalog)
     implementation(libs.mwdat.core)
