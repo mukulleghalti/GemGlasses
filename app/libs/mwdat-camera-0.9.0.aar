@@ -1,0 +1,14 @@
+HTTP/2 200 
+access-control-allow-methods: GET, HEAD, OPTIONS
+access-control-allow-origin: *
+content-security-policy: default-src 'none';
+last-modified: Mon, 03 Aug 2026 20:55:05 UTC
+server: GitHub Registry
+strict-transport-security: max-age=31536000;
+x-content-type-options: nosniff
+x-frame-options: DENY
+x-xss-protection: 1; mode=block
+date: Sun, 20 Sep 2026 04:32:15 GMT
+x-github-request-id: 3409:2EB188:18ADD5:474BDB:6AAF61CF
+x-github-edge-region: centralindia
+
