@@ -6,15 +6,28 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
-    <!-- Bluetooth: legacy perms capped at API 30, runtime CONNECT/SCAN from API 31+ -->
-    <uses-permission android:name="android.permission.BLUETOOTH"
-        android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
-        android:maxSdkVersion="30" />
+    <!-- Bluetooth & Nearby permissions for Meta Wearables -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="s" />
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="tiramisu" />
+
+    <!-- Package visibility queries for Meta AI (Stella) companion app -->
+    <queries>
+        <package android:name="com.facebook.stella" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="com.meta.wearable.dat.REGISTER" />
+        </intent>
+    </queries>
 
     <!-- Foreground service keeps the Gemini Live session alive in the background -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -30,7 +43,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.GemGlasses">
 
-        <!-- Meta Wearables Developer Center credentials, injected from local.properties -->
+        <!-- Meta Wearables Developer Center credentials -->
         <meta-data
             android:name="com.meta.wearable.mwdat.APPLICATION_ID"
             android:value="${metaApplicationId}" />
@@ -40,6 +53,14 @@
         <meta-data
             android:name="com.meta.wearable.mwdat.ANALYTICS_OPT_OUT"
             android:value="true" />
+            
+        <!-- Also provide core dat namespace keys in case SDK 0.9.0 checks either -->
+        <meta-data
+            android:name="com.meta.wearable.dat.APPLICATION_ID"
+            android:value="${metaApplicationId}" />
+        <meta-data
+            android:name="com.meta.wearable.dat.CLIENT_TOKEN"
+            android:value="${metaClientToken}" />
 
         <activity
             android:name=".MainActivity"
