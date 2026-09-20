@@ -16,5 +16,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "GemGlasses"
 include(":app")
-            }
-}
