@@ -133,4 +133,3 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 ksp {
         arg("error_prone_annotations", "true")
 }
-}
