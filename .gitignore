@@ -29,3 +29,6 @@ node_modules/
 
 # OMC operational state (not part of the project)
 .omc/
+
+classes.jar
+camera-classes.jar

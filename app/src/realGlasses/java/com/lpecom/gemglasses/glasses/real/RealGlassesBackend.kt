@@ -6,11 +6,11 @@ import com.lpecom.gemglasses.glasses.CameraPermission
 import com.lpecom.gemglasses.glasses.GlassesBackend
 import com.lpecom.gemglasses.glasses.GlassesDevice
 import com.lpecom.gemglasses.glasses.RegistrationState
-import com.meta.wearable.mwdat.Wearables
-import com.meta.wearable.mwdat.Permission
-import com.meta.wearable.mwdat.PermissionStatus
-import com.meta.wearable.mwdat.RegistrationStatus
-import com.meta.wearable.mwdat.camera.CameraClient
+import com.meta.wearable.dat.core.Wearables
+import com.meta.wearable.dat.core.types.Permission
+import com.meta.wearable.dat.core.types.PermissionStatus
+import com.meta.wearable.dat.core.types.RegistrationStatus
+import com.meta.wearable.dat.camera.CameraClient
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
