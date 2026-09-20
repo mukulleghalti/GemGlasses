@@ -116,7 +116,8 @@ dependencies {
 
     // Real Meta DAT SDK only linked when a github_token is present and the flag is on.
     if (useRealGlasses) {
-        implementation(libs.meta.wearables.dat)
+        implementation("com.meta.wearable:mwdat-core:0.5.0")
+            implementation("com.meta.wearable:mwdat-camera:0.5.0")
     }
 
     testImplementation(libs.junit)
