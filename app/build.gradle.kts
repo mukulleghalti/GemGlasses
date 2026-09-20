@@ -80,6 +80,8 @@ dependencies {
     // FIX FOR LOCATION ERRORS (Google Play Services)
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
+    implementation("com.facebook.soloader:soloader:0.10.5")
+
     // HARD-PLACED META SDK (Points to your local app/libs folder)
     implementation(files("libs/mwdat-core-0.9.0.aar"))
     implementation(files("libs/mwdat-camera-0.9.0.aar"))
