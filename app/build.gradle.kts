@@ -81,6 +81,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
     implementation("com.facebook.soloader:soloader:0.10.5")
+    implementation("com.google.code.gson:gson:2.10.1")
 
     // HARD-PLACED META SDK (Points to your local app/libs folder)
     implementation(files("libs/mwdat-core-0.9.0.aar"))
