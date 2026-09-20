@@ -6,7 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
-    alias(libs.plugins.kapt)
+    id("kotlin-kapt")
 }
 
 val localProps = Properties().apply {
