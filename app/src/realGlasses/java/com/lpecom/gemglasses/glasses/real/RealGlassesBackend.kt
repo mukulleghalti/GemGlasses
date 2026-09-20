@@ -222,7 +222,6 @@ class RealGlassesBackend @Inject constructor(
     private fun PermissionStatus.toPermissionDomain(): CameraPermission = when (this) {
         is PermissionStatus.Granted -> CameraPermission.GRANTED
         is PermissionStatus.Denied -> CameraPermission.DENIED
-        else -> CameraPermission.NOT_DETERMINED
     }
 
     companion object {
