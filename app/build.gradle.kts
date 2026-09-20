@@ -36,6 +36,23 @@ android {
         manifestPlaceholders["metaClientToken"] = secret("META_CLIENT_TOKEN", "")
     }
 
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        debug {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -80,15 +97,17 @@ dependencies {
     // FIX FOR LOCATION ERRORS (Google Play Services)
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
+    // Facebook & Google Core Dependencies required by Meta DAT SDK
     implementation("com.facebook.soloader:soloader:0.10.5")
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("com.facebook.infer.annotation:infer-annotation:0.18.0")
-    implementation("com.facebook.fresco:fbcore:2.6.0") // Provides Facebook LoggingDelegates & debug loggers
-    // HARD-PLACED META SDK (Points to your local app/libs folder)
-    // implementation(files("libs/mwdat-core-0.9.0.aar"))
-    // implementation(files("libs/mwdat-camera-0.9.0.aar"))
-    implementation("com.meta.wearable:mwdat-core:0.9.0")
-    implementation("com.meta.wearable:mwdat-camera:0.9.0")
+    implementation("com.facebook.fresco:fbcore:2.6.0")
+
+    // Meta Wearables DAT SDK 0.9.0 (Pulled automatically from Maven Central via version catalog)
+    implementation(libs.mwdat.core)
+    implementation(libs.mwdat.camera)
+    implementation(libs.mwdat.display)
+    implementation(libs.mwdat.mockdevice)
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
