@@ -18,7 +18,7 @@ fun secret(key: String, default: String = ""): String =
     localProps.getProperty(key) ?: System.getenv(key) ?: default
 
 // When false, the real Meta DAT SDK is not linked and the app uses the mock
-// glasses backend. Enables hardware-free CI and local development.
+// glasses backend.
 val useRealGlasses = (project.findProperty("gemglasses.useRealGlasses") as String?)
     ?.toBoolean() ?: true
 
@@ -35,9 +35,9 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Injected into BuildConfig + manifest placeholders instead of hardcoding.
+        // Check if your Secret Name is TOKEN_APP_SECRET or GEMGLASSES_APP_SECRET
         buildConfigField("String", "BACKEND_URL", "\"${secret("GEMGLASSES_BACKEND_URL", "http://10.0.2.2:8787")}\"")
-        buildConfigField("String", "APP_SECRET", "\"${secret("GEMGLASSES_APP_SECRET", "dev-secret")}\"")
+        buildConfigField("String", "APP_SECRET", "\"${secret("TOKEN_APP_SECRET", "dev-secret")}\"")
         buildConfigField("boolean", "USE_REAL_GLASSES", useRealGlasses.toString())
 
         manifestPlaceholders["metaApplicationId"] = secret("META_APPLICATION_ID", "0")
@@ -69,9 +69,6 @@ android {
         buildConfig = true
     }
 
-    // The real Meta DAT integration lives in its own source dir that is only
-    // compiled when the SDK is linked. Hardware-free builds (mock backend) skip
-    // it entirely, so the project still compiles with no github_token.
     sourceSets {
         getByName("main") {
             if (useRealGlasses) {
@@ -114,12 +111,10 @@ dependencies {
     implementation(libs.play.services.location)
     implementation(libs.androidx.datastore.preferences)
 
-    // Real Meta DAT SDK only linked when a github_token is present and the flag is on.
-    val useRealGlasses = project.findProperty("gemglasses.useRealGlasses")?.toString()?.toBoolean() ?: false
-        if (useRealGlasses) {
-                    implementation(libs.meta.wearables.dat)
-        }
-        }
+    // Real Meta DAT SDK linkage
+    if (useRealGlasses) {
+        implementation(libs.meta.wearables.dat)
+    }
 
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
