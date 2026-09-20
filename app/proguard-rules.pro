@@ -13,3 +13,8 @@
 
 # The real Meta DAT backend is loaded reflectively — keep it when present.
 -keep class com.lpecom.gemglasses.glasses.real.RealGlassesBackend { *; }
+
+-keep class kotlin.coroutines.jvm.internal.** { *; }
+-keep class com.meta.wearable.** { *; }
+-dontwarn com.meta.wearable.**
+-dontwarn com.facebook.soloader.**
