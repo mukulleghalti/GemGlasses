@@ -42,7 +42,7 @@ fun TranscriptScreen(
     ) {
         item {
             Text(
-                "Transcrição",
+                "Transcription",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(vertical = 12.dp),
             )

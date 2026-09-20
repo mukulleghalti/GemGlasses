@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">GemGlasses</string>
-    <string name="notification_channel">Sessão do assistente</string>
-    <string name="notification_title">GemGlasses ativo</string>
-    <string name="notification_text">Assistente Gemini ouvindo pelos óculos</string>
-</resources>
+        <string name="notification_channel">Assistant Session</string>
+            <string name="notification_title">GemGlasses Active</string>
+                <string name="notification_text">Gemini Assistant listening through glasses</string>
+                </resources>

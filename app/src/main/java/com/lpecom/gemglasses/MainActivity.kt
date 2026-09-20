@@ -52,9 +52,9 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class Tab(val route: String, val label: String, val icon: ImageVector) {
-    HOME("home", "Sessão", Icons.Filled.Home),
-    TRANSCRIPT("transcript", "Transcrição", Icons.AutoMirrored.Filled.List),
-    SETTINGS("settings", "Ajustes", Icons.Filled.Settings),
+    HOME("home", "Home", Icons.Filled.Home),
+    TRANSCRIPT("transcript", "Transcript", Icons.AutoMirrored.Filled.List),
+    SETTINGS("settings", "Settings", Icons.Filled.Settings),
 }
 
 @Composable

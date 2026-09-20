@@ -29,7 +29,7 @@ fun SettingsScreen(
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-        Text("Ajustes", style = MaterialTheme.typography.titleLarge)
+        Text("Settings", style = MaterialTheme.typography.titleLarge)
 
         Setting(title = "Idioma da resposta") {
             LANGUAGES.forEach { (code, label) ->
