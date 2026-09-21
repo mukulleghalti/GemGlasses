@@ -137,18 +137,16 @@ class LiveSession(
         setup = Setup(
             model = Models.GEMINI_LIVE_MODEL,
             generationConfig = GenerationConfig(
-                responseModalities = listOf("AUDIO"),
-                speechConfig = SpeechConfig(
-                    voiceConfig = VoiceConfig(PrebuiltVoiceConfig(voiceName)),
-                    languageCode = languageCode,
-                ),
+                responseModalities = listOf("AUDIO")
+                // speechConfig has been moved out
+            ),
+            speechConfig = SpeechConfig(
+                voiceConfig = VoiceConfig(PrebuiltVoiceConfig(voiceName)),
+                languageCode = languageCode,
             ),
             systemInstruction = Content(parts = listOf(Part(text = systemInstruction))),
             tools = liveTools,
             realtimeInputConfig = RealtimeInputConfig(activityHandling = "START_OF_ACTIVITY_INTERRUPTS"),
-            // inputAudioTranscription = EMPTY_OBJECT,
-            // outputAudioTranscription = EMPTY_OBJECT,
-            // sessionResumption = SessionResumptionConfig(handle = resumeHandle),
         ),
     )
 
