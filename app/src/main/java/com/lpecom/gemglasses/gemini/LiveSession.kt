@@ -133,7 +133,7 @@ class LiveSession(
 
     private fun buildSetup() = ClientMessage(
         setup = Setup(
-            model = "models/${Models.GEMINI_LIVE_MODEL}",
+            model = Models.GEMINI_LIVE_MODEL,   // ← Changed: removed "models/"
             generationConfig = GenerationConfig(
                 responseModalities = listOf("AUDIO"),
                 speechConfig = SpeechConfig(
