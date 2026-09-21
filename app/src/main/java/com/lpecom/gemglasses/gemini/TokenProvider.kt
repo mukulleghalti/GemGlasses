@@ -11,6 +11,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 import javax.inject.Singleton
+import android.util.Log
 
 /**
  * Fetches an ephemeral Gemini Live token from the backend Worker. The Google
