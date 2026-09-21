@@ -14,26 +14,23 @@ import com.lpecom.gemglasses.glasses.GlassesDevice
 import com.lpecom.gemglasses.glasses.RegistrationState
 import com.meta.wearable.dat.camera.Camera
 import com.meta.wearable.dat.camera.addCamera
-import com.meta.wearable.dat.camera.removeCamera
 import com.meta.wearable.dat.camera.types.StreamConfiguration
-import com.meta.wearable.dat.camera.types.VideoFrame
 import com.meta.wearable.dat.camera.types.VideoQuality
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.selectors.AutoDeviceSelector
 import com.meta.wearable.dat.core.session.DeviceSession
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
-import com.meta.wearable.dat.core.types.RegistrationState as MetaRegistrationState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.ByteArrayOutputStream
 
 @Singleton
 class RealGlassesBackend @Inject constructor(
@@ -45,22 +42,13 @@ class RealGlassesBackend @Inject constructor(
         private const val TAG = "RealGlassesBackend"
     }
 
-    /*
-     * The Activity is required by MWDAT for registration / permission flows.
-     *
-     * MainActivity calls:
-     *
-     *     glassesBackend.setActivity(this)
-     *
-     * before Compose starts.
-     */
     @Volatile
     private var currentActivity: Activity? = null
 
-    private val wearables: Wearables = Wearables
-
     /**
-     * Called by MainActivity when it becomes the foreground Activity.
+     * MainActivity calls this when it becomes active.
+     *
+     * MWDAT requires an Activity for registration.
      */
     fun setActivity(activity: Activity) {
         currentActivity = activity
@@ -72,10 +60,8 @@ class RealGlassesBackend @Inject constructor(
     }
 
     /**
-     * Called by MainActivity when it is destroyed.
-     *
-     * We only clear the reference if it is the same Activity that registered
-     * itself. This prevents an old Activity from clearing a newer Activity.
+     * Clear the Activity reference only if this is still
+     * the Activity currently registered.
      */
     fun clearActivity(activity: Activity) {
         if (currentActivity === activity) {
@@ -88,84 +74,96 @@ class RealGlassesBackend @Inject constructor(
         }
     }
 
+    /**
+     * MWDAT registration state.
+     *
+     * We intentionally only depend on REGISTERED / REGISTERING here.
+     * The other states have changed between SDK versions.
+     */
     override val registrationState: Flow<RegistrationState> =
-        wearables.registrationState.map { state ->
-            when (state) {
-                MetaRegistrationState.REGISTERED ->
+        Wearables.registrationState.map { state ->
+
+            when (state.name) {
+                "REGISTERED" ->
                     RegistrationState.REGISTERED
 
-                MetaRegistrationState.REGISTERING ->
+                "REGISTERING" ->
                     RegistrationState.REGISTERING
-
-                MetaRegistrationState.NOT_REGISTERED ->
-                    RegistrationState.NOT_REGISTERED
-
-                MetaRegistrationState.REVOKED ->
-                    RegistrationState.REVOKED
 
                 else ->
                     RegistrationState.UNKNOWN
             }
         }
 
+    /**
+     * Expose the devices reported by MWDAT.
+     *
+     * DAT 0.9.0 exposes Wearables.devices as device identifiers.
+     * Device metadata is available through Wearables.devicesMetadata[id].
+     */
     override val devices: Flow<List<GlassesDevice>> =
         callbackFlow {
+
             val job = launch(Dispatchers.Default) {
+
                 try {
-                    while (true) {
-                        val selector = AutoDeviceSelector()
+                    Wearables.devices.collect { deviceIds ->
 
-                        val session = DeviceSession.create(
-                            context,
-                            selector,
-                        )
+                        val result = mutableListOf<GlassesDevice>()
 
-                        val devices = try {
-                            val device = session.device
+                        for (deviceId in deviceIds) {
+                            try {
+                                val metadataFlow =
+                                    Wearables.devicesMetadata[deviceId]
 
-                            if (device != null) {
-                                val rawName = device.metadata.name
+                                metadataFlow.collect { device ->
 
-                                val displayName =
-                                    if (
-                                        rawName.isNullOrBlank() ||
-                                        rawName.equals("Unknown", ignoreCase = true)
-                                    ) {
-                                        "Ray-Ban Meta"
-                                    } else {
-                                        rawName
+                                    val rawName = device.name
+
+                                    val displayName =
+                                        if (
+                                            rawName.isBlank() ||
+                                            rawName.equals(
+                                                "Unknown",
+                                                ignoreCase = true,
+                                            )
+                                        ) {
+                                            "Ray-Ban Meta"
+                                        } else {
+                                            rawName
+                                        }
+
+                                    result.removeAll {
+                                        it.id == deviceId.toString()
                                     }
 
-                                listOf(
-                                    GlassesDevice(
-                                        id = device.id,
-                                        name = displayName,
-                                        connected = true,
-                                    ),
-                                )
-                            } else {
-                                emptyList()
-                            }
-                        } catch (e: Exception) {
-                            Log.e(
-                                TAG,
-                                "Failed to read glasses device",
-                                e,
-                            )
+                                    result.add(
+                                        GlassesDevice(
+                                            id = deviceId.toString(),
+                                            name = displayName,
+                                            connected = device.linkState.name == "CONNECTED",
+                                        ),
+                                    )
 
-                            emptyList()
+                                    trySend(result.toList())
+                                }
+                            } catch (e: Exception) {
+                                Log.e(
+                                    TAG,
+                                    "Failed to read device metadata for $deviceId",
+                                    e,
+                                )
+                            }
                         }
 
-                        trySend(devices)
-
-                        session.close()
-
-                        kotlinx.coroutines.delay(2_000L)
+                        if (deviceIds.isEmpty()) {
+                            trySend(emptyList())
+                        }
                     }
                 } catch (e: Exception) {
                     Log.e(
                         TAG,
-                        "Device monitoring stopped",
+                        "Device monitoring failed",
                         e,
                     )
                 }
@@ -176,23 +174,37 @@ class RealGlassesBackend @Inject constructor(
             }
         }
 
+    /**
+     * Initialize MWDAT once.
+     */
     override fun initialize() {
         try {
             Log.i(TAG, "Initializing MWDAT")
 
-            wearables.initialize(context)
-
-            Log.i(TAG, "MWDAT initialized")
+            Wearables.initialize(context)
+                .onSuccess {
+                    Log.i(TAG, "MWDAT initialized successfully")
+                }
+                .onFailure { error, _ ->
+                    Log.e(
+                        TAG,
+                        "MWDAT initialization failed: ${error.description}",
+                    )
+                }
         } catch (e: Exception) {
             Log.e(
                 TAG,
-                "Failed to initialize MWDAT",
+                "Exception while initializing MWDAT",
                 e,
             )
         }
     }
 
+    /**
+     * Starts Meta's registration flow.
+     */
     override fun startRegistration() {
+
         val activity = currentActivity
 
         if (activity == null) {
@@ -209,41 +221,65 @@ class RealGlassesBackend @Inject constructor(
         )
 
         try {
-            wearables.startRegistration(activity)
-
-            Log.i(
-                TAG,
-                "Meta registration request started",
-            )
+            Wearables.startRegistration(activity)
+                .onSuccess {
+                    Log.i(
+                        TAG,
+                        "Meta registration request started successfully",
+                    )
+                }
+                .onFailure { error, _ ->
+                    Log.e(
+                        TAG,
+                        "Meta registration failed: ${error.description}",
+                    )
+                }
         } catch (e: Exception) {
             Log.e(
                 TAG,
-                "Failed to start registration",
+                "Exception while starting Meta registration",
                 e,
             )
         }
     }
 
+    /**
+     * Check MWDAT camera permission.
+     */
     override suspend fun cameraPermission(): CameraPermission {
+
         return try {
-            when (
-                wearables.checkPermissionStatus(
-                    Permission.CAMERA,
-                )
-            ) {
-                PermissionStatus.GRANTED ->
-                    CameraPermission.GRANTED
 
-                PermissionStatus.DENIED ->
-                    CameraPermission.DENIED
+            Wearables.checkPermissionStatus(
+                Permission.CAMERA,
+            ).fold(
+                onSuccess = { status ->
 
-                else ->
+                    when (status) {
+                        PermissionStatus.GRANTED ->
+                            CameraPermission.GRANTED
+
+                        else ->
+                            CameraPermission.NOT_DETERMINED
+                    }
+                },
+
+                onFailure = { error, _ ->
+
+                    Log.e(
+                        TAG,
+                        "Failed to check camera permission: ${error.description}",
+                    )
+
                     CameraPermission.NOT_DETERMINED
-            }
+                },
+            )
+
         } catch (e: Exception) {
+
             Log.e(
                 TAG,
-                "Failed to check camera permission",
+                "Exception checking camera permission",
                 e,
             )
 
@@ -251,11 +287,11 @@ class RealGlassesBackend @Inject constructor(
         }
     }
 
+    /**
+     * Starts the MWDAT registration flow if camera permission
+     * has not already been granted.
+     */
     override suspend fun requestCameraPermission(): CameraPermission {
-        Log.i(
-            TAG,
-            "Requesting camera permission",
-        )
 
         val activity = currentActivity
 
@@ -268,7 +304,8 @@ class RealGlassesBackend @Inject constructor(
             return CameraPermission.DENIED
         }
 
-        return try {
+        try {
+
             val current = cameraPermission()
 
             if (current == CameraPermission.GRANTED) {
@@ -285,81 +322,151 @@ class RealGlassesBackend @Inject constructor(
                 "Starting MWDAT registration/permission flow from ${activity::class.java.simpleName}",
             )
 
-            wearables.startRegistration(activity)
+            Wearables.startRegistration(activity)
+                .onSuccess {
+                    Log.i(
+                        TAG,
+                        "MWDAT permission/registration flow started",
+                    )
+                }
+                .onFailure { error, _ ->
+                    Log.e(
+                        TAG,
+                        "MWDAT permission/registration failed: ${error.description}",
+                    )
+                }
 
-            /*
-             * MWDAT's registration/permission flow is asynchronous.
-             *
-             * We check immediately here, but if the permission UI is shown,
-             * the next camera attempt will check again.
-             */
-            val afterRequest = cameraPermission()
+            return cameraPermission()
 
-            Log.i(
-                TAG,
-                "Camera permission after request: $afterRequest",
-            )
-
-            afterRequest
         } catch (e: Exception) {
+
             Log.e(
                 TAG,
-                "Failed to request camera permission",
+                "Exception requesting camera permission",
                 e,
             )
 
-            CameraPermission.DENIED
+            return CameraPermission.DENIED
         }
     }
 
     /**
-     * Provides JPEG frames from the glasses camera.
-     *
-     * Each emitted ByteArray is a JPEG image suitable for sending to Gemini.
+     * Opens a MWDAT camera session and emits JPEG frames.
      */
     override fun cameraFrames(): Flow<ByteArray> =
         callbackFlow {
 
             val job = launch(Dispatchers.IO) {
+
                 var session: DeviceSession? = null
                 var camera: Camera? = null
 
                 try {
-                    Log.i(
-                        TAG,
-                        "Starting glasses camera stream",
-                    )
-
-                    val selector = AutoDeviceSelector()
-
-                    session = DeviceSession.create(
-                        context,
-                        selector,
-                    )
 
                     Log.i(
                         TAG,
-                        "Device session created",
+                        "Creating MWDAT camera session",
                     )
 
-                    camera = session.addCamera(
-                        StreamConfiguration(
-                            videoQuality = VideoQuality.MEDIUM,
-                            frameRate = 15,
-                            compressVideo = false,
-                        ),
-                    )
+                    /*
+                     * DAT 0.9.0:
+                     *
+                     * Wearables.createSession(...)
+                     * returns DatResult<DeviceSession, ...>
+                     */
+                    session = Wearables
+                        .createSession(AutoDeviceSelector())
+                        .getOrElse { error ->
+
+                            Log.e(
+                                TAG,
+                                "Failed to create camera session: ${error.description}",
+                            )
+
+                            return@launch
+                        }
 
                     Log.i(
                         TAG,
-                        "Camera added to device session",
+                        "DeviceSession created",
                     )
 
-                    camera?.videoStream?.collect { frame ->
+                    /*
+                     * Start the session before adding the camera.
+                     */
+                    session.start()
+
+                    Log.i(
+                        TAG,
+                        "DeviceSession.start() called",
+                    )
+
+                    /*
+                     * DAT 0.9.0:
+                     *
+                     * addCamera() returns DatResult<Camera, ...>
+                     */
+                    camera = session
+                        .addCamera(
+                            StreamConfiguration(
+                                videoQuality = VideoQuality.MEDIUM,
+                                frameRate = 15,
+                            ),
+                        )
+                        .getOrElse { error ->
+
+                            Log.e(
+                                TAG,
+                                "Failed to add camera: ${error.description}",
+                            )
+
+                            return@launch
+                        }
+
+                    Log.i(
+                        TAG,
+                        "Camera capability added",
+                    )
+
+                    /*
+                     * Start the actual camera stream.
+                     */
+                    camera.stream
+                        .start()
+                        .onSuccess {
+                            Log.i(
+                                TAG,
+                                "Camera stream started",
+                            )
+                        }
+                        .onFailure { error, _ ->
+
+                            Log.e(
+                                TAG,
+                                "Failed to start camera stream: ${error.description}",
+                            )
+
+                            return@launch
+                        }
+
+                    Log.i(
+                        TAG,
+                        "Collecting camera frames",
+                    )
+
+                    /*
+                     * DAT 0.9.0:
+                     *
+                     * Camera -> stream -> videoStream
+                     */
+                    camera.stream.videoStream.collect { frame ->
+
                         try {
+
                             val jpeg = videoFrameToJpeg(frame)
 
                             if (jpeg != null) {
+
                                 trySend(jpeg)
 
                                 Log.d(
@@ -367,12 +474,15 @@ class RealGlassesBackend @Inject constructor(
                                     "Camera frame emitted: ${jpeg.size} bytes",
                                 )
                             } else {
+
                                 Log.w(
                                     TAG,
-                                    "Camera frame could not be converted to JPEG",
+                                    "Camera frame conversion returned null",
                                 )
                             }
+
                         } catch (e: Exception) {
+
                             Log.e(
                                 TAG,
                                 "Failed to process camera frame",
@@ -380,17 +490,29 @@ class RealGlassesBackend @Inject constructor(
                             )
                         }
                     }
+
                 } catch (e: Exception) {
+
                     Log.e(
                         TAG,
                         "Camera stream failed",
                         e,
                     )
+
                 } finally {
+
                     try {
-                        camera?.let {
-                            session?.removeCamera(it)
-                        }
+                        camera?.stop()
+                    } catch (e: Exception) {
+                        Log.w(
+                            TAG,
+                            "Failed to stop camera",
+                            e,
+                        )
+                    }
+
+                    try {
+                        session?.removeCamera()
                     } catch (e: Exception) {
                         Log.w(
                             TAG,
@@ -400,18 +522,18 @@ class RealGlassesBackend @Inject constructor(
                     }
 
                     try {
-                        session?.close()
+                        session?.stop()
                     } catch (e: Exception) {
                         Log.w(
                             TAG,
-                            "Failed to close device session",
+                            "Failed to stop DeviceSession",
                             e,
                         )
                     }
 
                     Log.i(
                         TAG,
-                        "Glasses camera stream stopped",
+                        "Glasses camera session stopped",
                     )
                 }
             }
@@ -422,20 +544,15 @@ class RealGlassesBackend @Inject constructor(
         }
 
     /**
-     * Converts the MWDAT VideoFrame into JPEG.
+     * Convert a MWDAT VideoFrame to JPEG.
      *
-     * Handles:
-     * 1. Already-JPEG frames
-     * 2. I420/YUV frames
+     * We first try to interpret the frame buffer as an encoded image.
+     * If that fails, we fall back to I420/YUV conversion.
      */
     private fun videoFrameToJpeg(
         frame: VideoFrame,
     ): ByteArray? {
 
-        /*
-         * Some MWDAT versions expose compressed frames through the buffer
-         * directly. Try JPEG decoding first.
-         */
         val buffer = frame.buffer
 
         if (buffer == null) {
@@ -452,7 +569,7 @@ class RealGlassesBackend @Inject constructor(
         buffer.get(bytes)
 
         /*
-         * If this is already JPEG data, preserve it.
+         * Try encoded image data first.
          */
         val bitmap = BitmapFactory.decodeByteArray(
             bytes,
@@ -465,15 +582,18 @@ class RealGlassesBackend @Inject constructor(
         }
 
         /*
-         * Otherwise interpret it as I420/YUV.
+         * Fall back to raw I420.
          */
         return try {
+
             i420ToJpeg(
                 data = bytes,
                 width = frame.width,
                 height = frame.height,
             )
+
         } catch (e: Exception) {
+
             Log.e(
                 TAG,
                 "Failed to convert I420 frame to JPEG",
@@ -487,7 +607,9 @@ class RealGlassesBackend @Inject constructor(
     private fun bitmapToJpeg(
         bitmap: Bitmap,
     ): ByteArray {
+
         return ByteArrayOutputStream().use { output ->
+
             bitmap.compress(
                 Bitmap.CompressFormat.JPEG,
                 85,
@@ -501,13 +623,13 @@ class RealGlassesBackend @Inject constructor(
     }
 
     /**
-     * Converts planar I420:
+     * I420:
      *
      * YYYYYYYY
      * UUUU
      * VVVV
      *
-     * into Android's NV21:
+     * -> NV21:
      *
      * YYYYYYYY
      * VUVU
@@ -521,14 +643,19 @@ class RealGlassesBackend @Inject constructor(
         val ySize = width * height
         val uvSize = ySize / 4
 
-        require(data.size >= ySize + uvSize + uvSize) {
-            "Invalid I420 buffer. size=${data.size}, expected=${ySize + uvSize + uvSize}"
+        require(
+            data.size >= ySize + uvSize + uvSize,
+        ) {
+            "Invalid I420 buffer: size=${data.size}, " +
+                "expected at least ${ySize + uvSize + uvSize}"
         }
 
-        val nv21 = ByteArray(ySize + uvSize + uvSize)
+        val nv21 = ByteArray(
+            ySize + uvSize + uvSize,
+        )
 
         /*
-         * Copy Y plane.
+         * Y plane.
          */
         System.arraycopy(
             data,
@@ -542,13 +669,17 @@ class RealGlassesBackend @Inject constructor(
         val vOffset = ySize + uvSize
 
         /*
-         * Convert U/V planes to interleaved V/U.
+         * Interleave V/U.
          */
         var outputIndex = ySize
 
         for (i in 0 until uvSize) {
-            nv21[outputIndex++] = data[vOffset + i]
-            nv21[outputIndex++] = data[uOffset + i]
+
+            nv21[outputIndex++] =
+                data[vOffset + i]
+
+            nv21[outputIndex++] =
+                data[uOffset + i]
         }
 
         val yuvImage = YuvImage(
@@ -560,6 +691,7 @@ class RealGlassesBackend @Inject constructor(
         )
 
         return ByteArrayOutputStream().use { output ->
+
             yuvImage.compressToJpeg(
                 Rect(
                     0,
