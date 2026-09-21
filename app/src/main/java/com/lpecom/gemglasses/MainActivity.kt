@@ -5,7 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
@@ -20,7 +19,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -44,8 +42,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Explicitly give the MWDAT backend the Activity it should use
-        // for registration and permission UI.
+        // IMPORTANT:
+        // Register the Activity before Compose can create the ViewModel
+        // or the user can press "Conectar óculos".
         glassesBackend.setActivity(this)
 
         enableEdgeToEdge()
@@ -68,68 +67,62 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Tab(
+private data class BottomNavItem(
     val route: String,
     val label: String,
-    val icon: ImageVector
-) {
-    HOME(
-        "home",
-        "Home",
-        Icons.Filled.Home
-    ),
-
-    TRANSCRIPT(
-        "transcript",
-        "Transcript",
-        Icons.AutoMirrored.Filled.List
-    ),
-
-    SETTINGS(
-        "settings",
-        "Settings",
-        Icons.Filled.Settings
-    ),
-}
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+)
 
 @Composable
 private fun GemGlassesRoot() {
     val navController = rememberNavController()
 
+    val items = listOf(
+        BottomNavItem(
+            route = "home",
+            label = "Home",
+            icon = Icons.Default.Home,
+        ),
+        BottomNavItem(
+            route = "transcript",
+            label = "Transcript",
+            icon = Icons.AutoMirrored.Filled.List,
+        ),
+        BottomNavItem(
+            route = "settings",
+            label = "Settings",
+            icon = Icons.Default.Settings,
+        ),
+    )
+
     Scaffold(
         bottomBar = {
-            val backStack by navController.currentBackStackEntryAsState()
-            val current = backStack?.destination
-
             NavigationBar {
-                Tab.entries.forEach { tab ->
-                    NavigationBarItem(
-                        selected = current
-                            ?.hierarchy
-                            ?.any { it.route == tab.route } == true,
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentDestination = navBackStackEntry?.destination
 
+                items.forEach { item ->
+                    NavigationBarItem(
+                        selected = currentDestination
+                            ?.hierarchy
+                            ?.any { it.route == item.route } == true,
                         onClick = {
-                            navController.navigate(tab.route) {
-                                popUpTo(
-                                    navController.graph.findStartDestination().id
-                                ) {
+                            navController.navigate(item.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
                                     saveState = true
                                 }
-
                                 launchSingleTop = true
                                 restoreState = true
                             }
                         },
-
                         icon = {
                             Icon(
-                                tab.icon,
-                                contentDescription = tab.label
+                                imageVector = item.icon,
+                                contentDescription = item.label,
                             )
                         },
-
                         label = {
-                            Text(tab.label)
+                            Text(item.label)
                         },
                     )
                 }
@@ -138,24 +131,24 @@ private fun GemGlassesRoot() {
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = Tab.HOME.route,
+            startDestination = "home",
             modifier = Modifier.fillMaxSize(),
         ) {
-            composable(Tab.HOME.route) {
+            composable("home") {
                 HomeScreen(
-                    Modifier.padding(padding)
+                    modifier = Modifier,
                 )
             }
 
-            composable(Tab.TRANSCRIPT.route) {
+            composable("transcript") {
                 TranscriptScreen(
-                    Modifier.padding(padding)
+                    modifier = Modifier,
                 )
             }
 
-            composable(Tab.SETTINGS.route) {
+            composable("settings") {
                 SettingsScreen(
-                    Modifier.padding(padding)
+                    modifier = Modifier,
                 )
             }
         }
