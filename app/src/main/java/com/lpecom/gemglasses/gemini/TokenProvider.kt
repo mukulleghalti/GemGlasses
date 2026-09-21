@@ -27,6 +27,8 @@ class TokenProvider @Inject constructor(
 
     /** Returns a fresh ephemeral token, or throws on transport/auth failure. */
     suspend fun fetchEphemeralToken(): String = withContext(Dispatchers.IO) {
+        Log.d("TokenProvider", "Connecting to: ${BuildConfig.BACKEND_URL}/token")
+        Log.d("TokenProvider", "Using App Secret length: ${BuildConfig.APP_SECRET.length}")
         val request = Request.Builder()
             .url("${BuildConfig.BACKEND_URL.trimEnd('/')}/token")
             .header("X-App-Secret", BuildConfig.APP_SECRET)
