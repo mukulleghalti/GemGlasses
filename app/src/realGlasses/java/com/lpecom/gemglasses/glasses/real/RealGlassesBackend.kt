@@ -1,20 +1,17 @@
 package com.lpecom.gemglasses.glasses.real
 
 import android.app.Activity
-import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.graphics.YuvImage
-import android.os.Bundle
 import android.util.Log
 import com.lpecom.gemglasses.glasses.CameraPermission
 import com.lpecom.gemglasses.glasses.GlassesBackend
 import com.lpecom.gemglasses.glasses.GlassesDevice
 import com.lpecom.gemglasses.glasses.RegistrationState
-
 import com.meta.wearable.dat.camera.Camera
 import com.meta.wearable.dat.camera.addCamera
 import com.meta.wearable.dat.camera.removeCamera
@@ -27,7 +24,6 @@ import com.meta.wearable.dat.core.session.DeviceSession
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.core.types.RegistrationState as MetaRegistrationState
-
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -37,52 +33,40 @@ import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import javax.inject.Inject
+import javax.inject.Singleton
 
+@Singleton
 class RealGlassesBackend @Inject constructor(
     private val context: Context
 ) : GlassesBackend {
 
     private val wearables = Wearables
+
+    /*
+     * MainActivity explicitly registers itself here.
+     *
+     * We do NOT rely on Application.ActivityLifecycleCallbacks for the
+     * permission/registration flow anymore.
+     */
+    @Volatile
     private var currentActivity: Activity? = null
 
-    init {
-        (context.applicationContext as? Application)
-            ?.registerActivityLifecycleCallbacks(
-                object : Application.ActivityLifecycleCallbacks {
+    /**
+     * Called by MainActivity when it is available.
+     */
+    fun setActivity(activity: Activity) {
+        currentActivity = activity
+        Log.i(TAG, "Host Activity registered: ${activity.javaClass.simpleName}")
+    }
 
-                    override fun onActivityResumed(activity: Activity) {
-                        currentActivity = activity
-                    }
-
-                    override fun onActivityPaused(activity: Activity) {
-                        if (currentActivity == activity) {
-                            currentActivity = null
-                        }
-                    }
-
-                    override fun onActivityStarted(activity: Activity) {
-                        currentActivity = activity
-                    }
-
-                    override fun onActivityStopped(activity: Activity) = Unit
-
-                    override fun onActivityCreated(
-                        activity: Activity,
-                        savedInstanceState: Bundle?
-                    ) = Unit
-
-                    override fun onActivitySaveInstanceState(
-                        activity: Activity,
-                        outState: Bundle
-                    ) = Unit
-
-                    override fun onActivityDestroyed(activity: Activity) {
-                        if (currentActivity == activity) {
-                            currentActivity = null
-                        }
-                    }
-                }
-            )
+    /**
+     * Called when MainActivity is being destroyed.
+     */
+    fun clearActivity(activity: Activity) {
+        if (currentActivity === activity) {
+            currentActivity = null
+            Log.i(TAG, "Host Activity cleared")
+        }
     }
 
     override val registrationState: Flow<RegistrationState> =
@@ -93,17 +77,14 @@ class RealGlassesBackend @Inject constructor(
 
     override val devices: Flow<List<GlassesDevice>> =
         wearables.devices.map { idSet ->
-
             Log.d(TAG, "Meta devices set: $idSet")
 
             idSet.map { id ->
-
                 val metadata = wearables.devicesMetadata[id]?.value
 
                 Log.d(
                     TAG,
-                    "Device id=$id, metadata=$metadata, " +
-                        "metadataName=${metadata?.name}"
+                    "Device id=$id, metadata=$metadata, metadataName=${metadata?.name}"
                 )
 
                 val deviceName = metadata?.name
@@ -113,10 +94,7 @@ class RealGlassesBackend @Inject constructor(
                     }
                     ?: "Ray-Ban Meta"
 
-                Log.i(
-                    TAG,
-                    "Using glasses name: $deviceName"
-                )
+                Log.i(TAG, "Using glasses name: $deviceName")
 
                 GlassesDevice(
                     id = id.toString(),
@@ -127,7 +105,6 @@ class RealGlassesBackend @Inject constructor(
         }
 
     override fun initialize() {
-
         val result = wearables.initialize(context)
 
         Log.i(
@@ -139,13 +116,12 @@ class RealGlassesBackend @Inject constructor(
     }
 
     override fun startRegistration() {
-
-        val activity = currentActivity ?: (context as? Activity)
+        val activity = currentActivity
 
         Log.i(
             TAG,
             "startRegistration invoked. " +
-                "Activity available: $activity"
+                "Activity=${activity?.javaClass?.simpleName}"
         )
 
         if (activity != null) {
@@ -153,315 +129,252 @@ class RealGlassesBackend @Inject constructor(
         } else {
             Log.e(
                 TAG,
-                "Failed to start registration: " +
-                    "No active Activity found!"
+                "Failed to start registration: no registered Activity"
             )
         }
     }
 
     override suspend fun cameraPermission(): CameraPermission {
+        val result = wearables.checkPermissionStatus(Permission.CAMERA)
 
-        val result =
-            wearables.checkPermissionStatus(Permission.CAMERA)
+        val status = result.getOrNull()
 
-        val status =
-            result.getOrNull()
-                ?: return CameraPermission.NOT_DETERMINED
+        if (status == null) {
+            Log.e(
+                TAG,
+                "Unable to determine camera permission: " +
+                    "${result.errorOrNull()}"
+            )
+            return CameraPermission.NOT_DETERMINED
+        }
 
-        Log.d(
-            TAG,
-            "Camera permission status: $status"
-        )
+        Log.i(TAG, "Camera permission status: $status")
 
         return status.toPermissionDomain()
     }
 
     override suspend fun requestCameraPermission(): CameraPermission {
+        Log.i(TAG, "Requesting camera permission...")
 
         val current = cameraPermission()
 
+        Log.i(TAG, "Current camera permission: $current")
+
         if (current == CameraPermission.GRANTED) {
+            Log.i(TAG, "Camera permission already granted")
             return current
         }
 
-        val activity =
-            currentActivity ?: (context as? Activity)
+        val activity = currentActivity
 
-        if (activity != null) {
-
-            Log.i(
-                TAG,
-                "Starting Meta camera permission/registration flow"
-            )
-
-            wearables.startRegistration(activity)
-
-        } else {
-
+        if (activity == null) {
             Log.e(
                 TAG,
-                "Cannot request camera permission: " +
-                    "no active Activity"
+                "Cannot request camera permission: no registered Activity"
             )
+            return current
         }
 
-        return cameraPermission()
+        Log.i(
+            TAG,
+            "Starting Meta registration/permission flow using " +
+                activity.javaClass.simpleName
+        )
+
+        try {
+            wearables.startRegistration(activity)
+
+            Log.i(
+                TAG,
+                "Meta registration flow started successfully"
+            )
+        } catch (e: Exception) {
+            Log.e(
+                TAG,
+                "Failed to start Meta registration flow",
+                e
+            )
+            return CameraPermission.NOT_DETERMINED
+        }
+
+        /*
+         * IMPORTANT:
+         *
+         * startRegistration() launches an asynchronous UI flow.
+         * We cannot immediately assume the permission has changed here.
+         *
+         * Therefore we check again, but the Activity remains registered.
+         * If the user still needs to approve the permission, the next
+         * vision attempt can check it again.
+         */
+        val afterRequest = cameraPermission()
+
+        Log.i(
+            TAG,
+            "Camera permission after registration request: $afterRequest"
+        )
+
+        return afterRequest
     }
 
-    override fun cameraFrames(): Flow<ByteArray> =
-        callbackFlow {
+    override fun cameraFrames(): Flow<ByteArray> = callbackFlow {
+        Log.i(TAG, "Starting cameraFrames session...")
 
-            Log.i(TAG, "========================================")
-            Log.i(TAG, "Starting cameraFrames session...")
-            Log.i(TAG, "========================================")
+        val sessionResult = wearables.createSession(
+            AutoDeviceSelector()
+        )
 
-            val permission =
-                wearables.checkPermissionStatus(Permission.CAMERA)
-
-            Log.i(
-                TAG,
-                "Camera permission before session: $permission"
+        val session: DeviceSession = sessionResult.getOrNull()
+            ?: throw IllegalStateException(
+                "Failed to create device session: " +
+                    "${sessionResult.errorOrNull()}"
             )
 
-            val sessionResult =
-                wearables.createSession(
-                    AutoDeviceSelector()
-                )
+        Log.i(TAG, "Device session created")
 
-            if (sessionResult.isFailure) {
+        session.start()
 
-                val error = sessionResult.errorOrNull()
+        Log.i(TAG, "Device session started")
 
+        val streamConfig = StreamConfiguration(
+            videoQuality = VideoQuality.MEDIUM,
+            frameRate = 15,
+            compressVideo = false
+        )
+
+        Log.i(
+            TAG,
+            "Adding camera: quality=MEDIUM, fps=15, compressVideo=false"
+        )
+
+        val cameraResult = session.addCamera(streamConfig)
+
+        val camera: Camera = cameraResult.getOrNull()
+            ?: run {
                 Log.e(
                     TAG,
-                    "createSession FAILED: $error"
+                    "Failed to add camera: ${cameraResult.errorOrNull()}"
                 )
 
+                session.stop()
+
                 throw IllegalStateException(
-                    "Failed to create device session: $error"
+                    "Failed to add camera: " +
+                        "${cameraResult.errorOrNull()}"
                 )
             }
 
-            val session: DeviceSession =
-                sessionResult.getOrNull()
-                    ?: throw IllegalStateException(
-                        "Failed to create device session"
-                    )
+        Log.i(TAG, "Camera added successfully")
 
-            Log.i(
+        val stream = camera.stream
+
+        val streamStartResult = stream.start()
+
+        if (streamStartResult.isFailure) {
+            Log.e(
                 TAG,
-                "DeviceSession created"
+                "Failed to start camera stream: " +
+                    "${streamStartResult.errorOrNull()}"
             )
 
-            try {
+            camera.stop()
+            session.removeCamera()
+            session.stop()
 
-                session.start()
+            throw IllegalStateException(
+                "Failed to start stream: " +
+                    "${streamStartResult.errorOrNull()}"
+            )
+        }
 
-                Log.i(
+        Log.i(TAG, "CAMERA STREAM STARTED SUCCESSFULLY")
+
+        val job = launch(Dispatchers.Default) {
+            var frameNumber = 0
+
+            stream.videoStream.collect { frame ->
+                frameNumber++
+
+                val buffer = frame.buffer.asReadOnlyBuffer()
+
+                Log.d(
                     TAG,
-                    "DeviceSession.start() called"
+                    "VideoFrame #$frameNumber: " +
+                        "${frame.width}x${frame.height}, " +
+                        "bytes=${buffer.remaining()}, " +
+                        "compressed=${frame.isCompressed}, " +
+                        "codecConfig=${frame.isCodecConfig}"
                 )
 
-                val streamConfig =
-                    StreamConfiguration(
-                        videoQuality = VideoQuality.MEDIUM,
-                        frameRate = 15,
-                        compressVideo = false
-                    )
-
-                Log.i(
-                    TAG,
-                    "Adding camera: " +
-                        "quality=MEDIUM, fps=15, compressed=false"
-                )
-
-                val cameraResult =
-                    session.addCamera(streamConfig)
-
-                if (cameraResult.isFailure) {
-
-                    val error = cameraResult.errorOrNull()
-
-                    Log.e(
+                if (frame.isCodecConfig) {
+                    Log.d(
                         TAG,
-                        "addCamera FAILED: $error"
+                        "Ignoring codec config frame #$frameNumber"
                     )
-
-                    throw IllegalStateException(
-                        "Failed to add camera: $error"
-                    )
+                    return@collect
                 }
 
-                val camera: Camera =
-                    cameraResult.getOrNull()
-                        ?: throw IllegalStateException(
-                            "Failed to add camera"
-                        )
+                val jpeg = frame.toDownscaledJpeg()
 
-                Log.i(
-                    TAG,
-                    "Camera added successfully"
-                )
-
-                val stream = camera.stream
-
-                val streamStartResult =
-                    stream.start()
-
-                if (streamStartResult.isFailure) {
-
-                    val error =
-                        streamStartResult.errorOrNull()
-
-                    Log.e(
+                if (jpeg != null) {
+                    Log.d(
                         TAG,
-                        "Camera stream.start() FAILED: $error"
+                        "JPEG created: ${jpeg.size} bytes"
                     )
 
-                    camera.stop()
-                    session.removeCamera()
-                    session.stop()
-
-                    throw IllegalStateException(
-                        "Failed to start camera stream: $error"
-                    )
-                }
-
-                Log.i(TAG, "========================================")
-                Log.i(TAG, "CAMERA STREAM STARTED SUCCESSFULLY")
-                Log.i(TAG, "========================================")
-
-                val job =
-                    launch(Dispatchers.Default) {
-
-                        var frameNumber = 0
-
-                        stream.videoStream.collect { frame ->
-
-                            frameNumber++
-
-                            val buffer =
-                                frame.buffer.asReadOnlyBuffer()
-
-                            Log.d(
-                                TAG,
-                                "VideoFrame #$frameNumber: " +
-                                    "${frame.width}x${frame.height}, " +
-                                    "bytes=${buffer.remaining()}, " +
-                                    "compressed=${frame.isCompressed}, " +
-                                    "codecConfig=${frame.isCodecConfig}"
-                            )
-
-                            if (frame.isCodecConfig) {
-                                Log.d(
-                                    TAG,
-                                    "Skipping codec config frame"
-                                )
-                                return@collect
-                            }
-
-                            val jpeg =
-                                frame.toDownscaledJpeg()
-
-                            if (jpeg != null) {
-
-                                Log.d(
-                                    TAG,
-                                    "JPEG created: " +
-                                        "${jpeg.size} bytes"
-                                )
-
-                                try {
-                                    trySend(jpeg)
-                                } catch (e: Exception) {
-                                    Log.w(
-                                        TAG,
-                                        "Failed to send JPEG to camera flow",
-                                        e
-                                    )
-                                }
-
-                            } else {
-
-                                Log.w(
-                                    TAG,
-                                    "VideoFrame conversion returned null"
-                                )
-                            }
-                        }
+                    try {
+                        trySend(jpeg)
+                    } catch (e: Exception) {
+                        Log.w(
+                            TAG,
+                            "Failed to send JPEG to camera flow",
+                            e
+                        )
                     }
-
-                awaitClose {
-
-                    Log.i(
+                } else {
+                    Log.w(
                         TAG,
-                        "Stopping cameraFrames session..."
+                        "Could not convert VideoFrame #$frameNumber " +
+                            "to JPEG"
                     )
-
-                    job.cancel()
-
-                    runCatching {
-                        stream.stop()
-                    }.onFailure {
-                        Log.w(
-                            TAG,
-                            "stream.stop() failed",
-                            it
-                        )
-                    }
-
-                    runCatching {
-                        camera.stop()
-                    }.onFailure {
-                        Log.w(
-                            TAG,
-                            "camera.stop() failed",
-                            it
-                        )
-                    }
-
-                    runCatching {
-                        session.removeCamera()
-                    }.onFailure {
-                        Log.w(
-                            TAG,
-                            "session.removeCamera() failed",
-                            it
-                        )
-                    }
-
-                    runCatching {
-                        session.stop()
-                    }.onFailure {
-                        Log.w(
-                            TAG,
-                            "session.stop() failed",
-                            it
-                        )
-                    }
                 }
-
-            } catch (e: Exception) {
-
-                Log.e(
-                    TAG,
-                    "Camera session failed",
-                    e
-                )
-
-                runCatching {
-                    session.stop()
-                }
-
-                throw e
             }
         }
 
-    /**
-     * Converts the MWDAT raw YUV420/I420 frame into JPEG.
-     */
-    private fun VideoFrame.toDownscaledJpeg(): ByteArray? {
+        awaitClose {
+            Log.i(TAG, "Stopping cameraFrames session...")
 
+            job.cancel()
+
+            try {
+                stream.stop()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error stopping stream", e)
+            }
+
+            try {
+                camera.stop()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error stopping camera", e)
+            }
+
+            try {
+                session.removeCamera()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error removing camera", e)
+            }
+
+            try {
+                session.stop()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error stopping session", e)
+            }
+
+            Log.i(TAG, "Camera session stopped")
+        }
+    }
+
+    private fun VideoFrame.toDownscaledJpeg(): ByteArray? {
         val buf = buffer.asReadOnlyBuffer()
         val remaining = buf.remaining()
 
@@ -481,216 +394,164 @@ class RealGlassesBackend @Inject constructor(
             bytes[1] == 0xD8.toByte() &&
             bytes[2] == 0xFF.toByte()
         ) {
-
             Log.d(
                 TAG,
-                "Frame is already JPEG"
+                "VideoFrame is already JPEG"
             )
 
             return bytes
         }
 
         /*
-         * We intentionally use compressVideo=false,
-         * therefore compressed frames aren't expected here.
+         * If MWDAT says this frame is compressed but it isn't JPEG,
+         * don't try to interpret it as raw YUV.
          */
         if (isCompressed) {
-
             Log.w(
                 TAG,
-                "Received compressed video frame; " +
-                    "JPEG conversion skipped"
+                "VideoFrame is compressed but not JPEG. " +
+                    "Cannot decode frame."
             )
-
             return null
         }
 
-        val expectedI420Size =
-            width * height * 3 / 2
+        /*
+         * Expected size for I420/YUV420 planar:
+         *
+         * Y  = width * height
+         * U  = width * height / 4
+         * V  = width * height / 4
+         *
+         * Total = width * height * 3 / 2
+         */
+        val expectedI420Size = width * height * 3 / 2
 
         if (remaining != expectedI420Size) {
-
             Log.w(
                 TAG,
                 "Unexpected raw frame size: " +
                     "actual=$remaining, " +
-                    "expected=$expectedI420Size, " +
-                    "resolution=${width}x${height}"
+                    "expectedI420=$expectedI420Size, " +
+                    "resolution=${width}x$height"
             )
-
             return null
         }
 
         return try {
+            val jpeg = i420ToJpeg(
+                bytes = bytes,
+                width = width,
+                height = height,
+                quality = 70
+            )
 
-            val jpeg =
-                i420ToJpeg(
-                    bytes = bytes,
-                    width = width,
-                    height = height,
-                    quality = 70
-                )
+            val bitmap = BitmapFactory.decodeByteArray(
+                jpeg,
+                0,
+                jpeg.size
+            )
 
-            val bitmap =
-                BitmapFactory.decodeByteArray(
-                    jpeg,
-                    0,
-                    jpeg.size
-                )
-
-            bitmap?.toDownscaledJpeg()
-                ?: jpeg
-
+            bitmap?.toDownscaledJpeg() ?: jpeg
         } catch (e: Exception) {
-
             Log.e(
                 TAG,
                 "Failed to convert I420 frame to JPEG",
                 e
             )
-
             null
         }
     }
 
-    /**
-     * I420:
-     *
-     * YYYYYYYY
-     * UUUU
-     * VVVV
-     *
-     * Android YuvImage expects NV21:
-     *
-     * YYYYYYYY
-     * VUVUVUVU
-     */
     private fun i420ToJpeg(
         bytes: ByteArray,
         width: Int,
         height: Int,
         quality: Int
     ): ByteArray {
-
         val frameSize = width * height
         val chromaSize = frameSize / 4
 
-        val yOffset = 0
         val uOffset = frameSize
         val vOffset = frameSize + chromaSize
 
-        val nv21 =
-            ByteArray(
-                frameSize + chromaSize * 2
-            )
-
         /*
-         * Copy Y plane.
+         * Android YuvImage expects NV21:
+         *
+         * YYYYYYYY
+         * VUVUVUVU
          */
+        val nv21 = ByteArray(
+            frameSize + chromaSize * 2
+        )
+
         System.arraycopy(
             bytes,
-            yOffset,
+            0,
             nv21,
             0,
             frameSize
         )
 
-        /*
-         * I420 -> NV21
-         *
-         * I420 chroma:
-         * UUUU
-         * VVVV
-         *
-         * NV21:
-         * VUVUVUVU
-         */
         var outputIndex = frameSize
 
         for (i in 0 until chromaSize) {
-
-            nv21[outputIndex++] =
-                bytes[vOffset + i]
-
-            nv21[outputIndex++] =
-                bytes[uOffset + i]
+            nv21[outputIndex++] = bytes[vOffset + i]
+            nv21[outputIndex++] = bytes[uOffset + i]
         }
 
-        val yuvImage =
-            YuvImage(
-                nv21,
-                ImageFormat.NV21,
-                width,
-                height,
-                null
-            )
+        val yuvImage = YuvImage(
+            nv21,
+            ImageFormat.NV21,
+            width,
+            height,
+            null
+        )
 
-        return ByteArrayOutputStream().use { output ->
+        val out = ByteArrayOutputStream()
 
-            val success =
-                yuvImage.compressToJpeg(
-                    Rect(
-                        0,
-                        0,
-                        width,
-                        height
-                    ),
-                    quality,
-                    output
-                )
+        yuvImage.compressToJpeg(
+            Rect(0, 0, width, height),
+            quality,
+            out
+        )
 
-            if (!success) {
-                throw IllegalStateException(
-                    "YuvImage.compressToJpeg() failed"
-                )
-            }
-
-            output.toByteArray()
-        }
+        return out.toByteArray()
     }
 
     private fun Bitmap.toDownscaledJpeg(): ByteArray {
+        val longest = maxOf(width, height)
 
-        val longest =
-            maxOf(width, height)
+        val scaled = if (longest > 768) {
+            val ratio = 768f / longest
 
-        val scaled =
-            if (longest > 768) {
+            Bitmap.createScaledBitmap(
+                this,
+                (width * ratio).toInt(),
+                (height * ratio).toInt(),
+                true
+            )
+        } else {
+            this
+        }
 
-                val ratio =
-                    768f / longest
-
-                Bitmap.createScaledBitmap(
-                    this,
-                    (width * ratio).toInt(),
-                    (height * ratio).toInt(),
-                    true
-                )
-
-            } else {
-                this
-            }
-
-        return ByteArrayOutputStream().use { output ->
-
+        return ByteArrayOutputStream().use { out ->
             scaled.compress(
                 Bitmap.CompressFormat.JPEG,
                 70,
-                output
+                out
             )
 
             if (scaled !== this) {
                 scaled.recycle()
             }
 
-            output.toByteArray()
+            out.toByteArray()
         }
     }
 
     private fun MetaRegistrationState.toRegistrationDomain():
         RegistrationState =
         when (this) {
-
             MetaRegistrationState.REGISTERED ->
                 RegistrationState.REGISTERED
 
@@ -704,7 +565,6 @@ class RealGlassesBackend @Inject constructor(
     private fun PermissionStatus.toPermissionDomain():
         CameraPermission =
         when (this) {
-
             is PermissionStatus.Granted ->
                 CameraPermission.GRANTED
 
