@@ -2,6 +2,7 @@ package com.lpecom.gemglasses.gemini
 
 import android.util.Base64
 import android.util.Log
+import com.lpecom.gemglasses.BuildConfig
 import com.lpecom.gemglasses.gemini.protocol.*
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -27,7 +28,10 @@ class LiveSession(
     @Volatile private var socket: WebSocket? = null
 
     fun connect(): Flow<SessionEvent> = callbackFlow {
-        val url = "${Models.LIVE_WS_HOST}?key=$ephemeralToken"   // ← Changed to ?key=
+        // Use the real Gemini API key from BuildConfig (injected via local.properties)
+        val apiKey = BuildConfig.GEMINI_API_KEY
+
+        val url = "${Models.LIVE_WS_HOST}?key=$apiKey"
         val request = Request.Builder().url(url).build()
 
         val listener = object : WebSocketListener() {
@@ -35,44 +39,40 @@ class LiveSession(
                 socket = webSocket
                 val setupMessage = buildSetup()
                 val jsonString = json.encodeToString(ClientMessage.serializer(), setupMessage)
-                Log.d(TAG, ">>> Sending setup: $jsonString")
+                Log.d(TAG, ">>> Sending setup")
                 webSocket.send(jsonString)
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                val raw = bytes.utf8()
-                Log.d(TAG, "RAW ← (bytes) $raw")
-                handleFrame(raw)?.let { trySend(it) }
+                handleFrame(bytes.utf8())?.let { trySend(it) }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d(TAG, "RAW ← $text")
                 handleFrame(text)?.let { trySend(it) }
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "onClosing: code=$code, reason=$reason")
+                Log.d(TAG, "onClosing: $code - $reason")
                 webSocket.close(NORMAL_CLOSURE, null)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "onClosed: code=$code, reason=$reason")
+                Log.d(TAG, "onClosed: $code - $reason")
                 trySend(SessionEvent.Closed(null))
                 close()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "onFailure: ${t.message}", t)
+                Log.e(TAG, "onFailure", t)
                 trySend(SessionEvent.Closed(t))
                 close()
             }
         }
 
-        val ws = client.newWebSocket(request, listener)
-        socket = ws
+        client.newWebSocket(request, listener).also { socket = it }
 
         awaitClose {
-            ws.close(NORMAL_CLOSURE, "client closing")
+            socket?.close(NORMAL_CLOSURE, "client closing")
             socket = null
         }
     }
@@ -116,8 +116,7 @@ class LiveSession(
     }
 
     private fun send(message: ClientMessage) {
-        val ws = socket ?: return
-        ws.send(json.encodeToString(ClientMessage.serializer(), message))
+        socket?.send(json.encodeToString(ClientMessage.serializer(), message))
     }
 
     private fun buildSetup() = ClientMessage(
@@ -140,43 +139,15 @@ class LiveSession(
     )
 
     private fun handleFrame(raw: String): SessionEvent? {
-        val msg = runCatching { json.decodeFromString(ServerMessage.serializer(), raw) }
-            .getOrElse {
-                Log.w(TAG, "unparsed frame: ${raw.take(120)}")
-                return null
-            }
+        val msg = runCatching { json.decodeFromString(ServerMessage.serializer(), raw) }.getOrNull() ?: return null
 
         msg.setupComplete?.let { return SessionEvent.Ready }
         msg.goAway?.let { return SessionEvent.GoingAway(it.timeLeft) }
-        msg.toolCallCancellation?.let { return SessionEvent.ToolCancelled(it.ids) }
         msg.toolCall?.let {
             if (it.functionCalls.isNotEmpty()) return SessionEvent.ToolInvocation(it.functionCalls)
         }
-        msg.sessionResumptionUpdate?.let { update ->
-            if (update.resumable && update.newHandle != null) {
-                resumeCallback?.invoke(update.newHandle)
-            }
-        }
-
         msg.serverContent?.let { sc ->
             sc.interrupted?.takeIf { it }?.let { return SessionEvent.Interrupted }
             sc.inputTranscription?.text?.let { return SessionEvent.Transcript(it, fromUser = true) }
             sc.outputTranscription?.text?.let { return SessionEvent.Transcript(it, fromUser = false) }
-            sc.modelTurn?.parts?.firstNotNullOfOrNull { it.inlineData }?.let { blob ->
-                return SessionEvent.AudioChunk(Base64.decode(blob.data, Base64.NO_WRAP))
-            }
-            sc.turnComplete?.takeIf { it }?.let { return SessionEvent.TurnComplete }
-        }
-        return null
-    }
-
-    @Volatile var resumeCallback: ((String) -> Unit)? = null
-
-    private fun ByteArray.b64(): String = Base64.encodeToString(this, Base64.NO_WRAP)
-
-    private companion object {
-        const val TAG = "LiveSession"
-        const val NORMAL_CLOSURE = 1000
-        val EMPTY_OBJECT = kotlinx.serialization.json.JsonObject(emptyMap())
-    }
-}
+            sc.modelTurn?.parts?.firstNotNullOfOr
