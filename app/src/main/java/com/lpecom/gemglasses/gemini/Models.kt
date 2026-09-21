@@ -12,7 +12,7 @@ package com.lpecom.gemglasses.gemini
  */
 object Models {
     /** Native-audio Live model: speech-to-speech, VAD, barge-in in one socket. */
-    const val GEMINI_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
+    const val GEMINI_LIVE_MODEL = "gemini-2.5-flash-preview-native-audio-dialog"
 
     /** REST model used for `buscar_lugares` (generateContent + Maps grounding). */
     const val GEMINI_GROUNDING_MODEL = "gemini-2.5-flash"
