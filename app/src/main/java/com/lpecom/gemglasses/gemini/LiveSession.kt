@@ -2,22 +2,7 @@ package com.lpecom.gemglasses.gemini
 
 import android.util.Base64
 import android.util.Log
-import com.lpecom.gemglasses.gemini.protocol.Blob
-import com.lpecom.gemglasses.gemini.protocol.ClientContent
-import com.lpecom.gemglasses.gemini.protocol.ClientMessage
-import com.lpecom.gemglasses.gemini.protocol.Content
-import com.lpecom.gemglasses.gemini.protocol.FunctionResponse
-import com.lpecom.gemglasses.gemini.protocol.GenerationConfig
-import com.lpecom.gemglasses.gemini.protocol.Part
-import com.lpecom.gemglasses.gemini.protocol.PrebuiltVoiceConfig
-import com.lpecom.gemglasses.gemini.protocol.RealtimeInput
-import com.lpecom.gemglasses.gemini.protocol.RealtimeInputConfig
-import com.lpecom.gemglasses.gemini.protocol.ServerMessage
-import com.lpecom.gemglasses.gemini.protocol.SessionResumptionConfig
-import com.lpecom.gemglasses.gemini.protocol.Setup
-import com.lpecom.gemglasses.gemini.protocol.SpeechConfig
-import com.lpecom.gemglasses.gemini.protocol.ToolResponse
-import com.lpecom.gemglasses.gemini.protocol.VoiceConfig
+import com.lpecom.gemglasses.gemini.protocol.*
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -29,15 +14,6 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
 
-/**
- * A single Gemini Live WebSocket connection. Owns the socket lifecycle, sends
- * the setup handshake, streams audio/video, and parses server frames into a
- * cold [Flow] of [SessionEvent].
- *
- * This class is intentionally "dumb" about reconnection — [SessionKeeper] wraps
- * it and re-opens with a resumption handle when the socket drops or the server
- * sends `goAway`.
- */
 class LiveSession(
     private val client: OkHttpClient,
     private val json: Json,
@@ -45,15 +21,11 @@ class LiveSession(
     private val systemInstruction: String,
     private val voiceName: String,
     private val languageCode: String,
-    private val liveTools: List<com.lpecom.gemglasses.gemini.protocol.Tool>,
+    private val liveTools: List<Tool>,
     private val resumeHandle: String?,
 ) {
     @Volatile private var socket: WebSocket? = null
 
-    /**
-     * Opens the socket and emits events until it closes. Collecting starts the
-     * connection; cancelling the collector closes it cleanly.
-     */
     fun connect(): Flow<SessionEvent> = callbackFlow {
         val url = "${Models.LIVE_WS_HOST}?access_token=$ephemeralToken"
         val request = Request.Builder().url(url).build()
@@ -61,28 +33,36 @@ class LiveSession(
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 socket = webSocket
-                webSocket.send(json.encodeToString(ClientMessage.serializer(), buildSetup()))
+                val setupMessage = buildSetup()
+                val jsonString = json.encodeToString(ClientMessage.serializer(), setupMessage)
+                Log.d(TAG, ">>> Sending setup: $jsonString")
+                webSocket.send(jsonString)
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                handleFrame(bytes.utf8())?.let { trySend(it) }
+                val raw = bytes.utf8()
+                Log.d(TAG, "RAW ← (bytes) $raw")
+                handleFrame(raw)?.let { trySend(it) }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                Log.d(TAG, "RAW ← $text")
                 handleFrame(text)?.let { trySend(it) }
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                Log.d(TAG, "onClosing: code=$code, reason=$reason")
                 webSocket.close(NORMAL_CLOSURE, null)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                Log.d(TAG, "onClosed: code=$code, reason=$reason")
                 trySend(SessionEvent.Closed(null))
                 close()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.w(TAG, "socket failure: ${t.message}")
+                Log.e(TAG, "onFailure: ${t.message}", t)
                 trySend(SessionEvent.Closed(t))
                 close()
             }
@@ -97,7 +77,6 @@ class LiveSession(
         }
     }
 
-    /** Streams a mic chunk (PCM 16-bit, 16 kHz, mono) to the model. */
     fun sendAudio(pcm: ByteArray) {
         val msg = ClientMessage(
             realtimeInput = RealtimeInput(
@@ -107,7 +86,6 @@ class LiveSession(
         send(msg)
     }
 
-    /** Streams a single JPEG frame as realtime video input. */
     fun sendFrame(jpeg: ByteArray) {
         val msg = ClientMessage(
             realtimeInput = RealtimeInput(
@@ -117,12 +95,10 @@ class LiveSession(
         send(msg)
     }
 
-    /** Returns the results of one or more tool calls to the model. */
     fun sendToolResponses(responses: List<FunctionResponse>) {
         send(ClientMessage(toolResponse = ToolResponse(functionResponses = responses)))
     }
 
-    /** Injects a text turn (used for typed input / debugging). */
     fun sendText(text: String) {
         send(
             ClientMessage(
@@ -138,8 +114,6 @@ class LiveSession(
         socket?.close(NORMAL_CLOSURE, null)
         socket = null
     }
-
-    // --- internals -------------------------------------------------------
 
     private fun send(message: ClientMessage) {
         val ws = socket ?: return
@@ -159,10 +133,8 @@ class LiveSession(
             systemInstruction = Content(parts = listOf(Part(text = systemInstruction))),
             tools = liveTools,
             realtimeInputConfig = RealtimeInputConfig(activityHandling = "START_OF_ACTIVITY_INTERRUPTS"),
-            // Empty JSON objects => enable transcription of both directions.
             inputAudioTranscription = EMPTY_OBJECT,
             outputAudioTranscription = EMPTY_OBJECT,
-            // Empty handle => start resumable; non-null => resume prior session.
             sessionResumption = SessionResumptionConfig(handle = resumeHandle),
         ),
     )
@@ -182,9 +154,6 @@ class LiveSession(
         }
         msg.sessionResumptionUpdate?.let { update ->
             if (update.resumable && update.newHandle != null) {
-                // Surface via a synthetic event? Handle stored by SessionKeeper
-                // which observes the raw stream. Kept out of the sealed set to
-                // avoid leaking protocol detail; SessionKeeper hooks resume().
                 resumeCallback?.invoke(update.newHandle)
             }
         }
@@ -201,7 +170,6 @@ class LiveSession(
         return null
     }
 
-    /** SessionKeeper registers here to capture resumption handles. */
     @Volatile var resumeCallback: ((String) -> Unit)? = null
 
     private fun ByteArray.b64(): String = Base64.encodeToString(this, Base64.NO_WRAP)
