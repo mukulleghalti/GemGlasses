@@ -70,6 +70,8 @@ class SessionKeeper @Inject constructor(
         while (scope.isActive) {
             val session = try {
                 val token = tokenProvider.fetchEphemeralToken()
+                Log.d(TAG, "Token acquired successfully. Creating LiveSession...")
+                
                 LiveSession(
                     client = client,
                     json = json,
@@ -81,7 +83,7 @@ class SessionKeeper @Inject constructor(
                     resumeHandle = resumeHandle,
                 ).also { it.resumeCallback = { handle -> resumeHandle = handle } }
             } catch (e: Exception) {
-                Log.w(TAG, "token/setup failed, retrying in ${backoffMs}ms", e)
+                Log.e(TAG, "🔴 LiveSession SETUP FAILED: ${e.message}", e)
                 _events.emit(SessionEvent.Closed(e))
                 delay(backoffMs)
                 backoffMs = (backoffMs * 2).coerceAtMost(MAX_BACKOFF_MS)
@@ -92,14 +94,21 @@ class SessionKeeper @Inject constructor(
             var reconnectNow = false
 
             session.connect().collect { event ->
+                Log.d(TAG, "Event received: $event")
                 when (event) {
-                    is SessionEvent.Ready -> backoffMs = INITIAL_BACKOFF_MS
+                    is SessionEvent.Ready -> {
+                        Log.i(TAG, "🟢 Session Event: Ready")
+                        backoffMs = INITIAL_BACKOFF_MS
+                    }
                     is SessionEvent.GoingAway -> {
+                        Log.w(TAG, "⚠️ Session Event: GoingAway")
                         // Reconnect proactively before the server drops us.
                         reconnectNow = true
                         session.close()
                     }
-                    is SessionEvent.Closed -> Unit // handled after collect returns
+                    is SessionEvent.Closed -> {
+                        Log.e(TAG, "🔴 LiveSession CLOSED with cause: ${event.cause?.message}", event.cause)
+                    }
                     else -> Unit
                 }
                 // Never forward the raw Closed of a resumable reconnect as a
