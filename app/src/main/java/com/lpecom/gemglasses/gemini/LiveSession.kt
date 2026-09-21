@@ -46,7 +46,6 @@ class LiveSession(
                 val setupMessage = buildSetup()
                 val jsonString = json.encodeToString(ClientMessage.serializer(), setupMessage)
 
-                // Log the raw JSON being sent
                 Log.d(TAG, ">>> RAW SETUP JSON:\n$jsonString")
 
                 val sent = webSocket.send(jsonString)
@@ -147,9 +146,9 @@ class LiveSession(
             systemInstruction = Content(parts = listOf(Part(text = systemInstruction))),
             tools = liveTools,
             realtimeInputConfig = RealtimeInputConfig(activityHandling = "START_OF_ACTIVITY_INTERRUPTS"),
-            inputAudioTranscription = EMPTY_OBJECT,
-            outputAudioTranscription = EMPTY_OBJECT,
-            sessionResumption = SessionResumptionConfig(handle = resumeHandle),
+            // inputAudioTranscription = EMPTY_OBJECT,
+            // outputAudioTranscription = EMPTY_OBJECT,
+            // sessionResumption = SessionResumptionConfig(handle = resumeHandle),
         ),
     )
 
