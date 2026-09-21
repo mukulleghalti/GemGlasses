@@ -27,7 +27,7 @@ class LiveSession(
     @Volatile private var socket: WebSocket? = null
 
     fun connect(): Flow<SessionEvent> = callbackFlow {
-        val url = "${Models.LIVE_WS_HOST}?access_token=$ephemeralToken"
+        val url = "${Models.LIVE_WS_HOST}?key=$ephemeralToken"   // ← Changed to ?key=
         val request = Request.Builder().url(url).build()
 
         val listener = object : WebSocketListener() {
