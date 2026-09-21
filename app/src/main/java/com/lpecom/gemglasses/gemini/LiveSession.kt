@@ -30,6 +30,12 @@ class LiveSession(
     fun connect(): Flow<SessionEvent> = callbackFlow {
         val apiKey = BuildConfig.GEMINI_API_KEY
 
+        if (apiKey.isBlank()) {
+            Log.e(TAG, "GEMINI_API_KEY is empty! Check build.gradle.kts and local.properties")
+            close()
+            return@callbackFlow
+        }
+
         val url = "${Models.LIVE_WS_HOST}?key=$apiKey"
         val request = Request.Builder().url(url).build()
 
