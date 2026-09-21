@@ -43,7 +43,6 @@ class RealGlassesBackend @Inject constructor(
 ) : GlassesBackend {
 
     private val wearables = Wearables
-
     private var currentActivity: Activity? = null
 
     init {
@@ -51,29 +50,21 @@ class RealGlassesBackend @Inject constructor(
             ?.registerActivityLifecycleCallbacks(
                 object : Application.ActivityLifecycleCallbacks {
 
-                    override fun onActivityResumed(
-                        activity: Activity
-                    ) {
+                    override fun onActivityResumed(activity: Activity) {
                         currentActivity = activity
                     }
 
-                    override fun onActivityPaused(
-                        activity: Activity
-                    ) {
+                    override fun onActivityPaused(activity: Activity) {
                         if (currentActivity == activity) {
                             currentActivity = null
                         }
                     }
 
-                    override fun onActivityStarted(
-                        activity: Activity
-                    ) {
+                    override fun onActivityStarted(activity: Activity) {
                         currentActivity = activity
                     }
 
-                    override fun onActivityStopped(
-                        activity: Activity
-                    ) = Unit
+                    override fun onActivityStopped(activity: Activity) = Unit
 
                     override fun onActivityCreated(
                         activity: Activity,
@@ -85,9 +76,7 @@ class RealGlassesBackend @Inject constructor(
                         outState: Bundle
                     ) = Unit
 
-                    override fun onActivityDestroyed(
-                        activity: Activity
-                    ) {
+                    override fun onActivityDestroyed(activity: Activity) {
                         if (currentActivity == activity) {
                             currentActivity = null
                         }
@@ -98,45 +87,31 @@ class RealGlassesBackend @Inject constructor(
 
     override val registrationState: Flow<RegistrationState> =
         wearables.registrationState.map {
-
-            Log.d(
-                TAG,
-                "Meta registrationState changed: $it"
-            )
-
+            Log.d(TAG, "Meta registrationState changed: $it")
             it.toRegistrationDomain()
         }
 
     override val devices: Flow<List<GlassesDevice>> =
         wearables.devices.map { idSet ->
 
-            Log.d(
-                TAG,
-                "Meta devices set: $idSet"
-            )
+            Log.d(TAG, "Meta devices set: $idSet")
 
             idSet.map { id ->
 
-                val metadata =
-                    wearables.devicesMetadata[id]?.value
+                val metadata = wearables.devicesMetadata[id]?.value
 
                 Log.d(
                     TAG,
-                    "Device id=$id, " +
-                        "metadata=$metadata, " +
+                    "Device id=$id, metadata=$metadata, " +
                         "metadataName=${metadata?.name}"
                 )
 
-                val deviceName =
-                    metadata?.name
-                        ?.takeIf {
-                            it.isNotBlank() &&
-                                !it.equals(
-                                    "Unknown",
-                                    ignoreCase = true
-                                )
-                        }
-                        ?: "Ray-Ban Meta"
+                val deviceName = metadata?.name
+                    ?.takeIf {
+                        it.isNotBlank() &&
+                            !it.equals("Unknown", ignoreCase = true)
+                    }
+                    ?: "Ray-Ban Meta"
 
                 Log.i(
                     TAG,
@@ -153,8 +128,7 @@ class RealGlassesBackend @Inject constructor(
 
     override fun initialize() {
 
-        val result =
-            wearables.initialize(context)
+        val result = wearables.initialize(context)
 
         Log.i(
             TAG,
@@ -166,8 +140,7 @@ class RealGlassesBackend @Inject constructor(
 
     override fun startRegistration() {
 
-        val activity =
-            currentActivity ?: (context as? Activity)
+        val activity = currentActivity ?: (context as? Activity)
 
         Log.i(
             TAG,
@@ -176,11 +149,8 @@ class RealGlassesBackend @Inject constructor(
         )
 
         if (activity != null) {
-
             wearables.startRegistration(activity)
-
         } else {
-
             Log.e(
                 TAG,
                 "Failed to start registration: " +
@@ -192,9 +162,7 @@ class RealGlassesBackend @Inject constructor(
     override suspend fun cameraPermission(): CameraPermission {
 
         val result =
-            wearables.checkPermissionStatus(
-                Permission.CAMERA
-            )
+            wearables.checkPermissionStatus(Permission.CAMERA)
 
         val status =
             result.getOrNull()
@@ -210,8 +178,7 @@ class RealGlassesBackend @Inject constructor(
 
     override suspend fun requestCameraPermission(): CameraPermission {
 
-        val current =
-            cameraPermission()
+        val current = cameraPermission()
 
         if (current == CameraPermission.GRANTED) {
             return current
@@ -238,38 +205,18 @@ class RealGlassesBackend @Inject constructor(
             )
         }
 
-        /*
-         * IMPORTANT:
-         *
-         * startRegistration() is asynchronous.
-         * Do not assume that immediately checking the permission again
-         * means the user has completed the registration dialog.
-         */
         return cameraPermission()
     }
 
     override fun cameraFrames(): Flow<ByteArray> =
         callbackFlow {
 
-            Log.i(
-                TAG,
-                "========================================"
-            )
-
-            Log.i(
-                TAG,
-                "Starting cameraFrames session..."
-            )
-
-            Log.i(
-                TAG,
-                "========================================"
-            )
+            Log.i(TAG, "========================================")
+            Log.i(TAG, "Starting cameraFrames session...")
+            Log.i(TAG, "========================================")
 
             val permission =
-                wearables.checkPermissionStatus(
-                    Permission.CAMERA
-                )
+                wearables.checkPermissionStatus(Permission.CAMERA)
 
             Log.i(
                 TAG,
@@ -283,8 +230,7 @@ class RealGlassesBackend @Inject constructor(
 
             if (sessionResult.isFailure) {
 
-                val error =
-                    sessionResult.errorOrNull()
+                val error = sessionResult.errorOrNull()
 
                 Log.e(
                     TAG,
@@ -326,20 +272,15 @@ class RealGlassesBackend @Inject constructor(
                 Log.i(
                     TAG,
                     "Adding camera: " +
-                        "quality=MEDIUM, " +
-                        "fps=15, " +
-                        "compressed=false"
+                        "quality=MEDIUM, fps=15, compressed=false"
                 )
 
                 val cameraResult =
-                    session.addCamera(
-                        streamConfig
-                    )
+                    session.addCamera(streamConfig)
 
                 if (cameraResult.isFailure) {
 
-                    val error =
-                        cameraResult.errorOrNull()
+                    val error = cameraResult.errorOrNull()
 
                     Log.e(
                         TAG,
@@ -362,8 +303,7 @@ class RealGlassesBackend @Inject constructor(
                     "Camera added successfully"
                 )
 
-                val stream =
-                    camera.stream
+                val stream = camera.stream
 
                 val streamStartResult =
                     stream.start()
@@ -387,20 +327,9 @@ class RealGlassesBackend @Inject constructor(
                     )
                 }
 
-                Log.i(
-                    TAG,
-                    "========================================"
-                )
-
-                Log.i(
-                    TAG,
-                    "CAMERA STREAM STARTED SUCCESSFULLY"
-                )
-
-                Log.i(
-                    TAG,
-                    "========================================"
-                )
+                Log.i(TAG, "========================================")
+                Log.i(TAG, "CAMERA STREAM STARTED SUCCESSFULLY")
+                Log.i(TAG, "========================================")
 
                 val job =
                     launch(Dispatchers.Default) {
@@ -411,11 +340,14 @@ class RealGlassesBackend @Inject constructor(
 
                             frameNumber++
 
+                            val buffer =
+                                frame.buffer.asReadOnlyBuffer()
+
                             Log.d(
                                 TAG,
                                 "VideoFrame #$frameNumber: " +
                                     "${frame.width}x${frame.height}, " +
-                                    "bytes=${frame.buffer.remaining()}, " +
+                                    "bytes=${buffer.remaining()}, " +
                                     "compressed=${frame.isCompressed}, " +
                                     "codecConfig=${frame.isCodecConfig}"
                             )
@@ -439,16 +371,15 @@ class RealGlassesBackend @Inject constructor(
                                         "${jpeg.size} bytes"
                                 )
 
-                                trySend(jpeg)
-                                    .onFailure { error ->
-
-                                        Log.w(
-                                            TAG,
-                                            "Failed to send JPEG " +
-                                                "to camera flow",
-                                            error
-                                        )
-                                    }
+                                try {
+                                    trySend(jpeg)
+                                } catch (e: Exception) {
+                                    Log.w(
+                                        TAG,
+                                        "Failed to send JPEG to camera flow",
+                                        e
+                                    )
+                                }
 
                             } else {
 
@@ -527,37 +458,22 @@ class RealGlassesBackend @Inject constructor(
         }
 
     /**
-     * MWDAT 0.9.0 provides uncompressed frames as YUV420/I420
-     * when compressVideo=false.
-     *
-     * I420 layout:
-     *
-     *   YYYYYYYYYYYY
-     *   UUUUUU
-     *   VVVVVV
-     *
-     * This is NOT NV21.
+     * Converts the MWDAT raw YUV420/I420 frame into JPEG.
      */
     private fun VideoFrame.toDownscaledJpeg(): ByteArray? {
 
-        val buffer =
-            buffer.asReadOnlyBuffer()
-
-        val remaining =
-            buffer.remaining()
+        val buf = buffer.asReadOnlyBuffer()
+        val remaining = buf.remaining()
 
         if (remaining <= 0) {
             return null
         }
 
-        val bytes =
-            ByteArray(remaining)
-
-        buffer.get(bytes)
+        val bytes = ByteArray(remaining)
+        buf.get(bytes)
 
         /*
-         * If the SDK ever gives us an already encoded JPEG,
-         * accept it directly.
+         * Already JPEG.
          */
         if (
             remaining >= 3 &&
@@ -575,11 +491,8 @@ class RealGlassesBackend @Inject constructor(
         }
 
         /*
-         * Compressed frames are HEVC/H.265.
-         *
-         * We intentionally don't try to feed HEVC directly into
-         * BitmapFactory. The stream is configured with compressVideo=false,
-         * so normal frames should arrive as YUV420.
+         * We intentionally use compressVideo=false,
+         * therefore compressed frames aren't expected here.
          */
         if (isCompressed) {
 
@@ -601,8 +514,8 @@ class RealGlassesBackend @Inject constructor(
                 TAG,
                 "Unexpected raw frame size: " +
                     "actual=$remaining, " +
-                    "expectedI420=$expectedI420Size, " +
-                    "resolution=${width}x$height"
+                    "expected=$expectedI420Size, " +
+                    "resolution=${width}x${height}"
             )
 
             return null
@@ -618,9 +531,6 @@ class RealGlassesBackend @Inject constructor(
                     quality = 70
                 )
 
-            /*
-             * Downscale the JPEG to keep the Gemini payload small.
-             */
             val bitmap =
                 BitmapFactory.decodeByteArray(
                     jpeg,
@@ -644,32 +554,30 @@ class RealGlassesBackend @Inject constructor(
     }
 
     /**
-     * Converts tightly-packed I420/YUV420 planar data into JPEG.
+     * I420:
      *
-     * Android's YuvImage expects NV21/YUY2 rather than I420,
-     * so we rearrange I420 into NV21 first.
+     * YYYYYYYY
+     * UUUU
+     * VVVV
+     *
+     * Android YuvImage expects NV21:
+     *
+     * YYYYYYYY
+     * VUVUVUVU
      */
     private fun i420ToJpeg(
         bytes: ByteArray,
         width: Int,
         height: Int,
-        quality: Int,
+        quality: Int
     ): ByteArray {
 
-        val frameSize =
-            width * height
+        val frameSize = width * height
+        val chromaSize = frameSize / 4
 
-        val chromaSize =
-            frameSize / 4
-
-        val ySize =
-            frameSize
-
-        val uOffset =
-            ySize
-
-        val vOffset =
-            ySize + chromaSize
+        val yOffset = 0
+        val uOffset = frameSize
+        val vOffset = frameSize + chromaSize
 
         val nv21 =
             ByteArray(
@@ -681,24 +589,23 @@ class RealGlassesBackend @Inject constructor(
          */
         System.arraycopy(
             bytes,
-            0,
+            yOffset,
             nv21,
             0,
-            ySize
+            frameSize
         )
 
         /*
-         * Convert:
+         * I420 -> NV21
          *
-         * I420:
-         *   U U U U
-         *   V V V V
+         * I420 chroma:
+         * UUUU
+         * VVVV
          *
-         * to NV21:
-         *   V U V U V U
+         * NV21:
+         * VUVUVUVU
          */
-        var outputIndex =
-            ySize
+        var outputIndex = frameSize
 
         for (i in 0 until chromaSize) {
 
@@ -709,7 +616,7 @@ class RealGlassesBackend @Inject constructor(
                 bytes[uOffset + i]
         }
 
-        val yuv =
+        val yuvImage =
             YuvImage(
                 nv21,
                 ImageFormat.NV21,
@@ -718,10 +625,10 @@ class RealGlassesBackend @Inject constructor(
                 null
             )
 
-        return ByteArrayOutputStream().use { out ->
+        return ByteArrayOutputStream().use { output ->
 
             val success =
-                yuv.compressToJpeg(
+                yuvImage.compressToJpeg(
                     Rect(
                         0,
                         0,
@@ -729,7 +636,7 @@ class RealGlassesBackend @Inject constructor(
                         height
                     ),
                     quality,
-                    out
+                    output
                 )
 
             if (!success) {
@@ -738,17 +645,14 @@ class RealGlassesBackend @Inject constructor(
                 )
             }
 
-            out.toByteArray()
+            output.toByteArray()
         }
     }
 
     private fun Bitmap.toDownscaledJpeg(): ByteArray {
 
         val longest =
-            maxOf(
-                width,
-                height
-            )
+            maxOf(width, height)
 
         val scaled =
             if (longest > 768) {
@@ -764,23 +668,22 @@ class RealGlassesBackend @Inject constructor(
                 )
 
             } else {
-
                 this
             }
 
-        return ByteArrayOutputStream().use { out ->
+        return ByteArrayOutputStream().use { output ->
 
             scaled.compress(
                 Bitmap.CompressFormat.JPEG,
                 70,
-                out
+                output
             )
 
             if (scaled !== this) {
                 scaled.recycle()
             }
 
-            out.toByteArray()
+            output.toByteArray()
         }
     }
 
@@ -810,7 +713,6 @@ class RealGlassesBackend @Inject constructor(
         }
 
     companion object {
-        private const val TAG =
-            "RealGlassesBackend"
+        private const val TAG = "RealGlassesBackend"
     }
 }
