@@ -28,7 +28,6 @@ class LiveSession(
     @Volatile private var socket: WebSocket? = null
 
     fun connect(): Flow<SessionEvent> = callbackFlow {
-        // Use the real Gemini API key from BuildConfig (injected via local.properties)
         val apiKey = BuildConfig.GEMINI_API_KEY
 
         val url = "${Models.LIVE_WS_HOST}?key=$apiKey"
@@ -150,4 +149,21 @@ class LiveSession(
             sc.interrupted?.takeIf { it }?.let { return SessionEvent.Interrupted }
             sc.inputTranscription?.text?.let { return SessionEvent.Transcript(it, fromUser = true) }
             sc.outputTranscription?.text?.let { return SessionEvent.Transcript(it, fromUser = false) }
-            sc.modelTurn?.parts?.firstNotNullOfOr
+            sc.modelTurn?.parts?.firstNotNullOfOrNull { it.inlineData }?.let { blob ->
+                return SessionEvent.AudioChunk(Base64.decode(blob.data, Base64.NO_WRAP))
+            }
+            sc.turnComplete?.takeIf { it }?.let { return SessionEvent.TurnComplete }
+        }
+        return null
+    }
+
+    @Volatile var resumeCallback: ((String) -> Unit)? = null
+
+    private fun ByteArray.b64(): String = Base64.encodeToString(this, Base64.NO_WRAP)
+
+    private companion object {
+        const val TAG = "LiveSession"
+        const val NORMAL_CLOSURE = 1000
+        val EMPTY_OBJECT = kotlinx.serialization.json.JsonObject(emptyMap())
+    }
+}
