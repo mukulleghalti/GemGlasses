@@ -31,7 +31,7 @@ class LiveSession(
         val apiKey = BuildConfig.GEMINI_API_KEY
 
         if (apiKey.isBlank()) {
-            Log.e(TAG, "GEMINI_API_KEY is empty! Check build.gradle.kts and local.properties")
+            Log.e(TAG, "GEMINI_API_KEY is empty!")
             close()
             return@callbackFlow
         }
@@ -42,10 +42,16 @@ class LiveSession(
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 socket = webSocket
+
                 val setupMessage = buildSetup()
                 val jsonString = json.encodeToString(ClientMessage.serializer(), setupMessage)
-                Log.d(TAG, ">>> Sending setup")
-                webSocket.send(jsonString)
+
+                val sent = webSocket.send(jsonString)
+                if (sent) {
+                    Log.d(TAG, ">>> Setup message sent successfully")
+                } else {
+                    Log.e(TAG, ">>> Failed to send setup message!")
+                }
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
@@ -74,10 +80,11 @@ class LiveSession(
             }
         }
 
-        client.newWebSocket(request, listener).also { socket = it }
+        val ws = client.newWebSocket(request, listener)
+        socket = ws
 
         awaitClose {
-            socket?.close(NORMAL_CLOSURE, "client closing")
+            ws.close(NORMAL_CLOSURE, "client closing")
             socket = null
         }
     }
