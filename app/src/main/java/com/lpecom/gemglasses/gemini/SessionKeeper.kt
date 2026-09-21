@@ -41,25 +41,37 @@ class SessionKeeper @Inject constructor(
     private val _events = MutableSharedFlow<SessionEvent>(extraBufferCapacity = 256)
     val events: SharedFlow<SessionEvent> = _events.asSharedFlow()
 
-    @Volatile private var current: LiveSession? = null
-    @Volatile private var resumeHandle: String? = null
+    @Volatile
+    private var current: LiveSession? = null
+
+    @Volatile
+    private var resumeHandle: String? = null
+
     private var loop: Job? = null
 
     fun start(scope: CoroutineScope, config: SessionConfig) {
         if (loop?.isActive == true) return
+
         resumeHandle = null
-        loop = scope.launch { runLoop(config) }
+        loop = scope.launch {
+            runLoop(config)
+        }
     }
 
     fun stop() {
         loop?.cancel()
         loop = null
+
         current?.close()
         current = null
     }
 
-    fun sendAudio(pcm: ByteArray) = current?.sendAudio(pcm) ?: Unit
-    fun sendFrame(jpeg: ByteArray) = current?.sendFrame(jpeg) ?: Unit
+    fun sendAudio(pcm: ByteArray) =
+        current?.sendAudio(pcm) ?: Unit
+
+    fun sendFrame(jpeg: ByteArray) =
+        current?.sendFrame(jpeg) ?: Unit
+
     fun sendToolResponses(responses: List<FunctionResponse>) =
         current?.sendToolResponses(responses) ?: Unit
 
@@ -70,8 +82,12 @@ class SessionKeeper @Inject constructor(
         while (scope.isActive) {
             val session = try {
                 val token = tokenProvider.fetchEphemeralToken()
-                Log.d(TAG, "Token acquired successfully. Creating LiveSession...")
-                
+
+                Log.d(
+                    TAG,
+                    "Token acquired successfully. Creating LiveSession..."
+                )
+
                 LiveSession(
                     client = client,
                     json = json,
@@ -81,12 +97,25 @@ class SessionKeeper @Inject constructor(
                     languageCode = config.languageCode,
                     liveTools = toolRegistry.asLiveTools(),
                     resumeHandle = resumeHandle,
-                ).also { it.resumeCallback = { handle -> resumeHandle = handle } }
+                ).also {
+                    it.resumeCallback = { handle ->
+                        resumeHandle = handle
+                    }
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "🔴 LiveSession SETUP FAILED: ${e.message}", e)
+                Log.e(
+                    TAG,
+                    "🔴 LiveSession SETUP FAILED: ${e.message}",
+                    e
+                )
+
                 _events.emit(SessionEvent.Closed(e))
+
                 delay(backoffMs)
-                backoffMs = (backoffMs * 2).coerceAtMost(MAX_BACKOFF_MS)
+
+                backoffMs = (backoffMs * 2)
+                    .coerceAtMost(MAX_BACKOFF_MS)
+
                 continue
             }
 
@@ -95,34 +124,58 @@ class SessionKeeper @Inject constructor(
 
             session.connect().collect { event ->
                 Log.d(TAG, "Event received: $event")
+
                 when (event) {
                     is SessionEvent.Ready -> {
                         Log.i(TAG, "🟢 Session Event: Ready")
                         backoffMs = INITIAL_BACKOFF_MS
                     }
+
                     is SessionEvent.GoingAway -> {
                         Log.w(TAG, "⚠️ Session Event: GoingAway")
+
                         // Reconnect proactively before the server drops us.
                         reconnectNow = true
                         session.close()
                     }
+
                     is SessionEvent.Closed -> {
-                        Log.e(TAG, "🔴 LiveSession CLOSED with cause: ${event.cause?.message}", event.cause)
+                        if (event.error != null) {
+                            Log.e(
+                                TAG,
+                                "🔴 LiveSession CLOSED: ${event.error.message}",
+                                event.error
+                            )
+                        } else {
+                            Log.i(
+                                TAG,
+                                "🔴 LiveSession CLOSED cleanly"
+                            )
+                        }
                     }
+
                     else -> Unit
                 }
+
                 // Never forward the raw Closed of a resumable reconnect as a
                 // hard close to the UI; only surface Closed when we truly stop.
-                if (event !is SessionEvent.Closed) _events.emit(event)
+                if (event !is SessionEvent.Closed) {
+                    _events.emit(event)
+                }
             }
 
             current = null
-            if (!scope.isActive) break
+
+            if (!scope.isActive) {
+                break
+            }
 
             if (!reconnectNow && resumeHandle == null) {
                 // No handle to resume with and not a planned reconnect: back off.
                 delay(backoffMs)
-                backoffMs = (backoffMs * 2).coerceAtMost(MAX_BACKOFF_MS)
+
+                backoffMs = (backoffMs * 2)
+                    .coerceAtMost(MAX_BACKOFF_MS)
             }
         }
     }
