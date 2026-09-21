@@ -46,6 +46,9 @@ class LiveSession(
                 val setupMessage = buildSetup()
                 val jsonString = json.encodeToString(ClientMessage.serializer(), setupMessage)
 
+                // Log the raw JSON being sent
+                Log.d(TAG, ">>> RAW SETUP JSON:\n$jsonString")
+
                 val sent = webSocket.send(jsonString)
                 if (sent) {
                     Log.d(TAG, ">>> Setup message sent successfully")
@@ -133,7 +136,7 @@ class LiveSession(
 
     private fun buildSetup() = ClientMessage(
         setup = Setup(
-            model = Models.GEMINI_LIVE_MODEL,   // ← Changed: removed "models/"
+            model = Models.GEMINI_LIVE_MODEL,
             generationConfig = GenerationConfig(
                 responseModalities = listOf("AUDIO"),
                 speechConfig = SpeechConfig(
