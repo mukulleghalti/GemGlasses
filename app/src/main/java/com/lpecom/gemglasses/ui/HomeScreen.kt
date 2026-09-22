@@ -38,6 +38,7 @@ import com.lpecom.gemglasses.glasses.RegistrationState
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
+    onCameraTestClick: () -> Unit = {},
     viewModel: AgentViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -135,6 +136,29 @@ fun HomeScreen(
                     "Start Assistant"
                 }
             )
+        }
+
+        /*
+         * ---------------------------------------------------------
+         * Camera Test
+         * ---------------------------------------------------------
+         *
+         * This is intentionally separate from the Assistant.
+         *
+         * CameraTestScreen does NOT start:
+         *
+         * - Gemini
+         * - MicStreamer
+         * - BluetoothAudioRouter
+         * - SCO
+         */
+        Button(
+            onClick = onCameraTestClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+        ) {
+            Text("📷 Camera Test")
         }
 
         /*
