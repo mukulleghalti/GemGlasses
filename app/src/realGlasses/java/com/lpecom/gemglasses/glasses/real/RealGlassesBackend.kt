@@ -1025,18 +1025,90 @@ class RealGlassesBackend @Inject constructor(
         Log.i(TAG, "CAMERA FLOW STARTING")
         Log.i(TAG, "================================================")
 
-        val activeSession =
-            session
+        // ---------------------------------------------------------------------
+// Ensure MWDAT DeviceSession exists before adding the camera.
+//
+// The camera cannot work without a STARTED DeviceSession.
+// We do this here as a safety net because vision may be requested
+// independently of the normal glasses connection lifecycle.
+// ---------------------------------------------------------------------
 
-        if (activeSession == null) {
+var activeSession = session
+
+if (
+    activeSession == null ||
+    activeSession.state.value != DeviceSessionState.STARTED
+) {
+
+    Log.i(
+        TAG,
+        "CAMERA: No usable DeviceSession; connecting glasses first"
+    )
+
+    val connected =
+        try {
+            connect()
+        } catch (e: Exception) {
 
             Log.e(
                 TAG,
-                "CAMERA ABORTED: DeviceSession is NULL"
+                "CAMERA: connect() threw exception",
+                e
             )
 
-            return@flow
+            false
         }
+
+    if (!connected) {
+
+        Log.e(
+            TAG,
+            "CAMERA ABORTED: Could not establish DeviceSession"
+        )
+
+        return@flow
+    }
+
+    activeSession = session
+}
+
+if (activeSession == null) {
+
+    Log.e(
+        TAG,
+        "CAMERA ABORTED: DeviceSession is still NULL after connect()"
+    )
+
+    return@flow
+}
+
+if (
+    activeSession.state.value !=
+    DeviceSessionState.STARTED
+) {
+
+    Log.e(
+        TAG,
+        "CAMERA ABORTED: DeviceSession is not STARTED after connect()"
+    )
+
+    Log.e(
+        TAG,
+        "Current session state = ${activeSession.state.value}"
+    )
+
+    return@flow
+}
+
+Log.i(
+    TAG,
+    "CAMERA: DeviceSession is READY"
+)
+
+Log.i(
+    TAG,
+    "CAMERA: DeviceSession state = ${activeSession.state.value}"
+)
 
         Log.i(
             TAG,
