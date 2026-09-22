@@ -30,6 +30,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.lifecycleScope
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
@@ -41,7 +42,9 @@ import com.lpecom.gemglasses.ui.TranscriptScreen
 import com.lpecom.gemglasses.ui.theme.GemGlassesTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -71,7 +74,7 @@ class MainActivity : ComponentActivity() {
                 result[Manifest.permission.BLUETOOTH_CONNECT] == true
 
             Log.i(
-                "MainActivity",
+                TAG,
                 "Bluetooth permission result: " +
                     "SCAN=$scanGranted, CONNECT=$connectGranted"
             )
@@ -79,7 +82,7 @@ class MainActivity : ComponentActivity() {
             if (scanGranted && connectGranted) {
 
                 Log.i(
-                    "MainActivity",
+                    TAG,
                     "Bluetooth permissions granted"
                 )
 
@@ -88,7 +91,7 @@ class MainActivity : ComponentActivity() {
             } else {
 
                 Log.e(
-                    "MainActivity",
+                    TAG,
                     "Bluetooth permissions were not granted"
                 )
             }
@@ -117,7 +120,7 @@ class MainActivity : ComponentActivity() {
                 )
 
             Log.i(
-                "MainActivity",
+                TAG,
                 "Meta camera permission result = $status"
             )
 
@@ -152,7 +155,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 Log.i(
-                    "MainActivity",
+                    TAG,
                     "Launching Meta Wearables CAMERA permission"
                 )
 
@@ -218,7 +221,7 @@ class MainActivity : ComponentActivity() {
                 ) == PackageManager.PERMISSION_GRANTED
 
             Log.i(
-                "MainActivity",
+                TAG,
                 "Current Bluetooth permissions: " +
                     "SCAN=$scanGranted, CONNECT=$connectGranted"
             )
@@ -230,7 +233,7 @@ class MainActivity : ComponentActivity() {
             } else {
 
                 Log.i(
-                    "MainActivity",
+                    TAG,
                     "Requesting Bluetooth permissions before MWDAT initialization"
                 )
 
@@ -251,20 +254,26 @@ class MainActivity : ComponentActivity() {
     private fun initializeGlasses() {
 
         Log.i(
-            "MainActivity",
+            TAG,
             "Bluetooth permissions confirmed"
         )
 
         val app =
             application as GemGlassesApp
 
+        /*
+         * IMPORTANT:
+         *
+         * Wearables.initialize() must happen only after the
+         * Bluetooth runtime permissions are available.
+         */
         val wearablesReady =
             app.initializeWearables()
 
         if (!wearablesReady) {
 
             Log.e(
-                "MainActivity",
+                TAG,
                 "MWDAT SDK initialization failed; " +
                     "not initializing glasses backend"
             )
@@ -273,11 +282,71 @@ class MainActivity : ComponentActivity() {
         }
 
         Log.i(
-            "MainActivity",
+            TAG,
             "Initializing glasses backend"
         )
 
         glassesManager.initialize()
+
+        /*
+         * IMPORTANT:
+         *
+         * initialize() sets up the backend, but it does not
+         * create/start the DeviceSession.
+         *
+         * connect() creates the actual MWDAT DeviceSession.
+         *
+         * The camera API requires that DeviceSession to already
+         * exist, so connect immediately after initialization.
+         */
+        lifecycleScope.launch {
+
+            Log.i(
+                TAG,
+                "Connecting to Meta glasses..."
+            )
+
+            try {
+
+                val connected =
+                    glassesManager.connect()
+
+                if (connected) {
+
+                    Log.i(
+                        TAG,
+                        "========================================"
+                    )
+                    Log.i(
+                        TAG,
+                        "GLASSES CONNECTED"
+                    )
+                    Log.i(
+                        TAG,
+                        "DeviceSession is ready"
+                    )
+                    Log.i(
+                        TAG,
+                        "========================================"
+                    )
+
+                } else {
+
+                    Log.e(
+                        TAG,
+                        "Glasses connection failed"
+                    )
+                }
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Exception while connecting glasses",
+                    e
+                )
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -288,6 +357,10 @@ class MainActivity : ComponentActivity() {
         glassesManager.clearActivity(this)
 
         super.onDestroy()
+    }
+
+    private companion object {
+        const val TAG = "MainActivity"
     }
 }
 
@@ -391,7 +464,7 @@ private fun GemGlassesRoot() {
             }
         },
 
-    ) { padding ->
+    ) { _ ->
 
         NavHost(
             navController = navController,
