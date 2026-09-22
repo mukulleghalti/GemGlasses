@@ -20,13 +20,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ------------------------------------------------------------
+      # CHECKOUT
+      # ------------------------------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # For normal push builds this is the pushed commit.
-          # For manual builds this can be a branch or commit SHA.
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
 
+      # ------------------------------------------------------------
+      # JAVA
+      # ------------------------------------------------------------
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -34,6 +38,9 @@ jobs:
           distribution: "temurin"
           cache: gradle
 
+      # ------------------------------------------------------------
+      # VERIFY SECRETS
+      # ------------------------------------------------------------
       - name: Verify required secrets
         shell: bash
         env:
@@ -53,6 +60,9 @@ jobs:
 
           echo "Required secrets are configured."
 
+      # ------------------------------------------------------------
+      # LOCAL.PROPERTIES
+      # ------------------------------------------------------------
       - name: Write local.properties
         shell: bash
         env:
@@ -70,90 +80,4 @@ jobs:
             echo "TOKEN_APP_SECRET=$TOKEN_APP_SECRET"
             echo "META_APPLICATION_ID=$META_APP_ID"
             echo "META_CLIENT_TOKEN=$META_CLIENT_TOKEN"
-            echo "GEMGLASSES_BACKEND_URL=$GEMGLASSES_BACKEND_URL"
-          } > local.properties
-
-          echo "local.properties created with real Meta credentials."
-
-      - name: Prepare Gradle
-        run: chmod +x gradlew
-
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
-
-      - name: Print APK signing information
-        shell: bash
-        run: |
-          set -e
-
-          APK="$(find app/build/outputs/apk/debug \
-            -type f \
-            -name '*.apk' \
-            | head -n 1)"
-
-          if [ -z "$APK" ]; then
-            echo "No debug APK found."
-            exit 1
-          fi
-
-          APKSIGNER="$(
-            find "$ANDROID_HOME/build-tools" \
-              -type f \
-              -name apksigner \
-              | sort -V \
-              | tail -n 1
-          )"
-
-          if [ -z "$APKSIGNER" ]; then
-            echo "apksigner was not found."
-            exit 1
-          fi
-
-          echo "APK: $APK"
-          echo
-          echo "Full signing information:"
-          "$APKSIGNER" verify --verbose --print-certs "$APK"
-
-          DIGEST="$(
-            "$APKSIGNER" verify --print-certs "$APK" |
-              awk -F': ' '
-                /certificate SHA-256 digest:/ {
-                  print $2
-                  exit
-                }
-              ' |
-              tr -d ':[:space:]'
-          )"
-
-          if [ -z "$DIGEST" ]; then
-            echo "Could not extract certificate SHA-256 digest."
-            exit 1
-          fi
-
-          echo
-          echo "Raw certificate SHA-256 digest:"
-          echo "$DIGEST"
-
-          META_SIGNATURE="$(
-            printf '%s' "$DIGEST" |
-              xxd -r -p |
-              base64 -w 0 |
-              tr -d '='
-          )"
-
-          echo
-          echo "Base64 SHA-256 signature without padding:"
-          echo "$META_SIGNATURE"
-
-          echo
-          echo "Android package/application ID:"
-          echo "com.lpecom.gemglasses"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: gem-glasses-apk
-          path: app/build/outputs/apk/debug/*.apk
+            echo "GEMGLASSES_BACKEND_URL=$GEMGLASSES_BACK
