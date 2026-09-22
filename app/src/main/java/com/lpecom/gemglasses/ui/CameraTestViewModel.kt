@@ -1,13 +1,11 @@
 package com.lpecom.gemglasses.ui
 
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lpecom.gemglasses.glasses.real.RealGlassesBackend
 import com.meta.wearable.dat.camera.types.VideoFrame
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,10 +18,10 @@ import javax.inject.Inject
 
 data class CameraTestUiState(
     val status: String = "Ready",
-    val capturing: Boolean = false,
-    val capturedPhoto: Bitmap? = null,
-    val error: String? = null,
     val streaming: Boolean = false,
+    val capturing: Boolean = false,
+    val capturedPhoto: android.graphics.Bitmap? = null,
+    val error: String? = null,
 )
 
 @HiltViewModel
@@ -50,7 +48,18 @@ class CameraTestViewModel @Inject constructor(
 
     private var previewJob: Job? = null
 
+    /*
+     * ---------------------------------------------------------
+     * START CAMERA
+     * ---------------------------------------------------------
+     */
+
     fun startPreview() {
+
+        /*
+         * Don't start another camera stream if one is already
+         * running.
+         */
 
         if (previewJob?.isActive == true) {
             return
@@ -60,7 +69,6 @@ class CameraTestViewModel @Inject constructor(
             _uiState.value.copy(
                 status = "Starting camera…",
                 streaming = false,
-                capturing = false,
                 error = null,
             )
 
@@ -69,32 +77,27 @@ class CameraTestViewModel @Inject constructor(
 
                 try {
 
-                    backend.cameraTestFrames()
+                    backend
+                        .cameraTestFrames()
                         .collect { frame ->
 
                             /*
-                             * The first frame means the MWDAT camera
-                             * is definitely active and streaming.
+                             * Codec configuration frames are
+                             * required by MediaCodec, but they do
+                             * NOT mean that an actual video frame
+                             * has arrived yet.
+                             *
+                             * Therefore don't mark the camera
+                             * as streaming on a codec-config frame.
                              */
 
-                            if (
-                                !_uiState.value.streaming
-                            ) {
+                            if (!frame.isCodecConfig) {
 
                                 _uiState.value =
                                     _uiState.value.copy(
                                         status =
                                             "Live — ${frame.width} × ${frame.height}",
                                         streaming = true,
-                                        error = null,
-                                    )
-
-                            } else {
-
-                                _uiState.value =
-                                    _uiState.value.copy(
-                                        status =
-                                            "Live — ${frame.width} × ${frame.height}",
                                         error = null,
                                     )
                             }
@@ -110,10 +113,16 @@ class CameraTestViewModel @Inject constructor(
                         _uiState.value.copy(
                             status = "Camera stopped",
                             streaming = false,
-                            capturing = false,
                         )
 
-                } catch (e: CancellationException) {
+                } catch (
+                    e: kotlinx.coroutines.CancellationException
+                ) {
+
+                    /*
+                     * Normal when the user presses Stop Camera
+                     * or leaves the screen.
+                     */
 
                     throw e
 
@@ -123,7 +132,6 @@ class CameraTestViewModel @Inject constructor(
                         _uiState.value.copy(
                             status = "Camera error",
                             streaming = false,
-                            capturing = false,
                             error =
                                 e.message
                                     ?: e::class.java.simpleName,
@@ -132,25 +140,19 @@ class CameraTestViewModel @Inject constructor(
             }
     }
 
+    /*
+     * ---------------------------------------------------------
+     * CAPTURE PHOTO
+     * ---------------------------------------------------------
+     */
+
     fun capturePhoto() {
 
-        /*
-         * Do not allow capture until the MWDAT camera has actually
-         * produced a live frame.
-         */
-
-        if (!_uiState.value.streaming) {
-
-            _uiState.value =
-                _uiState.value.copy(
-                    error =
-                        "Camera is still starting. Wait for the live stream.",
-                )
-
+        if (_uiState.value.capturing) {
             return
         }
 
-        if (_uiState.value.capturing) {
+        if (!_uiState.value.streaming) {
             return
         }
 
@@ -160,7 +162,6 @@ class CameraTestViewModel @Inject constructor(
                 _uiState.value.copy(
                     capturing = true,
                     error = null,
-                    status = "Capturing photo…",
                 )
 
             try {
@@ -183,8 +184,6 @@ class CameraTestViewModel @Inject constructor(
                             _uiState.value =
                                 _uiState.value.copy(
                                     capturing = false,
-                                    streaming = true,
-                                    status = "Live",
                                     error =
                                         "Photo captured but could not decode JPEG",
                                 )
@@ -195,7 +194,6 @@ class CameraTestViewModel @Inject constructor(
                                 _uiState.value.copy(
                                     capturing = false,
                                     capturedPhoto = bitmap,
-                                    streaming = true,
                                     status = "Photo captured",
                                     error = null,
                                 )
@@ -206,11 +204,10 @@ class CameraTestViewModel @Inject constructor(
                         _uiState.value =
                             _uiState.value.copy(
                                 capturing = false,
-                                streaming = true,
-                                status = "Live",
                                 error =
                                     error.message
                                         ?: error::class.java.simpleName,
+                                status = "Capture failed",
                             )
                     }
 
@@ -219,22 +216,27 @@ class CameraTestViewModel @Inject constructor(
                 _uiState.value =
                     _uiState.value.copy(
                         capturing = false,
-                        streaming = true,
-                        status = "Live",
                         error =
                             e.message
                                 ?: e::class.java.simpleName,
+                        status = "Capture failed",
                     )
             }
         }
     }
 
+    /*
+     * ---------------------------------------------------------
+     * STOP CAMERA
+     * ---------------------------------------------------------
+     */
+
     fun stopPreview() {
 
-        previewJob?.cancel()
-        previewJob = null
-
-        backend.stopCameraTest()
+        /*
+         * Update UI immediately so the buttons change without
+         * waiting for the backend flow to finish cancelling.
+         */
 
         _uiState.value =
             _uiState.value.copy(
@@ -242,7 +244,18 @@ class CameraTestViewModel @Inject constructor(
                 streaming = false,
                 capturing = false,
             )
+
+        previewJob?.cancel()
+        previewJob = null
+
+        backend.stopCameraTest()
     }
+
+    /*
+     * ---------------------------------------------------------
+     * CLEANUP
+     * ---------------------------------------------------------
+     */
 
     override fun onCleared() {
 
