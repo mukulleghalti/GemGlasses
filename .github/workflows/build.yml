@@ -14,8 +14,8 @@ jobs:
 
       - uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          java-version: "17"
+          distribution: "temurin"
           cache: gradle
 
       - name: Setup
@@ -24,20 +24,55 @@ jobs:
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> local.properties
           echo "TOKEN_APP_SECRET=${{ secrets.TOKEN_APP_SECRET }}" >> local.properties
 
-          # Developer Mode / Debug build:
-          # Meta's MWDAT documentation recommends 0/0 for local development.
+          # Keep these as 0/0 only if using MWDAT Developer Mode
+          # according to Meta's setup instructions.
           echo "META_APPLICATION_ID=0" >> local.properties
           echo "META_CLIENT_TOKEN=0" >> local.properties
 
           echo "GEMGLASSES_BACKEND_URL=${{ secrets.GEMGLASSES_BACKEND_URL }}" >> local.properties
 
-      - run: chmod +x gradlew
+      - name: Verify Android package
+        run: |
+          grep '^applicationId' app/build.gradle.kts || true
+          echo "Expected package/application ID: com.lpecom.gemglasses"
+
+      - name: Prepare Gradle
+        run: chmod +x gradlew
 
       - name: Build
         run: ./gradlew assembleDebug --no-daemon
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+
+      - name: Print APK signing fingerprint
+        shell: bash
+        run: |
+          set -e
+
+          APK="$(find app/build/outputs/apk/debug -name '*.apk' -type f | head -n 1)"
+
+          if [ -z "$APK" ]; then
+            echo "No debug APK found"
+            exit 1
+          fi
+
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" \
+            -type f \
+            -name apksigner \
+            | sort -V \
+            | tail -n 1)"
+
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner was not found"
+            exit 1
+          fi
+
+          echo "APK: $APK"
+          echo "Using apksigner: $APKSIGNER"
+          echo
+          echo "Signing certificate information:"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
 
       - uses: actions/upload-artifact@v4
         with:
