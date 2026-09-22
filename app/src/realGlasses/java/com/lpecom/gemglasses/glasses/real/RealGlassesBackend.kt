@@ -77,11 +77,11 @@ class RealGlassesBackend @Inject constructor(
      * MainActivity supplies its Activity instance so that Meta's
      * registration / permission APIs can use the current Activity.
      */
-    fun setActivity(activity: Activity) {
+    override fun setActivity(activity: Activity) {
         this.activity = activity
     }
 
-    fun clearActivity(activity: Activity) {
+    override fun clearActivity(activity: Activity) {
         if (this.activity === activity) {
             this.activity = null
         }
