@@ -30,12 +30,21 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.meta.wearable.dat.core.Wearables
+import com.meta.wearable.dat.core.types.Permission
+import com.meta.wearable.dat.core.types.PermissionStatus
+import com.lpecom.gemglasses.glasses.CameraPermission
 import com.lpecom.gemglasses.glasses.GlassesManager
 import com.lpecom.gemglasses.ui.HomeScreen
 import com.lpecom.gemglasses.ui.SettingsScreen
 import com.lpecom.gemglasses.ui.TranscriptScreen
 import com.lpecom.gemglasses.ui.theme.GemGlassesTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlin.coroutines.resume
+import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -44,10 +53,12 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var glassesManager: GlassesManager
 
-    /**
-     * Request Bluetooth permissions required by Meta Wearables DAT
-     * on Android 12+.
+    /*
+     * ---------------------------------------------------------
+     * Bluetooth permissions
+     * ---------------------------------------------------------
      */
+
     private val bluetoothPermissionLauncher =
         registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
@@ -83,28 +94,109 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+    /*
+     * ---------------------------------------------------------
+     * Meta Wearables CAMERA permission
+     * ---------------------------------------------------------
+     */
+
+    private val cameraPermissionMutex =
+        Mutex()
+
+    private var cameraPermissionContinuation:
+        CancellableContinuation<CameraPermission>? = null
+
+    private val cameraPermissionLauncher =
+        registerForActivityResult(
+            Wearables.RequestPermissionContract()
+        ) { result ->
+
+            val status =
+                result.getOrDefault(
+                    PermissionStatus.Denied
+                )
+
+            Log.i(
+                "MainActivity",
+                "Meta camera permission result = $status"
+            )
+
+            val mapped =
+                when (status) {
+
+                    PermissionStatus.Granted ->
+                        CameraPermission.GRANTED
+
+                    PermissionStatus.Denied ->
+                        CameraPermission.DENIED
+                }
+
+            cameraPermissionContinuation
+                ?.resume(mapped)
+
+            cameraPermissionContinuation = null
+        }
+
+    private suspend fun requestMetaCameraPermission():
+        CameraPermission {
+
+        return cameraPermissionMutex.withLock {
+
+            suspendCancellableCoroutine { continuation ->
+
+                cameraPermissionContinuation =
+                    continuation
+
+                continuation.invokeOnCancellation {
+                    cameraPermissionContinuation = null
+                }
+
+                Log.i(
+                    "MainActivity",
+                    "Launching Meta Wearables CAMERA permission"
+                )
+
+                cameraPermissionLauncher.launch(
+                    Permission.CAMERA
+                )
+            }
+        }
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * Activity lifecycle
+     * ---------------------------------------------------------
+     */
+
+    override fun onCreate(
+        savedInstanceState: Bundle?,
+    ) {
         super.onCreate(savedInstanceState)
 
-        // Give the glasses backend access to this Activity.
         glassesManager.setActivity(this)
+
+        /*
+         * Register the permission bridge before any vision
+         * request can happen.
+         */
+        glassesManager.setCameraPermissionRequester {
+            requestMetaCameraPermission()
+        }
 
         enableEdgeToEdge()
 
-        /*
-         * IMPORTANT:
-         *
-         * MWDAT must be initialized only AFTER Bluetooth permissions
-         * are available.
-         */
         requestBluetoothPermissionsIfNeeded()
 
         setContent {
+
             GemGlassesTheme {
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
+
                     GemGlassesRoot()
                 }
             }
@@ -152,10 +244,6 @@ class MainActivity : ComponentActivity() {
 
         } else {
 
-            /*
-             * Android 11 and below don't require the Android 12
-             * Bluetooth runtime permissions.
-             */
             initializeGlasses()
         }
     }
@@ -167,12 +255,6 @@ class MainActivity : ComponentActivity() {
             "Bluetooth permissions confirmed"
         )
 
-        /*
-         * Initialize Meta Wearables DAT FIRST.
-         *
-         * GemGlassesApp guards this so this happens only once
-         * during the process lifetime.
-         */
         val app =
             application as GemGlassesApp
 
@@ -190,12 +272,6 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        /*
-         * Now initialize our backend.
-         *
-         * RealGlassesBackend.initialize() does NOT call
-         * Wearables.initialize(). It only starts its observers.
-         */
         Log.i(
             "MainActivity",
             "Initializing glasses backend"
@@ -206,42 +282,58 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
 
+        cameraPermissionContinuation?.cancel()
+        cameraPermissionContinuation = null
+
         glassesManager.clearActivity(this)
 
         super.onDestroy()
     }
 }
 
+/*
+ * -------------------------------------------------------------
+ * Navigation
+ * -------------------------------------------------------------
+ */
+
 private data class BottomNavItem(
     val route: String,
     val label: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val icon:
+        androidx.compose.ui.graphics.vector.ImageVector,
 )
 
 @Composable
 private fun GemGlassesRoot() {
 
-    val navController = rememberNavController()
+    val navController =
+        rememberNavController()
 
-    val items = listOf(
-        BottomNavItem(
-            route = "home",
-            label = "Home",
-            icon = Icons.Default.Home,
-        ),
-        BottomNavItem(
-            route = "transcript",
-            label = "Transcript",
-            icon = Icons.AutoMirrored.Filled.List,
-        ),
-        BottomNavItem(
-            route = "settings",
-            label = "Settings",
-            icon = Icons.Default.Settings,
-        ),
-    )
+    val items =
+        listOf(
+
+            BottomNavItem(
+                "home",
+                "Home",
+                Icons.Default.Home
+            ),
+
+            BottomNavItem(
+                "transcript",
+                "Transcript",
+                Icons.AutoMirrored.Filled.List
+            ),
+
+            BottomNavItem(
+                "settings",
+                "Settings",
+                Icons.Default.Settings
+            ),
+        )
 
     Scaffold(
+
         bottomBar = {
 
             NavigationBar {
@@ -255,15 +347,19 @@ private fun GemGlassesRoot() {
                 items.forEach { item ->
 
                     NavigationBarItem(
-                        selected = currentDestination
-                            ?.hierarchy
-                            ?.any {
-                                it.route == item.route
-                            } == true,
+
+                        selected =
+                            currentDestination
+                                ?.hierarchy
+                                ?.any {
+                                    it.route == item.route
+                                } == true,
 
                         onClick = {
 
-                            navController.navigate(item.route) {
+                            navController.navigate(
+                                item.route
+                            ) {
 
                                 popUpTo(
                                     navController.graph
@@ -274,11 +370,13 @@ private fun GemGlassesRoot() {
                                 }
 
                                 launchSingleTop = true
+
                                 restoreState = true
                             }
                         },
 
                         icon = {
+
                             Icon(
                                 imageVector = item.icon,
                                 contentDescription = item.label,
@@ -292,6 +390,7 @@ private fun GemGlassesRoot() {
                 }
             }
         },
+
     ) { padding ->
 
         NavHost(
@@ -303,21 +402,21 @@ private fun GemGlassesRoot() {
             composable("home") {
 
                 HomeScreen(
-                    modifier = Modifier,
+                    modifier = Modifier
                 )
             }
 
             composable("transcript") {
 
                 TranscriptScreen(
-                    modifier = Modifier,
+                    modifier = Modifier
                 )
             }
 
             composable("settings") {
 
                 SettingsScreen(
-                    modifier = Modifier,
+                    modifier = Modifier
                 )
             }
         }
