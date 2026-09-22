@@ -24,6 +24,9 @@ class GlassesManager @Inject constructor(
         backend.startRegistration()
     }
 
+    suspend fun connect(): Boolean =
+        backend.connect()
+
     fun setActivity(activity: Activity) {
         backend.setActivity(activity)
     }
