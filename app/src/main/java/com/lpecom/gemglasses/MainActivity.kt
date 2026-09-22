@@ -36,13 +36,13 @@ import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.lpecom.gemglasses.glasses.CameraPermission
 import com.lpecom.gemglasses.glasses.GlassesManager
+import com.lpecom.gemglasses.ui.CameraTestScreen
 import com.lpecom.gemglasses.ui.HomeScreen
 import com.lpecom.gemglasses.ui.SettingsScreen
 import com.lpecom.gemglasses.ui.TranscriptScreen
 import com.lpecom.gemglasses.ui.theme.GemGlassesTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -179,10 +179,6 @@ class MainActivity : ComponentActivity() {
 
         glassesManager.setActivity(this)
 
-        /*
-         * Register the permission bridge before any vision
-         * request can happen.
-         */
         glassesManager.setCameraPermissionRequester {
             requestMetaCameraPermission()
         }
@@ -261,12 +257,6 @@ class MainActivity : ComponentActivity() {
         val app =
             application as GemGlassesApp
 
-        /*
-         * IMPORTANT:
-         *
-         * Wearables.initialize() must happen only after the
-         * Bluetooth runtime permissions are available.
-         */
         val wearablesReady =
             app.initializeWearables()
 
@@ -288,17 +278,6 @@ class MainActivity : ComponentActivity() {
 
         glassesManager.initialize()
 
-        /*
-         * IMPORTANT:
-         *
-         * initialize() sets up the backend, but it does not
-         * create/start the DeviceSession.
-         *
-         * connect() creates the actual MWDAT DeviceSession.
-         *
-         * The camera API requires that DeviceSession to already
-         * exist, so connect immediately after initialization.
-         */
         lifecycleScope.launch {
 
             Log.i(
@@ -313,22 +292,10 @@ class MainActivity : ComponentActivity() {
 
                 if (connected) {
 
-                    Log.i(
-                        TAG,
-                        "========================================"
-                    )
-                    Log.i(
-                        TAG,
-                        "GLASSES CONNECTED"
-                    )
-                    Log.i(
-                        TAG,
-                        "DeviceSession is ready"
-                    )
-                    Log.i(
-                        TAG,
-                        "========================================"
-                    )
+                    Log.i(TAG, "========================================")
+                    Log.i(TAG, "GLASSES CONNECTED")
+                    Log.i(TAG, "DeviceSession is ready")
+                    Log.i(TAG, "========================================")
 
                 } else {
 
@@ -405,61 +372,70 @@ private fun GemGlassesRoot() {
             ),
         )
 
+    val navBackStackEntry by
+        navController.currentBackStackEntryAsState()
+
+    val currentDestination =
+        navBackStackEntry?.destination
+
+    val currentRoute =
+        currentDestination?.route
+
+    val isCameraTest =
+        currentRoute == "camera_test"
+
     Scaffold(
 
         bottomBar = {
 
-            NavigationBar {
+            if (!isCameraTest) {
 
-                val navBackStackEntry by
-                    navController.currentBackStackEntryAsState()
+                NavigationBar {
 
-                val currentDestination =
-                    navBackStackEntry?.destination
+                    items.forEach { item ->
 
-                items.forEach { item ->
+                        NavigationBarItem(
 
-                    NavigationBarItem(
+                            selected =
+                                currentDestination
+                                    ?.hierarchy
+                                    ?.any {
+                                        it.route == item.route
+                                    } == true,
 
-                        selected =
-                            currentDestination
-                                ?.hierarchy
-                                ?.any {
-                                    it.route == item.route
-                                } == true,
+                            onClick = {
 
-                        onClick = {
-
-                            navController.navigate(
-                                item.route
-                            ) {
-
-                                popUpTo(
-                                    navController.graph
-                                        .findStartDestination()
-                                        .id
+                                navController.navigate(
+                                    item.route
                                 ) {
-                                    saveState = true
+
+                                    popUpTo(
+                                        navController.graph
+                                            .findStartDestination()
+                                            .id
+                                    ) {
+                                        saveState = true
+                                    }
+
+                                    launchSingleTop = true
+
+                                    restoreState = true
                                 }
+                            },
 
-                                launchSingleTop = true
+                            icon = {
 
-                                restoreState = true
-                            }
-                        },
+                                Icon(
+                                    imageVector = item.icon,
+                                    contentDescription = item.label,
+                                )
+                            },
 
-                        icon = {
-
-                            Icon(
-                                imageVector = item.icon,
-                                contentDescription = item.label,
-                            )
-                        },
-
-                        label = {
-                            Text(item.label)
-                        },
-                    )
+                            label = {
+                                Text(item.label)
+                            },
+                        )
+                    }
                 }
             }
         },
@@ -475,7 +451,19 @@ private fun GemGlassesRoot() {
             composable("home") {
 
                 HomeScreen(
-                    modifier = Modifier
+                    modifier = Modifier,
+                    onCameraTestClick = {
+                        navController.navigate("camera_test")
+                    },
+                )
+            }
+
+            composable("camera_test") {
+
+                CameraTestScreen(
+                    onBack = {
+                        navController.popBackStack()
+                    },
                 )
             }
 
