@@ -32,81 +32,110 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meta.wearable.dat.camera.types.VideoFrame
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.nio.ByteBuffer
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun CameraTestScreen(
     onBack: () -> Unit,
     viewModel: CameraTestViewModel = hiltViewModel(),
 ) {
+    /*
+     * IMPORTANT:
+     *
+     * Use the actual StateFlow directly.
+     *
+     * Do NOT use the old custom
+     * collectAsStateWithLifecycleCompat() helper.
+     */
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    val uiState by viewModel.uiState.collectAsStateWithLifecycleCompat()
+    val context = LocalContext.current
 
-    val context =
-        LocalContext.current
+    val decoder = remember {
+        H265SurfaceDecoder()
+    }
 
-    val decoder =
-        remember {
-            H265SurfaceDecoder()
-        }
+    var surfaceReady by remember {
+        mutableStateOf(false)
+    }
 
-    var surfaceReady by
-        remember {
-            mutableStateOf(false)
-        }
+    /*
+     * ---------------------------------------------------------
+     * BACK
+     * ---------------------------------------------------------
+     */
 
     BackHandler {
-
         viewModel.stopPreview()
-
         decoder.release()
-
         onBack()
     }
 
     /*
-     * Start the camera only after SurfaceView has a real Surface.
+     * ---------------------------------------------------------
+     * START CAMERA
+     * ---------------------------------------------------------
+     *
+     * We wait until SurfaceView has a valid Surface before
+     * starting the MWDAT camera stream.
      */
+
     LaunchedEffect(surfaceReady) {
-
         if (surfaceReady) {
-
             viewModel.startPreview()
         }
     }
 
     /*
-     * Feed MWDAT VideoFrame objects into our H.265 MediaCodec decoder.
+     * ---------------------------------------------------------
+     * VIDEO FRAME PIPELINE
+     * ---------------------------------------------------------
+     *
+     * CameraTestViewModel exposes:
+     *
+     *     frames: Flow<VideoFrame>
+     *
+     * MWDAT gives us compressed H.265 frames.
+     *
+     * The decoder renders those frames directly into the
+     * SurfaceView.
      */
-    LaunchedEffect(Unit) {
 
+    LaunchedEffect(Unit) {
         viewModel.frames.collect { frame ->
 
             withContext(Dispatchers.Default) {
-
                 decoder.queue(frame)
             }
         }
     }
 
+    /*
+     * ---------------------------------------------------------
+     * CLEANUP
+     * ---------------------------------------------------------
+     */
+
     DisposableEffect(Unit) {
-
         onDispose {
-
             viewModel.stopPreview()
             decoder.release()
         }
     }
+
+    /*
+     * ---------------------------------------------------------
+     * SCREEN
+     * ---------------------------------------------------------
+     */
 
     Column(
         modifier = Modifier
@@ -115,9 +144,9 @@ fun CameraTestScreen(
     ) {
 
         /*
-         * ---------------------------------------------------------
-         * Header
-         * ---------------------------------------------------------
+         * -----------------------------------------------------
+         * HEADER
+         * -----------------------------------------------------
          */
 
         Row(
@@ -135,11 +164,8 @@ fun CameraTestScreen(
 
             Button(
                 onClick = {
-
                     viewModel.stopPreview()
-
                     decoder.release()
-
                     onBack()
                 },
             ) {
@@ -154,14 +180,12 @@ fun CameraTestScreen(
 
                 Text(
                     text = "Camera Test",
-                    style =
-                        MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleLarge,
                 )
 
                 Text(
                     text = uiState.status,
-                    style =
-                        MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall,
                     color =
                         if (uiState.error == null) {
                             MaterialTheme.colorScheme.onSurfaceVariant
@@ -173,9 +197,9 @@ fun CameraTestScreen(
         }
 
         /*
-         * ---------------------------------------------------------
-         * Live preview
-         * ---------------------------------------------------------
+         * -----------------------------------------------------
+         * LIVE PREVIEW
+         * -----------------------------------------------------
          */
 
         Box(
@@ -200,11 +224,16 @@ fun CameraTestScreen(
                                     holder: SurfaceHolder,
                                 ) {
 
-                                    decoder.setSurface(
-                                        holder.surface
-                                    )
+                                    if (
+                                        holder.surface.isValid
+                                    ) {
 
-                                    surfaceReady = true
+                                        decoder.setSurface(
+                                            holder.surface
+                                        )
+
+                                        surfaceReady = true
+                                    }
                                 }
 
                                 override fun surfaceChanged(
@@ -221,6 +250,8 @@ fun CameraTestScreen(
                                         decoder.setSurface(
                                             holder.surface
                                         )
+
+                                        surfaceReady = true
                                     }
                                 }
 
@@ -248,22 +279,22 @@ fun CameraTestScreen(
         }
 
         /*
-         * ---------------------------------------------------------
-         * Capture result
-         * ---------------------------------------------------------
+         * -----------------------------------------------------
+         * CAPTURE RESULT
+         * -----------------------------------------------------
          */
 
         uiState.capturedPhoto?.let { bitmap ->
 
             CapturedPhotoPreview(
-                bitmap = bitmap
+                bitmap = bitmap,
             )
         }
 
         /*
-         * ---------------------------------------------------------
-         * Error
-         * ---------------------------------------------------------
+         * -----------------------------------------------------
+         * ERROR
+         * -----------------------------------------------------
          */
 
         uiState.error?.let { error ->
@@ -284,16 +315,18 @@ fun CameraTestScreen(
         }
 
         /*
-         * ---------------------------------------------------------
-         * Capture button
-         * ---------------------------------------------------------
+         * -----------------------------------------------------
+         * CAPTURE BUTTON
+         * -----------------------------------------------------
          */
 
         Button(
             onClick = viewModel::capturePhoto,
+
             enabled =
                 surfaceReady &&
                     !uiState.capturing,
+
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
@@ -303,7 +336,7 @@ fun CameraTestScreen(
             if (uiState.capturing) {
 
                 CircularProgressIndicator(
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(22.dp),
                 )
 
             } else {
@@ -313,6 +346,12 @@ fun CameraTestScreen(
         }
     }
 }
+
+/*
+ * =============================================================
+ * CAPTURED PHOTO
+ * =============================================================
+ */
 
 @Composable
 private fun CapturedPhotoPreview(
@@ -326,14 +365,14 @@ private fun CapturedPhotoPreview(
                 MaterialTheme.colorScheme.surface
             )
             .padding(12.dp),
+
         verticalArrangement =
             Arrangement.spacedBy(8.dp),
     ) {
 
         Text(
             text = "Captured Photo",
-            style =
-                MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleMedium,
         )
 
         Image(
@@ -348,10 +387,12 @@ private fun CapturedPhotoPreview(
 
 /*
  * =============================================================
- * H.265 MediaCodec decoder
+ * H.265 MEDIA CODEC DECODER
  * =============================================================
  *
- * MWDAT 0.9.0's compressed VideoFrame contains:
+ * MWDAT 0.9.0's VideoFrame exposes compressed video data.
+ *
+ * The frame contains:
  *
  *     buffer
  *     width
@@ -360,24 +401,31 @@ private fun CapturedPhotoPreview(
  *     isCompressed
  *     isCodecConfig
  *
- * The AAR's own default VideoFormat uses H.265.
+ * MWDAT's camera stream uses H.265/HEVC.
  *
- * We therefore decode the compressed stream directly into the
- * SurfaceView Surface.
+ * We therefore decode the compressed frames using Android's
+ * MediaCodec and render directly to the SurfaceView.
+ *
+ * This is completely independent from Gemini and audio.
  */
+
 private class H265SurfaceDecoder {
 
-    private val lock =
-        Any()
+    private val lock = Any()
 
-    private var decoder:
-        MediaCodec? = null
+    private var decoder: MediaCodec? = null
 
-    private var surface:
-        Surface? = null
+    private var surface: Surface? = null
 
     private var width = 0
+
     private var height = 0
+
+    /*
+     * ---------------------------------------------------------
+     * SURFACE
+     * ---------------------------------------------------------
+     */
 
     fun setSurface(
         newSurface: Surface,
@@ -385,15 +433,20 @@ private class H265SurfaceDecoder {
 
         synchronized(lock) {
 
-            surface =
-                newSurface
-
             /*
-             * If the surface changes, the MediaCodec must be
-             * recreated because it is configured against the
-             * previous Surface.
+             * If this is a different Surface, recreate the
+             * MediaCodec because it is configured against the
+             * Surface.
              */
-            releaseDecoderLocked()
+
+            if (
+                surface !== newSurface
+            ) {
+
+                releaseDecoderLocked()
+            }
+
+            surface = newSurface
         }
     }
 
@@ -407,16 +460,23 @@ private class H265SurfaceDecoder {
         }
     }
 
+    /*
+     * ---------------------------------------------------------
+     * QUEUE VIDEO FRAME
+     * ---------------------------------------------------------
+     */
+
     fun queue(
         frame: VideoFrame,
     ) {
 
-        if (!frame.isCompressed) {
+        /*
+         * Camera Test requests compressed video.
+         *
+         * Ignore raw frames.
+         */
 
-            /*
-             * This test screen intentionally requests
-             * compressed video, so raw frames are ignored.
-             */
+        if (!frame.isCompressed) {
             return
         }
 
@@ -429,8 +489,13 @@ private class H265SurfaceDecoder {
                 currentSurface == null ||
                 !currentSurface.isValid
             ) {
+
                 return
             }
+
+            /*
+             * Create/recreate decoder when resolution changes.
+             */
 
             if (
                 decoder == null ||
@@ -438,16 +503,13 @@ private class H265SurfaceDecoder {
                 height != frame.height
             ) {
 
-                width =
-                    frame.width
-
-                height =
-                    frame.height
+                width = frame.width
+                height = frame.height
 
                 createDecoderLocked(
-                    currentSurface,
-                    width,
-                    height,
+                    outputSurface = currentSurface,
+                    frameWidth = width,
+                    frameHeight = height,
                 )
             }
 
@@ -457,23 +519,30 @@ private class H265SurfaceDecoder {
 
             try {
 
+                /*
+                 * Find an input buffer.
+                 */
+
                 val inputIndex =
                     activeDecoder.dequeueInputBuffer(
-                        0
+                        0,
                     )
 
                 if (inputIndex < 0) {
-
                     return
                 }
 
                 val inputBuffer =
                     activeDecoder.getInputBuffer(
-                        inputIndex
+                        inputIndex,
                     )
-                    ?: return
+                        ?: return
 
                 inputBuffer.clear()
+
+                /*
+                 * Never modify the original MWDAT ByteBuffer.
+                 */
 
                 val source =
                     frame.buffer.duplicate()
@@ -491,10 +560,18 @@ private class H265SurfaceDecoder {
 
                 inputBuffer.put(source)
 
+                /*
+                 * Codec configuration frames need the
+                 * BUFFER_FLAG_CODEC_CONFIG flag.
+                 */
+
                 val flags =
                     if (frame.isCodecConfig) {
+
                         MediaCodec.BUFFER_FLAG_CODEC_CONFIG
+
                     } else {
+
                         0
                     }
 
@@ -506,23 +583,40 @@ private class H265SurfaceDecoder {
                     flags,
                 )
 
+                /*
+                 * Drain decoded frames to SurfaceView.
+                 */
+
                 drainDecoderLocked(
-                    activeDecoder
+                    activeDecoder,
                 )
 
             } catch (_: IllegalStateException) {
+
+                /*
+                 * Codec can become invalid when the Surface is
+                 * destroyed/recreated.
+                 */
 
                 releaseDecoderLocked()
 
             } catch (_: Exception) {
 
                 /*
-                 * A malformed/unsupported compressed frame should
-                 * not crash the camera screen.
+                 * Ignore malformed/unsupported frames.
+                 *
+                 * The next frame can attempt to continue the
+                 * stream.
                  */
             }
         }
     }
+
+    /*
+     * ---------------------------------------------------------
+     * CREATE DECODER
+     * ---------------------------------------------------------
+     */
 
     private fun createDecoderLocked(
         outputSurface: Surface,
@@ -541,6 +635,13 @@ private class H265SurfaceDecoder {
                     frameHeight,
                 )
 
+            /*
+             * The camera stream is configured at 24/30 FPS
+             * depending on the MWDAT configuration.
+             *
+             * This value is only a decoder hint.
+             */
+
             mediaFormat.setInteger(
                 MediaFormat.KEY_FRAME_RATE,
                 30,
@@ -548,7 +649,7 @@ private class H265SurfaceDecoder {
 
             val newDecoder =
                 MediaCodec.createDecoderByType(
-                    MIME_TYPE
+                    MIME_TYPE,
                 )
 
             newDecoder.configure(
@@ -569,6 +670,12 @@ private class H265SurfaceDecoder {
         }
     }
 
+    /*
+     * ---------------------------------------------------------
+     * DRAIN DECODER
+     * ---------------------------------------------------------
+     */
+
     private fun drainDecoderLocked(
         activeDecoder: MediaCodec,
     ) {
@@ -588,6 +695,11 @@ private class H265SurfaceDecoder {
 
                 outputIndex >= 0 -> {
 
+                    /*
+                     * Render decoded frame to the configured
+                     * Surface.
+                     */
+
                     activeDecoder.releaseOutputBuffer(
                         outputIndex,
                         true,
@@ -598,7 +710,8 @@ private class H265SurfaceDecoder {
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
 
                     /*
-                     * Nothing else required for Surface output.
+                     * Surface output does not require additional
+                     * handling here.
                      */
                 }
 
@@ -615,6 +728,12 @@ private class H265SurfaceDecoder {
             }
         }
     }
+
+    /*
+     * ---------------------------------------------------------
+     * RELEASE
+     * ---------------------------------------------------------
+     */
 
     fun release() {
 
@@ -652,22 +771,4 @@ private class H265SurfaceDecoder {
         const val MIME_TYPE =
             "video/hevc"
     }
-}
-
-/*
- * Small local compatibility helper so this screen does not depend
- * on a particular lifecycle-compose extension version.
- */
-@Composable
-private fun <T> CameraTestViewModel.collectAsStateWithLifecycle(
-    selector: CameraTestViewModel.() -> kotlinx.coroutines.flow.StateFlow<T> =
-        { uiState },
-): androidx.compose.runtime.State<T> {
-
-    val stateFlow =
-        selector()
-
-    return androidx.compose.runtime.collectAsState(
-        stateFlow
-    )
 }
