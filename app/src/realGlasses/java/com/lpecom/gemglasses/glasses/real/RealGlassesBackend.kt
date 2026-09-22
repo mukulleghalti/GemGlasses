@@ -1664,7 +1664,7 @@ class RealGlassesBackend @Inject constructor(
                             VideoQuality.MEDIUM,
                         frameRate =
                             CAMERA_TEST_FRAME_RATE,
-                        compressVideo = false,
+                        compressVideo = true,
                     )
                 ).getOrElse { error ->
 
@@ -1773,16 +1773,6 @@ class RealGlassesBackend @Inject constructor(
             // -----------------------------------------------------------------
 
             activeCamera.stream.videoStream.collect { frame ->
-
-                if (frame.isCodecConfig) {
-
-                    Log.d(
-                        TAG,
-                        "CAMERA TEST: codec config frame ignored"
-                    )
-
-                    return@collect
-                }
 
                 Log.d(
                     TAG,
