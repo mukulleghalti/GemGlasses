@@ -25,7 +25,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.lpecom.gemglasses.glasses.real.RealGlassesBackend
+import com.lpecom.gemglasses.glasses.GlassesManager
 import com.lpecom.gemglasses.ui.HomeScreen
 import com.lpecom.gemglasses.ui.SettingsScreen
 import com.lpecom.gemglasses.ui.TranscriptScreen
@@ -36,16 +36,24 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    /**
+     * Do NOT inject RealGlassesBackend directly here.
+     *
+     * AppModule provides GlassesBackend through reflection so that
+     * src/main does not directly depend on the Meta DAT implementation.
+     *
+     * GlassesManager is the correct abstraction to use from MainActivity.
+     */
     @Inject
-    lateinit var glassesBackend: RealGlassesBackend
+    lateinit var glassesManager: GlassesManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // IMPORTANT:
-        // Register the Activity before Compose can create the ViewModel
-        // or the user can press "Conectar óculos".
-        glassesBackend.setActivity(this)
+        // Give the glasses backend access to this Activity.
+        // The real Meta DAT backend uses this for registration and
+        // permission-related flows.
+        glassesManager.setActivity(this)
 
         enableEdgeToEdge()
 
@@ -62,7 +70,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        glassesBackend.clearActivity(this)
+        // Remove the Activity reference from the backend.
+        glassesManager.clearActivity(this)
+
         super.onDestroy()
     }
 }
@@ -108,7 +118,9 @@ private fun GemGlassesRoot() {
                             ?.any { it.route == item.route } == true,
                         onClick = {
                             navController.navigate(item.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
+                                popUpTo(
+                                    navController.graph.findStartDestination().id
+                                ) {
                                     saveState = true
                                 }
                                 launchSingleTop = true
