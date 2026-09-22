@@ -1,6 +1,7 @@
 package com.lpecom.gemglasses.ui
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lpecom.gemglasses.agent.AgentController
@@ -15,6 +16,7 @@ import com.lpecom.gemglasses.state.CitedPlace
 import com.lpecom.gemglasses.state.ConversationStore
 import com.lpecom.gemglasses.state.TranscriptEntry
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -22,9 +24,10 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Bridges the Compose UI to the [AgentController] and shared state. Holds no
- * business logic — it starts/stops the session (and the foreground service that
- * keeps it alive) and re-exposes flows the screens observe.
+ * Bridges the Compose UI to the [AgentController] and shared state.
+ *
+ * Holds no business logic — it starts/stops the session, manages the
+ * foreground service, and re-exposes flows that the screens observe.
  */
 @HiltViewModel
 class AgentViewModel @Inject constructor(
@@ -35,41 +38,114 @@ class AgentViewModel @Inject constructor(
     private val settings: SettingsRepository,
 ) : AndroidViewModel(application) {
 
-    val status: StateFlow<AgentStatus> = controller.status
+    val status: StateFlow<AgentStatus> =
+        controller.status
 
     val registration: StateFlow<RegistrationState> =
-        glassesManager.registrationState.stateInDefault(RegistrationState.UNKNOWN)
+        glassesManager.registrationState
+            .stateInDefault(RegistrationState.UNKNOWN)
 
     val devices: StateFlow<List<GlassesDevice>> =
-        glassesManager.devices.stateInDefault(emptyList())
+        glassesManager.devices
+            .stateInDefault(emptyList())
 
     val transcript: StateFlow<List<TranscriptEntry>> =
-        conversation.entries.stateInDefault(emptyList())
+        conversation.entries
+            .stateInDefault(emptyList())
 
     val places: StateFlow<List<CitedPlace>> =
-        conversation.places.stateInDefault(emptyList())
+        conversation.places
+            .stateInDefault(emptyList())
 
     val preferences: StateFlow<AgentPreferences> =
-        settings.preferences.stateInDefault(AgentPreferences.DEFAULT)
+        settings.preferences
+            .stateInDefault(AgentPreferences.DEFAULT)
 
-    /** Starts the assistant. Caller must have RECORD_AUDIO granted. */
+    /**
+     * Starts the assistant.
+     *
+     * Caller must have RECORD_AUDIO permission.
+     */
     fun startSession() {
         val app = getApplication<Application>()
+
         conversation.clear()
+
         AgentForegroundService.start(app)
         controller.start()
     }
 
+    /**
+     * Stops the assistant.
+     */
     fun stopSession() {
         controller.stop()
         AgentForegroundService.stop(getApplication())
     }
 
-    fun registerGlasses() = glassesManager.startRegistration()
+    /**
+     * Starts the Meta glasses registration flow.
+     */
+    fun registerGlasses() {
+        glassesManager.startRegistration()
+    }
 
-    fun setLanguage(code: String) = viewModelScope.launch { settings.setLanguage(code) }
-    fun setVoice(voice: String) = viewModelScope.launch { settings.setVoice(voice) }
+    /**
+     * Connects to the registered Ray-Ban Meta glasses.
+     *
+     * Registration and an active MWDAT connection are separate states.
+     */
+    fun connectGlasses() {
+        viewModelScope.launch {
+            try {
+                val connected = glassesManager.connect()
 
-    private fun <T> kotlinx.coroutines.flow.Flow<T>.stateInDefault(initial: T): StateFlow<T> =
-        stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initial)
+                if (connected) {
+                    Log.i(TAG, "Glasses connected successfully")
+                } else {
+                    Log.w(TAG, "Glasses connection failed")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error connecting glasses", e)
+            }
+        }
+    }
+
+    /**
+     * Changes the assistant language.
+     *
+     * Example:
+     *     setLanguage("en")
+     *     setLanguage("hi")
+     */
+    fun setLanguage(code: String) {
+        viewModelScope.launch {
+            settings.setLanguage(code)
+        }
+    }
+
+    /**
+     * Changes the Gemini voice.
+     */
+    fun setVoice(voice: String) {
+        viewModelScope.launch {
+            settings.setVoice(voice)
+        }
+    }
+
+    /**
+     * Converts a Flow into a StateFlow with a default value.
+     */
+    private fun <T> Flow<T>.stateInDefault(
+        initial: T,
+    ): StateFlow<T> =
+        stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = initial,
+        )
+
+    private companion object {
+        const val TAG = "AgentViewModel"
+    }
 }
