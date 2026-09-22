@@ -33,33 +33,26 @@ interface GlassesBackend {
 
     fun startRegistration()
 
-    /**
-     * Creates and starts the MWDAT DeviceSession.
-     *
-     * Returns true when the session reaches STARTED.
-     */
-    suspend fun connect(): Boolean {
-        return false
-    }
-
     suspend fun cameraPermission(): CameraPermission
 
     suspend fun requestCameraPermission(): CameraPermission
 
+    /**
+     * Registers the Activity-owned Meta Wearables permission launcher.
+     *
+     * The actual Wearables.RequestPermissionContract() must live in
+     * MainActivity because it is an Activity Result API contract.
+     */
+    fun setCameraPermissionRequester(
+        requester: suspend () -> CameraPermission,
+    ) {
+    }
+
     fun cameraFrames(): Flow<ByteArray>
 
-    /**
-     * Gives the backend the current Activity when an Activity is available.
-     * Real MWDAT backend uses this for registration / permission flows.
-     */
-    fun setActivity(activity: Activity) {
-        // Default no-op for mock backends.
-    }
+    fun setActivity(activity: Activity)
 
-    /**
-     * Removes the Activity reference when it is destroyed.
-     */
-    fun clearActivity(activity: Activity) {
-        // Default no-op for mock backends.
-    }
+    fun clearActivity(activity: Activity)
+
+    suspend fun connect(): Boolean = false
 }
