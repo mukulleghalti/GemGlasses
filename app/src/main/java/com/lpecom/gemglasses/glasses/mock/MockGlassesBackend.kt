@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import java.io.ByteArrayOutputStream
+import android.app.Activity
 
 /**
  * Hardware-free stand-in for the Meta DAT SDK. Reports one connected pair of
@@ -38,7 +39,14 @@ class MockGlassesBackend : GlassesBackend {
     override fun startRegistration() {
         _registration.value = RegistrationState.REGISTERED
     }
+    
+    override fun setActivity(activity: Activity) {
+        // No-op for mock backend
+    }
 
+    override fun clearActivity(activity: Activity) {
+        // No-op for mock backend
+    }
     override suspend fun cameraPermission() = CameraPermission.GRANTED
 
     override suspend fun requestCameraPermission() = CameraPermission.GRANTED
