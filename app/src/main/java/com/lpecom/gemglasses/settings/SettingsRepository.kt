@@ -21,44 +21,74 @@ data class AgentPreferences(
         get() = DEFAULT_SYSTEM_INSTRUCTION
 
     companion object {
-        val DEFAULT = AgentPreferences(languageCode = "pt-BR", voiceName = "Puck")
+
+        /**
+         * Default assistant language is English.
+         *
+         * Puck is kept as the default Gemini voice.
+         */
+        val DEFAULT = AgentPreferences(
+            languageCode = "en",
+            voiceName = "Puck",
+        )
 
         val DEFAULT_SYSTEM_INSTRUCTION = """
-            Você é um assistente pessoal de voz que fala pelos óculos do usuário.
-            Você conversa — então responda curto e natural, em 1 a 3 frases.
-            Fale em português do Brasil, a menos que peçam outra língua.
-            Use as ferramentas quando fizer sentido: para ver o que o usuário
-            está olhando use capturar_visao; para achar lugares reais use
-            buscar_lugares (nunca invente nomes de estabelecimentos); para navegar
-            use iniciar_navegacao; para mandar mensagem use enviar_mensagem.
-            Se não tiver certeza, pergunte de forma breve.
+            You are a personal voice assistant that speaks through the user's glasses.
+            Have a natural conversation and keep responses short, usually 1 to 3 sentences.
+            Speak English by default unless the user asks for another language.
+            
+            Use tools when appropriate:
+            - To see what the user is looking at, use capturar_visao.
+            - To find real places, use buscar_lugares. Never invent business or place names.
+            - To navigate, use iniciar_navegacao.
+            - To send a message, use enviar_mensagem.
+            
+            If you are unsure about something, ask a brief clarifying question.
         """.trimIndent()
     }
 }
 
-private val Context.dataStore by preferencesDataStore(name = "gemglasses_settings")
+private val Context.dataStore by preferencesDataStore(
+    name = "gemglasses_settings"
+)
 
 @Singleton
 class SettingsRepository @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    private val langKey = stringPreferencesKey("language_code")
-    private val voiceKey = stringPreferencesKey("voice_name")
 
-    val preferences: Flow<AgentPreferences> = context.dataStore.data.map { prefs ->
-        AgentPreferences(
-            languageCode = prefs[langKey] ?: AgentPreferences.DEFAULT.languageCode,
-            voiceName = prefs[voiceKey] ?: AgentPreferences.DEFAULT.voiceName,
-        )
-    }
+    private val langKey =
+        stringPreferencesKey("language_code")
 
-    suspend fun snapshot(): AgentPreferences = preferences.first()
+    private val voiceKey =
+        stringPreferencesKey("voice_name")
+
+    val preferences: Flow<AgentPreferences> =
+        context.dataStore.data.map { prefs ->
+
+            AgentPreferences(
+                languageCode =
+                    prefs[langKey]
+                        ?: AgentPreferences.DEFAULT.languageCode,
+
+                voiceName =
+                    prefs[voiceKey]
+                        ?: AgentPreferences.DEFAULT.voiceName,
+            )
+        }
+
+    suspend fun snapshot(): AgentPreferences =
+        preferences.first()
 
     suspend fun setLanguage(code: String) {
-        context.dataStore.edit { it[langKey] = code }
+        context.dataStore.edit {
+            it[langKey] = code
+        }
     }
 
     suspend fun setVoice(voice: String) {
-        context.dataStore.edit { it[voiceKey] = voice }
+        context.dataStore.edit {
+            it[voiceKey] = voice
+        }
     }
 }
