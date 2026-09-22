@@ -33,6 +33,15 @@ interface GlassesBackend {
 
     fun startRegistration()
 
+    /**
+     * Creates and starts the MWDAT DeviceSession.
+     *
+     * Returns true when the session reaches STARTED.
+     */
+    suspend fun connect(): Boolean {
+        return false
+    }
+
     suspend fun cameraPermission(): CameraPermission
 
     suspend fun requestCameraPermission(): CameraPermission
