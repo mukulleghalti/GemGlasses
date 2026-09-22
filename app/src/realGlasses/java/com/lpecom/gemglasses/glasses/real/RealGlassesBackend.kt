@@ -1586,7 +1586,7 @@ class RealGlassesBackend @Inject constructor(
 
             try {
 
-                activeSession.removeCamera()
+                activeSession.stop()
 
                 Log.i(
                     TAG,
