@@ -20,17 +20,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ------------------------------------------------------------
-      # CHECKOUT
-      # ------------------------------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
 
-      # ------------------------------------------------------------
-      # JAVA
-      # ------------------------------------------------------------
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -38,9 +32,6 @@ jobs:
           distribution: "temurin"
           cache: gradle
 
-      # ------------------------------------------------------------
-      # VERIFY SECRETS
-      # ------------------------------------------------------------
       - name: Verify required secrets
         shell: bash
         env:
@@ -60,9 +51,6 @@ jobs:
 
           echo "Required secrets are configured."
 
-      # ------------------------------------------------------------
-      # LOCAL.PROPERTIES
-      # ------------------------------------------------------------
       - name: Write local.properties
         shell: bash
         env:
@@ -74,10 +62,113 @@ jobs:
         run: |
           set -e
 
-          {
-            echo "sdk.dir=$ANDROID_SDK_ROOT"
-            echo "GEMINI_API_KEY=$GEMINI_API_KEY"
-            echo "TOKEN_APP_SECRET=$TOKEN_APP_SECRET"
-            echo "META_APPLICATION_ID=$META_APP_ID"
-            echo "META_CLIENT_TOKEN=$META_CLIENT_TOKEN"
-            echo "GEMGLASSES_BACKEND_URL=$GEMGLASSES_BACK
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "GEMINI_API_KEY=$GEMINI_API_KEY" >> local.properties
+          echo "TOKEN_APP_SECRET=$TOKEN_APP_SECRET" >> local.properties
+          echo "META_APPLICATION_ID=$META_APP_ID" >> local.properties
+          echo "META_CLIENT_TOKEN=$META_CLIENT_TOKEN" >> local.properties
+          echo "GEMGLASSES_BACKEND_URL=$GEMGLASSES_BACKEND_URL" >> local.properties
+
+          echo "local.properties created."
+
+      - name: Prepare Gradle
+        shell: bash
+        run: |
+          set -e
+          chmod +x gradlew
+
+      - name: Inspect MWDAT dependencies
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "MWDAT DEPENDENCY TREE"
+          echo "========================================"
+
+          ./gradlew :app:dependencies \
+            --configuration debugCompileClasspath \
+            | grep -i -A5 -B5 mwdat || true
+
+          echo
+          echo "========================================"
+          echo "MWDAT CACHE ARTIFACTS"
+          echo "========================================"
+
+          find "$HOME/.gradle/caches/modules-2/files-2.1" \
+            -type f \
+            \( -name "*.jar" -o -name "*.aar" \) \
+            | grep -i mwdat || true
+
+          echo
+          echo "========================================"
+          echo "CAMERA API CLASSES"
+          echo "========================================"
+
+          while IFS= read -r artifact; do
+            echo
+            echo "----- $artifact -----"
+
+            if [[ "$artifact" == *.jar ]]; then
+              unzip -l "$artifact" 2>/dev/null \
+                | grep -Ei \
+                  "PhotoData|Photo|Camera|StreamConfiguration|StreamState|VideoQuality" \
+                || true
+            fi
+          done < <(
+            find "$HOME/.gradle/caches/modules-2/files-2.1" \
+              -type f \
+              \( -name "*.jar" -o -name "*.aar" \) \
+              | grep -i mwdat || true
+          )
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          set -e
+          ./gradlew assembleDebug --no-daemon
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+
+      - name: Print APK signing information
+        shell: bash
+        run: |
+          set -e
+
+          APK=$(find app/build/outputs/apk/debug -type f -name "*.apk" | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "No debug APK found."
+            exit 1
+          fi
+
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" \
+            -type f \
+            -name "apksigner" \
+            | sort -V \
+            | tail -n 1)
+
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner was not found."
+            exit 1
+          fi
+
+          echo "APK: $APK"
+          echo
+          echo "Full signing information:"
+
+          "$APKSIGNER" verify \
+            --verbose \
+            --print-certs \
+            "$APK"
+
+          echo
+          echo "Android package/application ID:"
+          echo "com.lpecom.gemglasses"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: gem-glasses-apk
+          path: app/build/outputs/apk/debug/*.apk
