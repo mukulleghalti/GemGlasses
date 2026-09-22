@@ -4,6 +4,9 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -12,6 +15,8 @@ import com.lpecom.gemglasses.glasses.GlassesBackend
 import com.lpecom.gemglasses.glasses.GlassesDevice
 import com.lpecom.gemglasses.glasses.RegistrationState
 import com.meta.wearable.dat.camera.addCamera
+import com.meta.wearable.dat.camera.removeCamera
+import com.meta.wearable.dat.camera.types.PhotoData
 import com.meta.wearable.dat.camera.types.StreamConfiguration
 import com.meta.wearable.dat.camera.types.StreamState
 import com.meta.wearable.dat.camera.types.VideoQuality
@@ -38,6 +43,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -54,14 +61,13 @@ class RealGlassesBackend @Inject constructor(
 
         private const val SESSION_START_TIMEOUT_MS = 20_000L
 
-        // Camera startup timeout.
         private const val CAMERA_STREAM_TIMEOUT_MS = 15_000L
 
-        // Capture approximately one image per second.
+        // Capture approximately one still image per second.
         private const val PHOTO_INTERVAL_MS = 1_000L
 
-        // Vision burst is controlled by GlassesCameraSource.
-        // This backend simply keeps producing photos while collected.
+        // JPEG quality used when converting MWDAT Bitmap/HEIC photos.
+        private const val JPEG_QUALITY = 90
     }
 
     private val scope =
@@ -71,19 +77,14 @@ class RealGlassesBackend @Inject constructor(
 
     private var session: DeviceSession? = null
 
-    /*
-     * Active MWDAT camera attached to the current DeviceSession.
-     *
-     * We keep this reference so we can stop/remove the camera cleanly.
+    /**
+     * Currently attached MWDAT camera.
      */
     private var camera:
         com.meta.wearable.dat.camera.Camera? = null
 
-    /*
+    /**
      * MainActivity supplies the actual Activity Result permission request.
-     *
-     * We keep this as a suspend function because the MWDAT permission
-     * dialog is asynchronous.
      */
     private var cameraPermissionRequester:
         (suspend () -> CameraPermission)? = null
@@ -135,12 +136,6 @@ class RealGlassesBackend @Inject constructor(
     // CAMERA PERMISSION REQUESTER
     // =========================================================================
 
-    /**
-     * MainActivity provides the actual Wearables.RequestPermissionContract()
-     * launcher.
-     *
-     * The backend itself must not try to launch an Activity Result contract.
-     */
     override fun setCameraPermissionRequester(
         requester: suspend () -> CameraPermission,
     ) {
@@ -168,25 +163,10 @@ class RealGlassesBackend @Inject constructor(
 
         initialized = true
 
-        Log.i(
-            TAG,
-            "================================================"
-        )
-
-        Log.i(
-            TAG,
-            "INITIALIZING GLASSES BACKEND"
-        )
-
-        Log.i(
-            TAG,
-            "MWDAT SDK is initialized by GemGlassesApp"
-        )
-
-        Log.i(
-            TAG,
-            "================================================"
-        )
+        Log.i(TAG, "================================================")
+        Log.i(TAG, "INITIALIZING GLASSES BACKEND")
+        Log.i(TAG, "MWDAT SDK is initialized by GemGlassesApp")
+        Log.i(TAG, "================================================")
 
         logBluetoothPermissions()
 
@@ -276,25 +256,14 @@ class RealGlassesBackend @Inject constructor(
     }
 
     // =========================================================================
-    // CONNECTION TEST
+    // CONNECTION
     // =========================================================================
 
     override suspend fun connect(): Boolean {
 
-        Log.i(
-            TAG,
-            "================================================"
-        )
-
-        Log.i(
-            TAG,
-            "STARTING MINIMAL MWDAT CONNECTION TEST"
-        )
-
-        Log.i(
-            TAG,
-            "================================================"
-        )
+        Log.i(TAG, "================================================")
+        Log.i(TAG, "STARTING MINIMAL MWDAT CONNECTION TEST")
+        Log.i(TAG, "================================================")
 
         logBluetoothPermissions()
 
@@ -334,25 +303,10 @@ class RealGlassesBackend @Inject constructor(
 
         devices.forEach { device ->
 
-            Log.i(
-                TAG,
-                "Device:"
-            )
-
-            Log.i(
-                TAG,
-                "  id = ${device.id}"
-            )
-
-            Log.i(
-                TAG,
-                "  name = ${device.name}"
-            )
-
-            Log.i(
-                TAG,
-                "  connected = ${device.connected}"
-            )
+            Log.i(TAG, "Device:")
+            Log.i(TAG, "  id = ${device.id}")
+            Log.i(TAG, "  name = ${device.name}")
+            Log.i(TAG, "  connected = ${device.connected}")
         }
 
         if (devices.isEmpty()) {
@@ -366,7 +320,7 @@ class RealGlassesBackend @Inject constructor(
         }
 
         // ---------------------------------------------------------------------
-        // We deliberately keep the stable connection flow unchanged.
+        // AutoDeviceSelector
         // ---------------------------------------------------------------------
 
         Log.i(
@@ -375,7 +329,7 @@ class RealGlassesBackend @Inject constructor(
         )
 
         // ---------------------------------------------------------------------
-        // Stop previous session if one exists.
+        // Stop previous session
         // ---------------------------------------------------------------------
 
         val oldSession =
@@ -450,30 +404,14 @@ class RealGlassesBackend @Inject constructor(
         val createdSession =
             sessionResult.getOrElse { error ->
 
-                Log.e(
-                    TAG,
-                    "================================================"
-                )
-
-                Log.e(
-                    TAG,
-                    "CREATE SESSION FAILED"
-                )
-
-                Log.e(
-                    TAG,
-                    "Error = $error"
-                )
-
+                Log.e(TAG, "================================================")
+                Log.e(TAG, "CREATE SESSION FAILED")
+                Log.e(TAG, "Error = $error")
                 Log.e(
                     TAG,
                     "Error type = ${error::class.java.name}"
                 )
-
-                Log.e(
-                    TAG,
-                    "================================================"
-                )
+                Log.e(TAG, "================================================")
 
                 logCreateSessionError(error)
 
@@ -483,42 +421,22 @@ class RealGlassesBackend @Inject constructor(
         session =
             createdSession
 
-        Log.i(
-            TAG,
-            "================================================"
-        )
-
-        Log.i(
-            TAG,
-            "CREATE SESSION SUCCEEDED"
-        )
-
-        Log.i(
-            TAG,
-            "DeviceSession object created"
-        )
-
+        Log.i(TAG, "================================================")
+        Log.i(TAG, "CREATE SESSION SUCCEEDED")
+        Log.i(TAG, "DeviceSession object created")
         Log.i(
             TAG,
             "Initial state = ${createdSession.state.value}"
         )
-
-        Log.i(
-            TAG,
-            "================================================"
-        )
+        Log.i(TAG, "================================================")
 
         // ---------------------------------------------------------------------
-        // Observe session errors
+        // Observe session errors/state
         // ---------------------------------------------------------------------
 
         observeSessionErrors(
             createdSession
         )
-
-        // ---------------------------------------------------------------------
-        // Observe session state
-        // ---------------------------------------------------------------------
 
         observeSessionState(
             createdSession
@@ -579,6 +497,7 @@ class RealGlassesBackend @Inject constructor(
                 }
 
                 true
+
             } ?: false
 
         // ---------------------------------------------------------------------
@@ -587,53 +506,22 @@ class RealGlassesBackend @Inject constructor(
 
         if (started) {
 
-            Log.i(
-                TAG,
-                "================================================"
-            )
-
-            Log.i(
-                TAG,
-                "MWDAT CONNECTION TEST SUCCESS"
-            )
-
-            Log.i(
-                TAG,
-                "SESSION STATE = STARTED"
-            )
-
-            Log.i(
-                TAG,
-                "================================================"
-            )
+            Log.i(TAG, "================================================")
+            Log.i(TAG, "MWDAT CONNECTION TEST SUCCESS")
+            Log.i(TAG, "SESSION STATE = STARTED")
+            Log.i(TAG, "================================================")
 
             return true
         }
 
-        Log.e(
-            TAG,
-            "================================================"
-        )
-
-        Log.e(
-            TAG,
-            "MWDAT CONNECTION TEST FAILED"
-        )
-
-        Log.e(
-            TAG,
-            "Session never reached STARTED"
-        )
-
+        Log.e(TAG, "================================================")
+        Log.e(TAG, "MWDAT CONNECTION TEST FAILED")
+        Log.e(TAG, "Session never reached STARTED")
         Log.e(
             TAG,
             "Final state = ${createdSession.state.value}"
         )
-
-        Log.e(
-            TAG,
-            "================================================"
-        )
+        Log.e(TAG, "================================================")
 
         return false
     }
@@ -673,12 +561,6 @@ class RealGlassesBackend @Inject constructor(
                 Log.e(
                     TAG,
                     "RESULT: NO_ELIGIBLE_DEVICE"
-                )
-
-                Log.e(
-                    TAG,
-                    "The SDK could not find an eligible device " +
-                        "for AutoDeviceSelector()."
                 )
             }
 
@@ -759,30 +641,14 @@ class RealGlassesBackend @Inject constructor(
 
                 activeSession.errors.collect { error ->
 
-                    Log.e(
-                        TAG,
-                        "================================================"
-                    )
-
-                    Log.e(
-                        TAG,
-                        "SESSION ERROR EVENT"
-                    )
-
-                    Log.e(
-                        TAG,
-                        "Error = $error"
-                    )
-
+                    Log.e(TAG, "================================================")
+                    Log.e(TAG, "SESSION ERROR EVENT")
+                    Log.e(TAG, "Error = $error")
                     Log.e(
                         TAG,
                         "Error type = ${error::class.java.name}"
                     )
-
-                    Log.e(
-                        TAG,
-                        "================================================"
-                    )
+                    Log.e(TAG, "================================================")
                 }
 
             } catch (e: Exception) {
@@ -916,66 +782,25 @@ class RealGlassesBackend @Inject constructor(
         device: Device,
     ) {
 
-        Log.i(
-            TAG,
-            "================================================"
-        )
-
-        Log.i(
-            TAG,
-            "MWDAT DEVICE DIAGNOSTICS"
-        )
-
-        Log.i(
-            TAG,
-            "================================================"
-        )
-
-        Log.i(
-            TAG,
-            "Device ID = $deviceId"
-        )
-
-        Log.i(
-            TAG,
-            "Device name = ${device.name}"
-        )
-
-        Log.i(
-            TAG,
-            "Device type = ${device.deviceType}"
-        )
-
+        Log.i(TAG, "================================================")
+        Log.i(TAG, "MWDAT DEVICE DIAGNOSTICS")
+        Log.i(TAG, "================================================")
+        Log.i(TAG, "Device ID = $deviceId")
+        Log.i(TAG, "Device name = ${device.name}")
+        Log.i(TAG, "Device type = ${device.deviceType}")
         Log.i(
             TAG,
             "Device type description = " +
                 "${device.deviceType.description}"
         )
-
-        Log.i(
-            TAG,
-            "Link state = ${device.linkState}"
-        )
-
-        Log.i(
-            TAG,
-            "Compatibility = ${device.compatibility}"
-        )
-
+        Log.i(TAG, "Link state = ${device.linkState}")
+        Log.i(TAG, "Compatibility = ${device.compatibility}")
         Log.i(
             TAG,
             "Display capable = ${device.isDisplayCapable()}"
         )
-
-        Log.i(
-            TAG,
-            "Device object = $device"
-        )
-
-        Log.i(
-            TAG,
-            "================================================"
-        )
+        Log.i(TAG, "Device object = $device")
+        Log.i(TAG, "================================================")
     }
 
     private fun toGlassesDevice(
@@ -1097,6 +922,7 @@ class RealGlassesBackend @Inject constructor(
             when (status) {
 
                 PermissionStatus.Granted -> {
+
                     Log.i(
                         TAG,
                         "Meta CAMERA permission = GRANTED"
@@ -1106,6 +932,7 @@ class RealGlassesBackend @Inject constructor(
                 }
 
                 PermissionStatus.Denied -> {
+
                     Log.i(
                         TAG,
                         "Meta CAMERA permission = DENIED"
@@ -1179,39 +1006,24 @@ class RealGlassesBackend @Inject constructor(
     }
 
     // =========================================================================
-    // CAMERA STREAM
+    // CAMERA
     // =========================================================================
 
     /**
-     * Starts the MWDAT camera and emits JPEG photo bytes.
+     * Starts the MWDAT camera and emits JPEG image bytes.
      *
-     * We intentionally use capturePhoto() instead of forwarding
+     * We intentionally use capturePhoto() rather than forwarding
      * camera.stream.videoStream directly.
      *
-     * MWDAT's video stream is H.265/HEVC. Gemini's vision input path
-     * expects image bytes, so capturePhoto() gives us the actual image
-     * payload that we can forward to GlassesCameraSource/Gemini.
-     *
-     * The Flow remains active while GlassesCameraSource is collecting it.
-     * Every ~1 second we capture another still image.
+     * The MWDAT video stream is not the image format we want to send
+     * into the Gemini vision path.
      */
     override fun cameraFrames():
         Flow<ByteArray> = flow {
 
-        Log.i(
-            TAG,
-            "================================================"
-        )
-
-        Log.i(
-            TAG,
-            "CAMERA FLOW STARTING"
-        )
-
-        Log.i(
-            TAG,
-            "================================================"
-        )
+        Log.i(TAG, "================================================")
+        Log.i(TAG, "CAMERA FLOW STARTING")
+        Log.i(TAG, "================================================")
 
         val activeSession =
             session
@@ -1268,7 +1080,7 @@ class RealGlassesBackend @Inject constructor(
         }
 
         // ---------------------------------------------------------------------
-        // Create camera
+        // Add camera
         // ---------------------------------------------------------------------
 
         val activeCamera =
@@ -1328,7 +1140,7 @@ class RealGlassesBackend @Inject constructor(
         try {
 
             // -----------------------------------------------------------------
-            // Start camera stream
+            // Start stream
             // -----------------------------------------------------------------
 
             Log.i(
@@ -1417,38 +1229,19 @@ class RealGlassesBackend @Inject constructor(
                 return@flow
             }
 
-            Log.i(
-                TAG,
-                "================================================"
-            )
-
-            Log.i(
-                TAG,
-                "CAMERA STREAMING"
-            )
-
-            Log.i(
-                TAG,
-                "Ready for capturePhoto()"
-            )
-
-            Log.i(
-                TAG,
-                "================================================"
-            )
+            Log.i(TAG, "================================================")
+            Log.i(TAG, "CAMERA STREAMING")
+            Log.i(TAG, "Ready for capturePhoto()")
+            Log.i(TAG, "================================================")
 
             // -----------------------------------------------------------------
-            // Capture photos continuously.
+            // Capture still images continuously.
             //
             // GlassesCameraSource controls how long this Flow is collected.
-            // When its burst finishes, collection is cancelled and finally{}
-            // below stops/removes the camera.
+            // When collection is cancelled, finally{} runs and removes camera.
             // -----------------------------------------------------------------
 
             while (true) {
-
-                var capturedBytes:
-                    ByteArray? = null
 
                 try {
 
@@ -1457,32 +1250,74 @@ class RealGlassesBackend @Inject constructor(
                         "Calling camera.stream.capturePhoto()"
                     )
 
-                    activeCamera.stream
-                        .capturePhoto()
-                        .onSuccess { photoData ->
+                    val captureResult =
+                        activeCamera.stream.capturePhoto()
 
-                            capturedBytes =
-                                photoData.data
+                    val photoData =
+                        captureResult.getOrNull()
+
+                    if (photoData == null) {
+
+                        val error =
+                            captureResult.errorOrNull()
+
+                        val exception =
+                            captureResult.exceptionOrNull()
+
+                        Log.e(
+                            TAG,
+                            "capturePhoto() returned no PhotoData"
+                        )
+
+                        Log.e(
+                            TAG,
+                            "Capture error = $error"
+                        )
+
+                        if (exception != null) {
+
+                            Log.e(
+                                TAG,
+                                "Capture exception",
+                                exception
+                            )
+                        }
+
+                    } else {
+
+                        val jpegBytes =
+                            photoDataToJpeg(
+                                photoData
+                            )
+
+                        if (
+                            jpegBytes != null &&
+                            jpegBytes.isNotEmpty()
+                        ) {
 
                             Log.i(
                                 TAG,
                                 "PHOTO CAPTURED: " +
-                                    "${photoData.data.size} bytes"
-                            )
-                        }
-                        .onFailure { error, _ ->
-
-                            Log.e(
-                                TAG,
-                                "capturePhoto() FAILED: $error"
+                                    "${jpegBytes.size} JPEG bytes"
                             )
 
-                            Log.e(
+                            emit(
+                                jpegBytes
+                            )
+
+                            Log.d(
                                 TAG,
-                                "Capture error type = " +
-                                    error::class.java.name
+                                "JPEG emitted to GlassesCameraSource"
+                            )
+
+                        } else {
+
+                            Log.w(
+                                TAG,
+                                "PhotoData could not be converted to JPEG"
                             )
                         }
+                    }
 
                 } catch (e: Exception) {
 
@@ -1490,29 +1325,6 @@ class RealGlassesBackend @Inject constructor(
                         TAG,
                         "capturePhoto() THREW EXCEPTION",
                         e
-                    )
-                }
-
-                val bytes =
-                    capturedBytes
-
-                if (
-                    bytes != null &&
-                    bytes.isNotEmpty()
-                ) {
-
-                    emit(bytes)
-
-                    Log.d(
-                        TAG,
-                        "JPEG emitted to GlassesCameraSource"
-                    )
-
-                } else {
-
-                    Log.w(
-                        TAG,
-                        "No photo bytes produced for this capture"
                     )
                 }
 
@@ -1538,20 +1350,273 @@ class RealGlassesBackend @Inject constructor(
     }
 
     // =========================================================================
+    // PHOTO CONVERSION
+    // =========================================================================
+
+    /**
+     * Converts MWDAT PhotoData into JPEG bytes suitable for the Gemini
+     * image input path.
+     *
+     * MWDAT 0.9.0 exposes:
+     *
+     * PhotoData.Bitmap
+     *     -> bitmap
+     *
+     * PhotoData.HEIC
+     *     -> data: ByteBuffer
+     */
+    private fun photoDataToJpeg(
+        photoData: PhotoData,
+    ): ByteArray? {
+
+        return try {
+
+            when (photoData) {
+
+                is PhotoData.Bitmap -> {
+
+                    Log.d(
+                        TAG,
+                        "PhotoData type = Bitmap"
+                    )
+
+                    bitmapToJpeg(
+                        photoData.bitmap
+                    )
+                }
+
+                is PhotoData.HEIC -> {
+
+                    Log.d(
+                        TAG,
+                        "PhotoData type = HEIC"
+                    )
+
+                    heicToJpeg(
+                        photoData.data
+                    )
+                }
+
+                else -> {
+
+                    Log.w(
+                        TAG,
+                        "Unknown PhotoData implementation: " +
+                            photoData::class.java.name
+                    )
+
+                    null
+                }
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Failed converting PhotoData to JPEG",
+                e
+            )
+
+            null
+        }
+    }
+
+    /**
+     * Compress an Android Bitmap to JPEG.
+     */
+    private fun bitmapToJpeg(
+        bitmap: Bitmap,
+    ): ByteArray? {
+
+        if (bitmap.isRecycled) {
+
+            Log.w(
+                TAG,
+                "Bitmap is already recycled"
+            )
+
+            return null
+        }
+
+        val output =
+            ByteArrayOutputStream()
+
+        return try {
+
+            val success =
+                bitmap.compress(
+                    Bitmap.CompressFormat.JPEG,
+                    JPEG_QUALITY,
+                    output
+                )
+
+            if (!success) {
+
+                Log.e(
+                    TAG,
+                    "Bitmap.compress() returned false"
+                )
+
+                null
+
+            } else {
+
+                output.toByteArray()
+            }
+
+        } finally {
+
+            try {
+                output.close()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    /**
+     * Convert MWDAT's HEIC ByteBuffer to JPEG.
+     *
+     * Android 11+ exposes ImageDecoder.createSource(ByteBuffer),
+     * which lets us decode the HEIC directly into a Bitmap.
+     *
+     * For older Android versions we attempt BitmapFactory as a fallback.
+     */
+    private fun heicToJpeg(
+        buffer: ByteBuffer,
+    ): ByteArray? {
+
+        val bytes =
+            byteBufferToByteArray(
+                buffer
+            )
+
+        if (bytes.isEmpty()) {
+
+            Log.w(
+                TAG,
+                "HEIC ByteBuffer contained zero bytes"
+            )
+
+            return null
+        }
+
+        val bitmap =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+
+                try {
+
+                    val source =
+                        ImageDecoder.createSource(
+                            ByteBuffer.wrap(bytes)
+                        )
+
+                    ImageDecoder.decodeBitmap(
+                        source
+                    )
+
+                } catch (e: Exception) {
+
+                    Log.e(
+                        TAG,
+                        "ImageDecoder could not decode HEIC",
+                        e
+                    )
+
+                    null
+                }
+
+            } else {
+
+                try {
+
+                    BitmapFactory.decodeByteArray(
+                        bytes,
+                        0,
+                        bytes.size
+                    )
+
+                } catch (e: Exception) {
+
+                    Log.e(
+                        TAG,
+                        "BitmapFactory could not decode HEIC",
+                        e
+                    )
+
+                    null
+                }
+            }
+
+        if (bitmap == null) {
+
+            Log.e(
+                TAG,
+                "HEIC could not be decoded into Bitmap"
+            )
+
+            return null
+        }
+
+        return try {
+
+            bitmapToJpeg(
+                bitmap
+            )
+
+        } finally {
+
+            if (!bitmap.isRecycled) {
+                bitmap.recycle()
+            }
+        }
+    }
+
+    /**
+     * Copies the remaining contents of a ByteBuffer without modifying
+     * the original buffer's position.
+     */
+    private fun byteBufferToByteArray(
+        buffer: ByteBuffer,
+    ): ByteArray {
+
+        val duplicate =
+            buffer.duplicate()
+
+        val bytes =
+            ByteArray(
+                duplicate.remaining()
+            )
+
+        duplicate.get(
+            bytes
+        )
+
+        return bytes
+    }
+
+    // =========================================================================
     // CAMERA CLEANUP
     // =========================================================================
 
     /**
-     * Stops and detaches the current camera.
+     * Stops and removes the current MWDAT camera.
      *
-     * This is deliberately separate from stopping the DeviceSession.
+     * IMPORTANT:
+     * We do NOT stop the DeviceSession here.
+     *
+     * The DeviceSession must remain STARTED so the next vision burst can
+     * simply attach another camera.
      */
     private fun stopCameraIfNeeded() {
 
         val activeCamera =
             camera
 
+        val activeSession =
+            session
+
         if (activeCamera == null) {
+
             return
         }
 
@@ -1579,26 +1644,34 @@ class RealGlassesBackend @Inject constructor(
             )
         }
 
-        val activeSession =
-            session
-
         if (activeSession != null) {
 
             try {
 
-                activeSession.stop()
+                val result =
+                    activeSession.removeCamera()
 
-                Log.i(
-                    TAG,
-                    "DeviceSession.removeCamera() called"
+                if (result.isSuccess) {
 
-                )
+                    Log.i(
+                        TAG,
+                        "DeviceSession.removeCamera() succeeded"
+                    )
+
+                } else {
+
+                    Log.w(
+                        TAG,
+                        "DeviceSession.removeCamera() failed: " +
+                            "${result.errorOrNull()}"
+                    )
+                }
 
             } catch (e: Exception) {
 
                 Log.w(
                     TAG,
-                    "DeviceSession.removeCamera() failed",
+                    "DeviceSession.removeCamera() threw exception",
                     e
                 )
             }
