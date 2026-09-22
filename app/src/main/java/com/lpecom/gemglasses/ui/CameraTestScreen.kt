@@ -38,10 +38,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.unit.dp
 import com.meta.wearable.dat.camera.types.VideoFrame
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import androidx.compose.ui.unit.dp
 
 @Composable
 fun CameraTestScreen(
@@ -76,23 +76,8 @@ fun CameraTestScreen(
 
     BackHandler {
         viewModel.stopPreview()
-        decoder.release()
+        decoder.resetDecoder()
         onBack()
-    }
-
-    /*
-     * ---------------------------------------------------------
-     * START CAMERA
-     * ---------------------------------------------------------
-     *
-     * We wait until SurfaceView has a valid Surface before
-     * starting the MWDAT camera stream.
-     */
-
-    LaunchedEffect(surfaceReady) {
-        if (surfaceReady) {
-            viewModel.startPreview()
-        }
     }
 
     /*
@@ -100,14 +85,10 @@ fun CameraTestScreen(
      * VIDEO FRAME PIPELINE
      * ---------------------------------------------------------
      *
-     * CameraTestViewModel exposes:
+     * The camera is NO LONGER started automatically when the
+     * SurfaceView becomes ready.
      *
-     *     frames: Flow<VideoFrame>
-     *
-     * MWDAT gives us compressed H.265 frames.
-     *
-     * The decoder renders those frames directly into the
-     * SurfaceView.
+     * The user must press "Start Camera".
      */
 
     LaunchedEffect(Unit) {
@@ -166,7 +147,7 @@ fun CameraTestScreen(
             Button(
                 onClick = {
                     viewModel.stopPreview()
-                    decoder.release()
+                    decoder.resetDecoder()
                     onBack()
                 },
             ) {
@@ -270,6 +251,13 @@ fun CameraTestScreen(
                 },
             )
 
+            /*
+             * Only show the loading indicator while the
+             * SurfaceView itself is not ready.
+             *
+             * Camera startup is controlled by the button below.
+             */
+
             if (
                 !surfaceReady &&
                 uiState.capturedPhoto == null
@@ -317,6 +305,75 @@ fun CameraTestScreen(
 
         /*
          * -----------------------------------------------------
+         * CAMERA CONTROLS
+         * -----------------------------------------------------
+         */
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 16.dp,
+                    vertical = 8.dp,
+                ),
+            horizontalArrangement =
+                Arrangement.spacedBy(12.dp),
+        ) {
+
+            /*
+             * START CAMERA
+             */
+
+            Button(
+                onClick = {
+                    viewModel.startPreview()
+                },
+
+                enabled =
+                    surfaceReady &&
+                        !uiState.streaming &&
+                        !uiState.capturing,
+
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
+            ) {
+
+                Text("Start Camera")
+            }
+
+            /*
+             * STOP CAMERA
+             */
+
+            Button(
+                onClick = {
+
+                    viewModel.stopPreview()
+
+                    /*
+                     * Keep the SurfaceView alive but reset the
+                     * MediaCodec so a fresh camera stream can
+                     * create a fresh decoder.
+                     */
+                    decoder.resetDecoder()
+                },
+
+                enabled =
+                    uiState.streaming ||
+                        uiState.status == "Starting camera…",
+
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
+            ) {
+
+                Text("Stop Camera")
+            }
+        }
+
+        /*
+         * -----------------------------------------------------
          * CAPTURE BUTTON
          * -----------------------------------------------------
          */
@@ -325,12 +382,16 @@ fun CameraTestScreen(
             onClick = viewModel::capturePhoto,
 
             enabled =
-    uiState.streaming &&
-        !uiState.capturing,
+                uiState.streaming &&
+                    !uiState.capturing,
 
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    bottom = 16.dp,
+                )
                 .height(56.dp),
         ) {
 
@@ -458,6 +519,32 @@ private class H265SurfaceDecoder {
             surface = null
 
             releaseDecoderLocked()
+        }
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * RESET DECODER
+     * ---------------------------------------------------------
+     *
+     * Used when stopping/restarting the camera.
+     *
+     * IMPORTANT:
+     * We keep the Surface reference because the SurfaceView
+     * itself has not been destroyed.
+     *
+     * The next incoming video frame will create a fresh
+     * MediaCodec against the same Surface.
+     */
+
+    fun resetDecoder() {
+
+        synchronized(lock) {
+
+            releaseDecoderLocked()
+
+            width = 0
+            height = 0
         }
     }
 
@@ -637,10 +724,7 @@ private class H265SurfaceDecoder {
                 )
 
             /*
-             * The camera stream is configured at 24/30 FPS
-             * depending on the MWDAT configuration.
-             *
-             * This value is only a decoder hint.
+             * Decoder hint.
              */
 
             mediaFormat.setInteger(
@@ -697,8 +781,7 @@ private class H265SurfaceDecoder {
                 outputIndex >= 0 -> {
 
                     /*
-                     * Render decoded frame to the configured
-                     * Surface.
+                     * Render decoded frame to SurfaceView.
                      */
 
                     activeDecoder.releaseOutputBuffer(
