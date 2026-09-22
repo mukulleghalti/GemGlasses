@@ -2,8 +2,18 @@ name: Build-APK
 
 on:
   push:
-    branches: [main, master]
+    branches:
+      - main
+      - master
+      - CameraTest
+
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or commit SHA to build"
+        required: false
+        default: "CameraTest"
+        type: string
 
 jobs:
   build:
@@ -12,6 +22,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # For normal push builds this is the pushed commit.
+          # For manual builds this can be a branch or commit SHA.
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
 
       - name: Setup Java
         uses: actions/setup-java@v4
