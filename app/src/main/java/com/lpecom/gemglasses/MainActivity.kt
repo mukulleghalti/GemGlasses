@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -58,21 +59,24 @@ class MainActivity : ComponentActivity() {
             val connectGranted =
                 result[Manifest.permission.BLUETOOTH_CONNECT] == true
 
-            android.util.Log.i(
+            Log.i(
                 "MainActivity",
                 "Bluetooth permission result: " +
                     "SCAN=$scanGranted, CONNECT=$connectGranted"
             )
 
             if (scanGranted && connectGranted) {
-                android.util.Log.i(
+
+                Log.i(
                     "MainActivity",
                     "Bluetooth permissions granted"
                 )
 
                 initializeGlasses()
+
             } else {
-                android.util.Log.e(
+
+                Log.e(
                     "MainActivity",
                     "Bluetooth permissions were not granted"
                 )
@@ -88,8 +92,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         /*
-         * Request Bluetooth permissions BEFORE initializing the
-         * real Meta Wearables backend.
+         * IMPORTANT:
+         *
+         * MWDAT must be initialized only AFTER Bluetooth permissions
+         * are available.
          */
         requestBluetoothPermissionsIfNeeded()
 
@@ -119,7 +125,7 @@ class MainActivity : ComponentActivity() {
                     Manifest.permission.BLUETOOTH_CONNECT
                 ) == PackageManager.PERMISSION_GRANTED
 
-            android.util.Log.i(
+            Log.i(
                 "MainActivity",
                 "Current Bluetooth permissions: " +
                     "SCAN=$scanGranted, CONNECT=$connectGranted"
@@ -131,6 +137,11 @@ class MainActivity : ComponentActivity() {
 
             } else {
 
+                Log.i(
+                    "MainActivity",
+                    "Requesting Bluetooth permissions before MWDAT initialization"
+                )
+
                 bluetoothPermissionLauncher.launch(
                     arrayOf(
                         Manifest.permission.BLUETOOTH_SCAN,
@@ -141,15 +152,51 @@ class MainActivity : ComponentActivity() {
 
         } else {
 
-            // Android 11 and below don't require the Android 12
-            // Bluetooth runtime permissions.
+            /*
+             * Android 11 and below don't require the Android 12
+             * Bluetooth runtime permissions.
+             */
             initializeGlasses()
         }
     }
 
     private fun initializeGlasses() {
 
-        android.util.Log.i(
+        Log.i(
+            "MainActivity",
+            "Bluetooth permissions confirmed"
+        )
+
+        /*
+         * Initialize Meta Wearables DAT FIRST.
+         *
+         * GemGlassesApp guards this so this happens only once
+         * during the process lifetime.
+         */
+        val app =
+            application as GemGlassesApp
+
+        val wearablesReady =
+            app.initializeWearables()
+
+        if (!wearablesReady) {
+
+            Log.e(
+                "MainActivity",
+                "MWDAT SDK initialization failed; " +
+                    "not initializing glasses backend"
+            )
+
+            return
+        }
+
+        /*
+         * Now initialize our backend.
+         *
+         * RealGlassesBackend.initialize() does NOT call
+         * Wearables.initialize(). It only starts its observers.
+         */
+        Log.i(
             "MainActivity",
             "Initializing glasses backend"
         )
