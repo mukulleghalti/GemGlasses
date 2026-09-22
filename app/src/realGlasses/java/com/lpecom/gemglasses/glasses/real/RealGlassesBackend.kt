@@ -14,6 +14,7 @@ import com.meta.wearable.dat.camera.types.VideoQuality
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.selectors.AutoDeviceSelector
 import com.meta.wearable.dat.core.session.DeviceSession
+import com.meta.wearable.dat.core.session.DeviceSessionState
 import com.meta.wearable.dat.core.types.Device
 import com.meta.wearable.dat.core.types.DeviceIdentifier
 import com.meta.wearable.dat.core.types.LinkState
@@ -29,10 +30,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -48,14 +51,14 @@ class RealGlassesBackend @Inject constructor(
         private const val DEFAULT_NAME = "Ray-Ban Meta"
 
         private const val FRAME_RATE = 24
-
         private const val PHOTO_INTERVAL_MS = 1_000L
         private const val MAX_PHOTOS_PER_BURST = 20
+
+        private const val SESSION_START_TIMEOUT_MS = 15_000L
     }
 
-    private val scope = CoroutineScope(
-        SupervisorJob() + Dispatchers.IO
-    )
+    private val scope =
+        CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val sessionMutex = Mutex()
 
@@ -83,7 +86,7 @@ class RealGlassesBackend @Inject constructor(
     }
 
     // -------------------------------------------------------------------------
-    // Activity lifecycle
+    // Activity
     // -------------------------------------------------------------------------
 
     override fun setActivity(activity: Activity) {
@@ -103,16 +106,27 @@ class RealGlassesBackend @Inject constructor(
     // -------------------------------------------------------------------------
 
     override fun initialize() {
-        Log.i(TAG, "Initializing Meta Wearables Device Access Toolkit")
+        Log.i(
+            TAG,
+            "Initializing Meta Wearables Device Access Toolkit"
+        )
 
         try {
             Wearables.initialize(context)
 
-            Log.i(TAG, "Wearables.initialize() called")
+            Log.i(
+                TAG,
+                "Wearables.initialize() called successfully"
+            )
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize Wearables", e)
+            Log.e(
+                TAG,
+                "Failed to initialize Wearables",
+                e
+            )
 
-            _registrationState.value = RegistrationState.UNKNOWN
+            _registrationState.value =
+                RegistrationState.UNKNOWN
         }
     }
 
@@ -132,7 +146,10 @@ class RealGlassesBackend @Inject constructor(
         }
 
         try {
-            Log.i(TAG, "Starting Meta glasses registration")
+            Log.i(
+                TAG,
+                "Starting Meta glasses registration"
+            )
 
             Wearables.startRegistration(currentActivity)
 
@@ -152,13 +169,223 @@ class RealGlassesBackend @Inject constructor(
     }
 
     // -------------------------------------------------------------------------
+    // CONNECT
+    // -------------------------------------------------------------------------
+
+    override suspend fun connect(): Boolean {
+        return sessionMutex.withLock {
+
+            try {
+                Log.i(
+                    TAG,
+                    "========== CONNECT GLASSES =========="
+                )
+
+                val registration =
+                    _registrationState.value
+
+                Log.i(
+                    TAG,
+                    "Registration state = $registration"
+                )
+
+                if (registration != RegistrationState.REGISTERED) {
+                    Log.e(
+                        TAG,
+                        "Cannot connect: app is not registered with Meta AI"
+                    )
+                    return@withLock false
+                }
+
+                val currentDevices =
+                    _devices.value
+
+                Log.i(
+                    TAG,
+                    "Known devices = $currentDevices"
+                )
+
+                val connectedDevice =
+                    currentDevices.firstOrNull { it.connected }
+
+                if (connectedDevice != null) {
+                    Log.i(
+                        TAG,
+                        "A connected device is already available: ${connectedDevice.name}"
+                    )
+                } else {
+                    Log.w(
+                        TAG,
+                        "No device currently reports connected=true"
+                    )
+
+                    Log.w(
+                        TAG,
+                        "Attempting DeviceSession anyway; MWDAT will determine device availability"
+                    )
+                }
+
+                // Reuse an already active session.
+                val existingSession = session
+
+                if (existingSession != null) {
+
+                    val existingState =
+                        existingSession.state.value
+
+                    Log.i(
+                        TAG,
+                        "Existing DeviceSession state = $existingState"
+                    )
+
+                    if (existingState == DeviceSessionState.STARTED) {
+                        Log.i(
+                            TAG,
+                            "DeviceSession is already STARTED"
+                        )
+
+                        return@withLock true
+                    }
+
+                    if (
+                        existingState == DeviceSessionState.STOPPED ||
+                        existingState == DeviceSessionState.STOPPING
+                    ) {
+                        Log.w(
+                            TAG,
+                            "Existing DeviceSession is terminal; recreating it"
+                        )
+
+                        session = null
+                    }
+                }
+
+                // Create a fresh session when necessary.
+                if (session == null) {
+
+                    Log.i(
+                        TAG,
+                        "Creating MWDAT DeviceSession"
+                    )
+
+                    val createdSession =
+                        Wearables
+                            .createSession(AutoDeviceSelector())
+                            .getOrElse { error ->
+
+                                Log.e(
+                                    TAG,
+                                    "createSession() failed: $error"
+                                )
+
+                                return@withLock false
+                            }
+
+                    session = createdSession
+
+                    Log.i(
+                        TAG,
+                        "DeviceSession created"
+                    )
+
+                    observeSessionErrors(createdSession)
+
+                    Log.i(
+                        TAG,
+                        "Starting DeviceSession"
+                    )
+
+                    createdSession.start()
+                }
+
+                val activeSession =
+                    session
+                        ?: return@withLock false
+
+                Log.i(
+                    TAG,
+                    "Waiting for DeviceSessionState.STARTED"
+                )
+
+                val started =
+                    withTimeoutOrNull(SESSION_START_TIMEOUT_MS) {
+
+                        activeSession.state.first { state ->
+
+                            Log.i(
+                                TAG,
+                                "DeviceSession state = $state"
+                            )
+
+                            state == DeviceSessionState.STARTED
+                        }
+
+                        true
+
+                    } ?: false
+
+                if (started) {
+
+                    Log.i(
+                        TAG,
+                        "========================================"
+                    )
+
+                    Log.i(
+                        TAG,
+                        "GLASSES DEVICE SESSION STARTED"
+                    )
+
+                    Log.i(
+                        TAG,
+                        "========================================"
+                    )
+
+                    true
+
+                } else {
+
+                    val finalState =
+                        activeSession.state.value
+
+                    Log.e(
+                        TAG,
+                        "DeviceSession did not reach STARTED within ${SESSION_START_TIMEOUT_MS}ms"
+                    )
+
+                    Log.e(
+                        TAG,
+                        "Final DeviceSession state = $finalState"
+                    )
+
+                    false
+                }
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Exception while connecting to glasses",
+                    e
+                )
+
+                false
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Camera permission
     // -------------------------------------------------------------------------
 
     override suspend fun cameraPermission(): CameraPermission {
+
         return try {
+
             val result =
-                Wearables.checkPermissionStatus(Permission.CAMERA)
+                Wearables.checkPermissionStatus(
+                    Permission.CAMERA
+                )
 
             Log.d(
                 TAG,
@@ -166,17 +393,26 @@ class RealGlassesBackend @Inject constructor(
             )
 
             result.onSuccess { status ->
+
                 Log.d(
                     TAG,
                     "Camera permission status: $status"
                 )
             }
 
-            val status = result.getOrElse {
-                return CameraPermission.NOT_DETERMINED
-            }
+            val status =
+                result.getOrElse {
+
+                    Log.w(
+                        TAG,
+                        "Camera permission check failed because device/session is unavailable"
+                    )
+
+                    return CameraPermission.NOT_DETERMINED
+                }
 
             when (status) {
+
                 PermissionStatus.Granted ->
                     CameraPermission.GRANTED
 
@@ -185,6 +421,7 @@ class RealGlassesBackend @Inject constructor(
             }
 
         } catch (e: Exception) {
+
             Log.e(
                 TAG,
                 "Failed to check camera permission",
@@ -196,283 +433,236 @@ class RealGlassesBackend @Inject constructor(
     }
 
     override suspend fun requestCameraPermission(): CameraPermission {
+
+        /*
+         * IMPORTANT:
+         *
+         * MWDAT permission requests use Wearables.RequestPermissionContract()
+         * and therefore have to be launched by an Activity/Compose
+         * ActivityResult launcher.
+         *
+         * This method cannot directly launch that contract from a background
+         * coroutine.
+         *
+         * We will wire this into MainActivity/HomeScreen next.
+         */
+
         Log.i(
             TAG,
-            "Camera permission request requires ActivityResult handling"
+            "Camera permission request must be launched through MWDAT RequestPermissionContract"
         )
 
         return CameraPermission.NOT_DETERMINED
     }
 
     // -------------------------------------------------------------------------
-    // Camera / vision
-    //
-    // IMPORTANT:
-    // This version intentionally does NOT access photoData.data.
-    //
-    // We are using this build to discover the exact PhotoData type exposed by
-    // the MWDAT dependency actually being compiled by GitHub Actions.
+    // CAMERA / VISION
     // -------------------------------------------------------------------------
 
-    override fun cameraFrames(): Flow<ByteArray> = flow {
+    override fun cameraFrames(): Flow<ByteArray> =
+        flow {
 
-        sessionMutex.withLock {
+            sessionMutex.withLock {
 
-            try {
-                ensureCameraSession()
+                try {
 
-                val activeCamera = camera
+                    /*
+                     * The camera path now guarantees that we have an active
+                     * DeviceSession before touching the camera capability.
+                     */
+                    val connected =
+                        connect()
 
-                if (activeCamera == null) {
-                    Log.e(
-                        TAG,
-                        "Camera session exists but camera is null"
-                    )
-
-                    return@flow
-                }
-
-                Log.i(
-                    TAG,
-                    "Starting camera stream"
-                )
-
-                val startResult =
-                    activeCamera.stream.start()
-
-                startResult.onFailure { error, _ ->
-                    Log.e(
-                        TAG,
-                        "Failed to start camera stream: $error"
-                    )
-                }
-
-                if (startResult.isFailure) {
-                    return@flow
-                }
-
-                Log.i(
-                    TAG,
-                    "Camera stream started"
-                )
-
-                repeat(MAX_PHOTOS_PER_BURST) { index ->
-
-                    try {
-                        /*
-                         * Capture a still photo from the glasses.
-                         *
-                         * We deliberately don't access photoData.data here.
-                         * The next CI build will tell us the exact runtime type
-                         * exposed by the resolved MWDAT 0.9.0 dependency.
-                         */
-
-                        val photoResult =
-                            activeCamera.stream.capturePhoto()
-
-                        Log.d(
-                            TAG,
-                            "capturePhoto result type = " +
-                                photoResult::class.java.name
-                        )
-
-                        photoResult
-                            .onSuccess { photoData ->
-
-                                Log.d(
-                                    TAG,
-                                    "capturePhoto success type = " +
-                                        photoData::class.java.name
-                                )
-
-                                Log.d(
-                                    TAG,
-                                    "capturePhoto success value = " +
-                                        photoData
-                                )
-                            }
-                            .onFailure { error, _ ->
-
-                                Log.e(
-                                    TAG,
-                                    "Failed to capture vision photo #" +
-                                        "${index + 1}: $error"
-                                )
-                            }
-
-                    } catch (e: Exception) {
+                    if (!connected) {
 
                         Log.e(
                             TAG,
-                            "Exception while capturing vision photo #" +
-                                "${index + 1}",
-                            e
+                            "Cannot start camera because DeviceSession is not STARTED"
+                        )
+
+                        return@flow
+                    }
+
+                    ensureCamera()
+
+                    val activeCamera =
+                        camera
+
+                    if (activeCamera == null) {
+
+                        Log.e(
+                            TAG,
+                            "Camera was not created"
+                        )
+
+                        return@flow
+                    }
+
+                    Log.i(
+                        TAG,
+                        "Starting camera stream"
+                    )
+
+                    val startResult =
+                        activeCamera.stream.start()
+
+                    startResult.onFailure { error, _ ->
+
+                        Log.e(
+                            TAG,
+                            "Failed to start camera stream: $error"
                         )
                     }
 
-                    if (
-                        index < MAX_PHOTOS_PER_BURST - 1
-                    ) {
-                        delay(PHOTO_INTERVAL_MS)
+                    if (startResult.isFailure) {
+                        return@flow
                     }
+
+                    Log.i(
+                        TAG,
+                        "Camera stream started"
+                    )
+
+                    /*
+                     * capturePhoto() gives us still-image data suitable for
+                     * sending to Gemini. The raw videoStream is HEVC, so we
+                     * deliberately don't forward those bytes as JPEG.
+                     */
+                    repeat(MAX_PHOTOS_PER_BURST) { index ->
+
+                        try {
+
+                            val photoResult =
+                                activeCamera.stream.capturePhoto()
+
+                            Log.d(
+                                TAG,
+                                "capturePhoto #${index + 1}: result=$photoResult"
+                            )
+
+                            photoResult.onSuccess { photoData ->
+
+                                Log.d(
+                                    TAG,
+                                    "capturePhoto success type=${photoData::class.java.name}"
+                                )
+
+                                /*
+                                 * IMPORTANT:
+                                 *
+                                 * Your installed 0.9.0 artifact previously
+                                 * rejected photoData.data at compile time.
+                                 *
+                                 * Therefore we are intentionally NOT guessing
+                                 * the property name here.
+                                 *
+                                 * The next compiler-visible step should inspect
+                                 * the actual PhotoData API from your resolved
+                                 * 0.9.0 dependency.
+                                 */
+                                Log.d(
+                                    TAG,
+                                    "capturePhoto success value=$photoData"
+                                )
+                            }
+
+                            photoResult.onFailure { error, _ ->
+
+                                Log.e(
+                                    TAG,
+                                    "Failed to capture vision photo #${index + 1}: $error"
+                                )
+                            }
+
+                        } catch (e: Exception) {
+
+                            Log.e(
+                                TAG,
+                                "Exception while capturing vision photo #${index + 1}",
+                                e
+                            )
+                        }
+
+                        if (
+                            index <
+                            MAX_PHOTOS_PER_BURST - 1
+                        ) {
+                            delay(PHOTO_INTERVAL_MS)
+                        }
+                    }
+
+                } catch (e: Exception) {
+
+                    Log.e(
+                        TAG,
+                        "Camera vision session failed",
+                        e
+
+                    )
                 }
 
-            } catch (e: Exception) {
-
-                Log.e(
-                    TAG,
-                    "Camera vision session failed",
-                    e
-                )
-
-            } finally {
-
-                stopCameraSession()
+                /*
+                 * Do NOT destroy the DeviceSession after every photo burst.
+                 *
+                 * The session represents the glasses connection. We keep it
+                 * alive so subsequent vision requests don't have to reconnect.
+                 */
             }
         }
-    }
 
-    // -------------------------------------------------------------------------
-    // Camera session
-    // -------------------------------------------------------------------------
+    private suspend fun ensureCamera() {
 
-    private suspend fun ensureCameraSession() {
+        val activeSession =
+            session
+                ?: throw IllegalStateException(
+                    "DeviceSession is not available"
+                )
 
-        if (
-            session != null &&
-            camera != null
-        ) {
+        if (camera != null) {
+
             Log.d(
                 TAG,
-                "Camera session already exists"
+                "Camera already exists"
             )
 
             return
         }
 
-        if (session == null) {
+        Log.i(
+            TAG,
+            "Adding camera to DeviceSession"
+        )
 
-            Log.i(
-                TAG,
-                "Creating MWDAT DeviceSession"
-            )
+        val addedCamera =
+            activeSession.addCamera(
+                StreamConfiguration(
+                    videoQuality = VideoQuality.MEDIUM,
+                    frameRate = FRAME_RATE,
+                )
+            ).getOrElse { error ->
 
-            val createdSession =
-                Wearables
-                    .createSession(AutoDeviceSelector())
-                    .getOrElse { error ->
+                val message =
+                    error.toString()
 
-                        val message =
-                            error.toString()
-
-                        Log.e(
-                            TAG,
-                            "Failed to create DeviceSession: $message"
-                        )
-
-                        throw IllegalStateException(message)
-                    }
-
-            session = createdSession
-
-            Log.i(
-                TAG,
-                "Starting MWDAT DeviceSession"
-            )
-
-            createdSession.start()
-        }
-
-        val activeSession =
-            session
-                ?: throw IllegalStateException(
-                    "DeviceSession was not created"
+                Log.e(
+                    TAG,
+                    "Failed to add camera: $message"
                 )
 
-        if (camera == null) {
+                throw IllegalStateException(message)
+            }
 
-            Log.i(
-                TAG,
-                "Adding camera to DeviceSession"
-            )
+        camera =
+            addedCamera
 
-            val addedCamera =
-                activeSession
-                    .addCamera(
-                        StreamConfiguration(
-                            videoQuality = VideoQuality.MEDIUM,
-                            frameRate = FRAME_RATE,
-                        )
-                    )
-                    .getOrElse { error ->
-
-                        val message =
-                            error.toString()
-
-                        Log.e(
-                            TAG,
-                            "Failed to add camera: $message"
-                        )
-
-                        throw IllegalStateException(message)
-                    }
-
-            camera = addedCamera
-
-            Log.i(
-                TAG,
-                "Camera added successfully"
-            )
-        }
+        Log.i(
+            TAG,
+            "Camera added successfully"
+        )
     }
 
     // -------------------------------------------------------------------------
-    // Camera cleanup
-    // -------------------------------------------------------------------------
-
-    private fun stopCameraSession() {
-
-        try {
-            camera?.stop()
-
-            Log.d(
-                TAG,
-                "Camera stopped"
-            )
-
-        } catch (e: Exception) {
-
-            Log.w(
-                TAG,
-                "Error stopping camera",
-                e
-            )
-        }
-
-        camera = null
-
-        try {
-            session?.stop()
-
-            Log.d(
-                TAG,
-                "DeviceSession stopped"
-            )
-
-        } catch (e: Exception) {
-
-            Log.w(
-                TAG,
-                "Error stopping DeviceSession",
-                e
-            )
-        }
-
-        session = null
-    }
-
-    // -------------------------------------------------------------------------
-    // Device observation
+    // DEVICE OBSERVATION
     // -------------------------------------------------------------------------
 
     private fun observeDevices() {
@@ -563,13 +753,12 @@ class RealGlassesBackend @Inject constructor(
             }
 
         val connected =
-            device.linkState == LinkState.CONNECTED
+            device.linkState ==
+                LinkState.CONNECTED
 
         Log.d(
             TAG,
-            "Device: id=$id " +
-                "name=$displayName " +
-                "connected=$connected"
+            "Device: id=$id name=$displayName connected=$connected"
         )
 
         return GlassesDevice(
@@ -580,7 +769,7 @@ class RealGlassesBackend @Inject constructor(
     }
 
     // -------------------------------------------------------------------------
-    // Registration observation
+    // REGISTRATION OBSERVATION
     // -------------------------------------------------------------------------
 
     private fun observeRegistrationState() {
@@ -631,24 +820,88 @@ class RealGlassesBackend @Inject constructor(
     }
 
     // -------------------------------------------------------------------------
-    // Shutdown
+    // SESSION ERRORS
+    // -------------------------------------------------------------------------
+
+    private fun observeSessionErrors(
+        activeSession: DeviceSession,
+    ) {
+
+        scope.launch {
+
+            try {
+
+                activeSession.errors.collect { error ->
+
+                    Log.e(
+                        TAG,
+                        "MWDAT DeviceSession error: $error"
+                    )
+                }
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "DeviceSession error observation failed",
+                    e
+                )
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // SHUTDOWN
     // -------------------------------------------------------------------------
 
     fun shutdown() {
 
-        try {
+        scope.launch {
 
-            stopCameraSession()
+            sessionMutex.withLock {
 
-        } catch (e: Exception) {
+                try {
 
-            Log.e(
-                TAG,
-                "Error shutting down camera/session",
-                e
-            )
+                    camera?.stop()
+
+                    Log.d(
+                        TAG,
+                        "Camera stopped"
+                    )
+
+                } catch (e: Exception) {
+
+                    Log.w(
+                        TAG,
+                        "Error stopping camera",
+                        e
+                    )
+                }
+
+                camera = null
+
+                try {
+
+                    session?.stop()
+
+                    Log.d(
+                        TAG,
+                        "DeviceSession stopped"
+                    )
+
+                } catch (e: Exception) {
+
+                    Log.w(
+                        TAG,
+                        "Error stopping DeviceSession",
+                        e
+                    )
+                }
+
+                session = null
+            }
+
+            scope.cancel()
         }
-
-        scope.cancel()
     }
 }
