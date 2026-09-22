@@ -325,8 +325,8 @@ fun CameraTestScreen(
             onClick = viewModel::capturePhoto,
 
             enabled =
-                surfaceReady &&
-                    !uiState.capturing,
+    uiState.streaming &&
+        !uiState.capturing,
 
             modifier = Modifier
                 .fillMaxWidth()
