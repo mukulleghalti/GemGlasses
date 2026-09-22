@@ -195,28 +195,40 @@ class RealGlassesBackend @Inject constructor(
                 val existingSession = session
 
                 if (existingSession != null) {
-                    val state = existingSession.state.value
-                    Log.i(TAG, "Existing DeviceSession state = $state")
+                    val existingState = existingSession.state.value
 
-                    if (state == DeviceSessionState.STARTED) {
+                    Log.i(
+                        TAG,
+                        "Existing DeviceSession state = $existingState",
+                    )
+
+                    if (existingState == DeviceSessionState.STARTED) {
+                        Log.i(TAG, "DeviceSession is already STARTED")
                         return@withLock true
                     }
 
                     if (
-                        state == DeviceSessionState.STOPPED ||
-                        state == DeviceSessionState.STOPPING
+                        existingState == DeviceSessionState.STOPPED ||
+                        existingState == DeviceSessionState.STOPPING
                     ) {
-                        Log.w(TAG, "Discarding terminal DeviceSession")
+                        Log.w(
+                            TAG,
+                            "Existing DeviceSession is terminal; discarding it",
+                        )
                         session = null
                     }
                 }
 
                 /*
-                 * Wait for the SDK metadata flow to report the device as
-                 * connected. The device can be visible in Wearables.devices
-                 * while still being in DISCONNECTED link state.
+                 * Wait until the MWDAT metadata flow reports a connected
+                 * device. The device may be present in _devices while its
+                 * link state is still DISCONNECTED.
+                 *
+                 * The explicit `true` after `_devices.first { ... }` is
+                 * important: it makes this entire block return Boolean rather
+                 * than returning the List<GlassesDevice> from `_devices.first`.
                  */
-                val connected =
+                val connected: Boolean =
                     withTimeoutOrNull(DEVICE_CONNECT_TIMEOUT_MS) {
                         _devices.first { deviceList ->
                             val connectedDevice =
@@ -237,30 +249,31 @@ class RealGlassesBackend @Inject constructor(
                                 false
                             }
                         }
+
+                        true
                     } ?: false
 
                 if (!connected) {
-                    val current = _devices.value
+                    val currentDevices = _devices.value
 
                     Log.e(
                         TAG,
                         "Timed out waiting for MWDAT CONNECTED state",
                     )
 
-                    current.forEach {
+                    currentDevices.forEach { device ->
                         Log.e(
                             TAG,
                             "Current device state: " +
-                                "id=${it.id}, " +
-                                "name=${it.name}, " +
-                                "connected=${it.connected}",
+                                "id=${device.id}, " +
+                                "name=${device.name}, " +
+                                "connected=${device.connected}",
                         )
                     }
 
                     Log.e(
                         TAG,
-                        "Do not call createSession(): MWDAT reports " +
-                            "no eligible connected device",
+                        "MWDAT reports no eligible connected device",
                     )
 
                     return@withLock false
@@ -269,7 +282,10 @@ class RealGlassesBackend @Inject constructor(
                 val deviceId = selectedDeviceId
 
                 if (deviceId == null) {
-                    Log.e(TAG, "No DeviceIdentifier is selected")
+                    Log.e(
+                        TAG,
+                        "Cannot create session: no DeviceIdentifier selected",
+                    )
                     return@withLock false
                 }
 
@@ -295,6 +311,7 @@ class RealGlassesBackend @Inject constructor(
                     session = createdSession
 
                     Log.i(TAG, "DeviceSession created successfully")
+
                     observeSessionErrors(createdSession)
 
                     Log.i(TAG, "Starting DeviceSession")
@@ -304,17 +321,25 @@ class RealGlassesBackend @Inject constructor(
                 val activeSession =
                     session ?: return@withLock false
 
-                val started =
+                Log.i(
+                    TAG,
+                    "Waiting for DeviceSessionState.STARTED",
+                )
+
+                val started: Boolean =
                     withTimeoutOrNull(SESSION_START_TIMEOUT_MS) {
                         activeSession.state.first { state ->
                             Log.i(TAG, "DeviceSession state = $state")
                             state == DeviceSessionState.STARTED
                         }
+
                         true
                     } ?: false
 
                 if (started) {
+                    Log.i(TAG, "========================================")
                     Log.i(TAG, "GLASSES DEVICE SESSION STARTED")
+                    Log.i(TAG, "========================================")
                     true
                 } else {
                     Log.e(
@@ -324,7 +349,8 @@ class RealGlassesBackend @Inject constructor(
                     )
                     Log.e(
                         TAG,
-                        "Final state = ${activeSession.state.value}",
+                        "Final DeviceSession state = " +
+                            activeSession.state.value,
                     )
                     false
                 }
@@ -359,6 +385,10 @@ class RealGlassesBackend @Inject constructor(
             text.contains("NO_ELIGIBLE_DEVICE", ignoreCase = true) -> {
                 Log.e(TAG, "No eligible connected device")
             }
+
+            else -> {
+                Log.e(TAG, "Unclassified MWDAT session failure")
+            }
         }
     }
 
@@ -371,8 +401,10 @@ class RealGlassesBackend @Inject constructor(
             val result =
                 Wearables.checkPermissionStatus(Permission.CAMERA)
 
-            result.onSuccess {
-                Log.d(TAG, "Camera permission status: $it")
+            Log.d(TAG, "Camera permission result: $result")
+
+            result.onSuccess { status ->
+                Log.d(TAG, "Camera permission status: $status")
             }
 
             result.onFailure { error, _ ->
@@ -381,12 +413,20 @@ class RealGlassesBackend @Inject constructor(
 
             val status =
                 result.getOrElse {
+                    Log.w(
+                        TAG,
+                        "Camera permission unavailable because no eligible " +
+                            "MWDAT device/session is available",
+                    )
                     return CameraPermission.NOT_DETERMINED
                 }
 
             when (status) {
-                PermissionStatus.Granted -> CameraPermission.GRANTED
-                PermissionStatus.Denied -> CameraPermission.DENIED
+                PermissionStatus.Granted ->
+                    CameraPermission.GRANTED
+
+                PermissionStatus.Denied ->
+                    CameraPermission.DENIED
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to check camera permission", e)
@@ -397,20 +437,28 @@ class RealGlassesBackend @Inject constructor(
     override suspend fun requestCameraPermission(): CameraPermission {
         Log.i(
             TAG,
-            "Camera permission request requires Wearables.RequestPermissionContract()",
+            "Camera permission request requires " +
+                "Wearables.RequestPermissionContract() from MainActivity",
         )
+
         return CameraPermission.NOT_DETERMINED
     }
 
     // -------------------------------------------------------------------------
-    // CAMERA
+    // CAMERA / VISION
     // -------------------------------------------------------------------------
 
     override fun cameraFrames(): Flow<ByteArray> =
         flow {
             try {
-                if (!connect()) {
-                    Log.e(TAG, "Cannot start camera: session unavailable")
+                val connected = connect()
+
+                if (!connected) {
+                    Log.e(
+                        TAG,
+                        "Cannot start camera because DeviceSession " +
+                            "could not be started",
+                    )
                     return@flow
                 }
 
@@ -419,10 +467,19 @@ class RealGlassesBackend @Inject constructor(
                 }
 
                 val activeCamera =
-                    camera ?: return@flow
+                    camera ?: run {
+                        Log.e(TAG, "Camera was not created")
+                        return@flow
+                    }
+
+                Log.i(TAG, "Starting camera stream")
 
                 val startResult =
                     activeCamera.stream.start()
+
+                startResult.onSuccess {
+                    Log.i(TAG, "Camera stream start succeeded")
+                }
 
                 startResult.onFailure { error, _ ->
                     Log.e(TAG, "Failed to start camera stream: $error")
@@ -432,27 +489,41 @@ class RealGlassesBackend @Inject constructor(
                     return@flow
                 }
 
+                Log.i(TAG, "Camera stream started")
+
                 repeat(MAX_PHOTOS_PER_BURST) { index ->
                     try {
                         val photoResult =
                             activeCamera.stream.capturePhoto()
 
+                        Log.d(
+                            TAG,
+                            "capturePhoto #${index + 1}: result=$photoResult",
+                        )
+
                         photoResult.onSuccess { photoData ->
-                            Log.d(TAG, "capturePhoto #${index + 1} succeeded")
+                            Log.d(TAG, "capturePhoto success")
                             Log.d(
                                 TAG,
                                 "PhotoData type=${photoData::class.java.name}",
                             )
+                            Log.d(TAG, "PhotoData value=$photoData")
                         }
 
                         photoResult.onFailure { error, _ ->
                             Log.e(
                                 TAG,
-                                "capturePhoto #${index + 1} failed: $error",
+                                "Failed to capture vision photo " +
+                                    "#${index + 1}: $error",
                             )
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "Photo capture exception", e)
+                        Log.e(
+                            TAG,
+                            "Exception while capturing vision photo " +
+                                "#${index + 1}",
+                            e,
+                        )
                     }
 
                     if (index < MAX_PHOTOS_PER_BURST - 1) {
@@ -466,13 +537,17 @@ class RealGlassesBackend @Inject constructor(
 
     private suspend fun ensureCamera() {
         val activeSession =
-            session ?: throw IllegalStateException(
-                "DeviceSession is not available",
-            )
+            session
+                ?: throw IllegalStateException(
+                    "DeviceSession is not available",
+                )
 
         if (camera != null) {
+            Log.d(TAG, "Camera already exists")
             return
         }
+
+        Log.i(TAG, "Adding camera to DeviceSession")
 
         val addResult =
             activeSession.addCamera(
@@ -482,9 +557,15 @@ class RealGlassesBackend @Inject constructor(
                 ),
             )
 
+        addResult.onFailure { error, _ ->
+            Log.e(TAG, "addCamera() failed: $error")
+        }
+
         val addedCamera =
             addResult.getOrElse { error ->
-                throw IllegalStateException("addCamera failed: $error")
+                throw IllegalStateException(
+                    "addCamera failed: $error",
+                )
             }
 
         camera = addedCamera
@@ -499,13 +580,22 @@ class RealGlassesBackend @Inject constructor(
         scope.launch {
             try {
                 Wearables.devices.collect { deviceIds ->
+                    Log.d(TAG, "Wearables.devices: $deviceIds")
+
                     val result = mutableListOf<GlassesDevice>()
 
                     for (deviceId in deviceIds) {
                         try {
                             val metadataFlow =
                                 Wearables.devicesMetadata[deviceId]
-                                    ?: continue
+
+                            if (metadataFlow == null) {
+                                Log.w(
+                                    TAG,
+                                    "No metadata flow for device $deviceId",
+                                )
+                                continue
+                            }
 
                             metadataFlow.collect { device ->
                                 selectedDeviceId = deviceId
@@ -552,7 +642,8 @@ class RealGlassesBackend @Inject constructor(
         Log.i(TAG, "Device type = ${device.deviceType}")
         Log.i(
             TAG,
-            "Device type description = ${device.deviceType.description}",
+            "Device type description = " +
+                device.deviceType.description,
         )
         Log.i(TAG, "Link state = ${device.linkState}")
         Log.i(TAG, "Compatibility = ${device.compatibility}")
@@ -570,17 +661,32 @@ class RealGlassesBackend @Inject constructor(
         val displayName =
             if (
                 rawName.isBlank() ||
-                rawName.equals(UNKNOWN_NAME, ignoreCase = true)
+                rawName.equals(
+                    UNKNOWN_NAME,
+                    ignoreCase = true,
+                )
             ) {
                 DEFAULT_NAME
             } else {
                 rawName
             }
 
+        val connected =
+            device.linkState == LinkState.CONNECTED
+
+        Log.i(
+            TAG,
+            "Device: " +
+                "id=$id, " +
+                "name=$displayName, " +
+                "linkState=${device.linkState}, " +
+                "connected=$connected",
+        )
+
         return GlassesDevice(
             id = id.toString(),
             name = displayName,
-            connected = device.linkState == LinkState.CONNECTED,
+            connected = connected,
         )
     }
 
@@ -614,6 +720,7 @@ class RealGlassesBackend @Inject constructor(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Registration observation failed", e)
+                _registrationState.value = RegistrationState.UNKNOWN
             }
         }
     }
@@ -631,11 +738,16 @@ class RealGlassesBackend @Inject constructor(
                     Log.e(TAG, "DeviceSession error: $error")
                     Log.e(
                         TAG,
-                        "DeviceSession error type: ${error::class.java.name}",
+                        "DeviceSession error type: " +
+                            error::class.java.name,
                     )
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "DeviceSession error observation failed", e)
+                Log.e(
+                    TAG,
+                    "DeviceSession error observation failed",
+                    e,
+                )
             }
         }
     }
@@ -649,6 +761,7 @@ class RealGlassesBackend @Inject constructor(
             sessionMutex.withLock {
                 try {
                     camera?.stop()
+                    Log.d(TAG, "Camera stopped")
                 } catch (e: Exception) {
                     Log.w(TAG, "Error stopping camera", e)
                 }
@@ -657,6 +770,7 @@ class RealGlassesBackend @Inject constructor(
 
                 try {
                     session?.stop()
+                    Log.d(TAG, "DeviceSession stopped")
                 } catch (e: Exception) {
                     Log.w(TAG, "Error stopping DeviceSession", e)
                 }
