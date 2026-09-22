@@ -57,6 +57,15 @@ class RealGlassesBackend @Inject constructor(
 
     private var session: DeviceSession? = null
 
+    /*
+     * MainActivity supplies the actual Activity Result permission request.
+     *
+     * We keep this as a suspend function because the MWDAT permission
+     * dialog is asynchronous.
+     */
+    private var cameraPermissionRequester:
+        (suspend () -> CameraPermission)? = null
+
     private val _registrationState =
         MutableStateFlow(RegistrationState.UNKNOWN)
 
@@ -68,12 +77,13 @@ class RealGlassesBackend @Inject constructor(
 
     override val devices: Flow<List<GlassesDevice>> =
         _devices.asStateFlow()
+
     @Volatile
     private var initialized = false
 
-init {
-    Log.i(TAG, "RealGlassesBackend created")
-}
+    init {
+        Log.i(TAG, "RealGlassesBackend created")
+    }
 
     // =========================================================================
     // ACTIVITY
@@ -92,8 +102,32 @@ init {
         if (this.activity === activity) {
             this.activity = null
 
-            Log.i(TAG, "Activity detached")
+            Log.i(
+                TAG,
+                "Activity detached"
+            )
         }
+    }
+
+    // =========================================================================
+    // CAMERA PERMISSION REQUESTER
+    // =========================================================================
+
+    /**
+     * MainActivity provides the actual Wearables.RequestPermissionContract()
+     * launcher.
+     *
+     * The backend itself must not try to launch an Activity Result contract.
+     */
+    override fun setCameraPermissionRequester(
+        requester: suspend () -> CameraPermission,
+    ) {
+        cameraPermissionRequester = requester
+
+        Log.i(
+            TAG,
+            "Camera permission requester registered"
+        )
     }
 
     // =========================================================================
@@ -102,41 +136,41 @@ init {
 
     override fun initialize() {
 
-    if (initialized) {
+        if (initialized) {
+            Log.i(
+                TAG,
+                "Glasses backend already initialized; ignoring duplicate call"
+            )
+            return
+        }
+
+        initialized = true
+
         Log.i(
             TAG,
-            "Glasses backend already initialized; ignoring duplicate call"
+            "================================================"
         )
-        return
+
+        Log.i(
+            TAG,
+            "INITIALIZING GLASSES BACKEND"
+        )
+
+        Log.i(
+            TAG,
+            "MWDAT SDK is initialized by GemGlassesApp"
+        )
+
+        Log.i(
+            TAG,
+            "================================================"
+        )
+
+        logBluetoothPermissions()
+
+        observeRegistrationState()
+        observeDevices()
     }
-
-    initialized = true
-
-    Log.i(
-        TAG,
-        "================================================"
-    )
-
-    Log.i(
-        TAG,
-        "INITIALIZING GLASSES BACKEND"
-    )
-
-    Log.i(
-        TAG,
-        "MWDAT SDK is initialized by GemGlassesApp"
-    )
-
-    Log.i(
-        TAG,
-        "================================================"
-    )
-
-    logBluetoothPermissions()
-
-    observeRegistrationState()
-    observeDevices()
-}
 
     private fun logBluetoothPermissions() {
 
@@ -310,16 +344,7 @@ init {
         }
 
         // ---------------------------------------------------------------------
-        // IMPORTANT:
-        //
-        // We deliberately do NOT:
-        //
-        //   - wait for LinkState.CONNECTED
-        //   - use SpecificDeviceSelector
-        //   - manually select a device
-        //   - perform any camera operation
-        //
-        // This is intentionally equivalent to Meta's basic session flow.
+        // We deliberately keep the stable connection flow unchanged.
         // ---------------------------------------------------------------------
 
         Log.i(
@@ -1013,20 +1038,14 @@ init {
     }
 
     // =========================================================================
-    // CAMERA METHODS
-    // =========================================================================
-    //
-    // These are intentionally disabled for this diagnostic build.
-    //
-    // We want to isolate the MWDAT connection/session problem first.
-    //
+    // CAMERA PERMISSION
     // =========================================================================
 
     override suspend fun cameraPermission(): CameraPermission {
 
         Log.d(
             TAG,
-            "cameraPermission() called during minimal connection test"
+            "cameraPermission() called"
         )
 
         return try {
@@ -1043,17 +1062,33 @@ init {
 
             val status =
                 result.getOrElse {
+                    Log.e(
+                        TAG,
+                        "Camera permission status lookup failed: $it"
+                    )
 
                     return CameraPermission.NOT_DETERMINED
                 }
 
             when (status) {
 
-                PermissionStatus.Granted ->
-                    CameraPermission.GRANTED
+                PermissionStatus.Granted -> {
+                    Log.i(
+                        TAG,
+                        "Meta CAMERA permission = GRANTED"
+                    )
 
-                PermissionStatus.Denied ->
+                    CameraPermission.GRANTED
+                }
+
+                PermissionStatus.Denied -> {
+                    Log.i(
+                        TAG,
+                        "Meta CAMERA permission = DENIED"
+                    )
+
                     CameraPermission.DENIED
+                }
             }
 
         } catch (e: Exception) {
@@ -1071,21 +1106,72 @@ init {
     override suspend fun requestCameraPermission():
         CameraPermission {
 
-        Log.w(
+        Log.i(
             TAG,
-            "requestCameraPermission() disabled during " +
-                "minimal MWDAT connection test"
+            "Requesting Meta Wearables CAMERA permission"
         )
 
-        return CameraPermission.NOT_DETERMINED
+        val requester =
+            cameraPermissionRequester
+
+        if (requester == null) {
+
+            Log.e(
+                TAG,
+                "Camera permission requester is NULL"
+            )
+
+            Log.e(
+                TAG,
+                "MainActivity has not registered the " +
+                    "Wearables.RequestPermissionContract() bridge"
+            )
+
+            return CameraPermission.NOT_DETERMINED
+        }
+
+        return try {
+
+            val result =
+                requester()
+
+            Log.i(
+                TAG,
+                "Meta CAMERA permission request completed: $result"
+            )
+
+            result
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Meta CAMERA permission request failed",
+                e
+            )
+
+            CameraPermission.NOT_DETERMINED
+        }
     }
+
+    // =========================================================================
+    // CAMERA STREAM
+    // =========================================================================
+    //
+    // Camera streaming is still intentionally disabled at this checkpoint.
+    //
+    // First verify that the Meta CAMERA permission dialog works correctly.
+    // Once permission is confirmed, we will implement the MWDAT camera
+    // session/stream/capturePhoto() logic separately.
+    //
+    // =========================================================================
 
     override fun cameraFrames():
         Flow<ByteArray> {
 
         Log.w(
             TAG,
-            "cameraFrames() disabled during minimal MWDAT connection test"
+            "cameraFrames() not implemented yet"
         )
 
         return flow {
