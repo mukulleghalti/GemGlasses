@@ -11,6 +11,10 @@ import com.lpecom.gemglasses.glasses.CameraPermission
 import com.lpecom.gemglasses.glasses.GlassesBackend
 import com.lpecom.gemglasses.glasses.GlassesDevice
 import com.lpecom.gemglasses.glasses.RegistrationState
+import com.meta.wearable.dat.camera.addCamera
+import com.meta.wearable.dat.camera.types.StreamConfiguration
+import com.meta.wearable.dat.camera.types.StreamState
+import com.meta.wearable.dat.camera.types.VideoQuality
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.selectors.AutoDeviceSelector
 import com.meta.wearable.dat.core.session.DeviceSession
@@ -25,6 +29,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,6 +53,15 @@ class RealGlassesBackend @Inject constructor(
         private const val DEFAULT_NAME = "Ray-Ban Meta"
 
         private const val SESSION_START_TIMEOUT_MS = 20_000L
+
+        // Camera startup timeout.
+        private const val CAMERA_STREAM_TIMEOUT_MS = 15_000L
+
+        // Capture approximately one image per second.
+        private const val PHOTO_INTERVAL_MS = 1_000L
+
+        // Vision burst is controlled by GlassesCameraSource.
+        // This backend simply keeps producing photos while collected.
     }
 
     private val scope =
@@ -56,6 +70,14 @@ class RealGlassesBackend @Inject constructor(
     private var activity: Activity? = null
 
     private var session: DeviceSession? = null
+
+    /*
+     * Active MWDAT camera attached to the current DeviceSession.
+     *
+     * We keep this reference so we can stop/remove the camera cleanly.
+     */
+    private var camera:
+        com.meta.wearable.dat.camera.Camera? = null
 
     /*
      * MainActivity supplies the actual Activity Result permission request.
@@ -372,6 +394,8 @@ class RealGlassesBackend @Inject constructor(
             )
 
             try {
+
+                stopCameraIfNeeded()
 
                 oldSession.stop()
 
@@ -1157,26 +1181,430 @@ class RealGlassesBackend @Inject constructor(
     // =========================================================================
     // CAMERA STREAM
     // =========================================================================
-    //
-    // Camera streaming is still intentionally disabled at this checkpoint.
-    //
-    // First verify that the Meta CAMERA permission dialog works correctly.
-    // Once permission is confirmed, we will implement the MWDAT camera
-    // session/stream/capturePhoto() logic separately.
-    //
-    // =========================================================================
 
+    /**
+     * Starts the MWDAT camera and emits JPEG photo bytes.
+     *
+     * We intentionally use capturePhoto() instead of forwarding
+     * camera.stream.videoStream directly.
+     *
+     * MWDAT's video stream is H.265/HEVC. Gemini's vision input path
+     * expects image bytes, so capturePhoto() gives us the actual image
+     * payload that we can forward to GlassesCameraSource/Gemini.
+     *
+     * The Flow remains active while GlassesCameraSource is collecting it.
+     * Every ~1 second we capture another still image.
+     */
     override fun cameraFrames():
-        Flow<ByteArray> {
+        Flow<ByteArray> = flow {
 
-        Log.w(
+        Log.i(
             TAG,
-            "cameraFrames() not implemented yet"
+            "================================================"
         )
 
-        return flow {
-            // Intentionally empty.
+        Log.i(
+            TAG,
+            "CAMERA FLOW STARTING"
+        )
+
+        Log.i(
+            TAG,
+            "================================================"
+        )
+
+        val activeSession =
+            session
+
+        if (activeSession == null) {
+
+            Log.e(
+                TAG,
+                "CAMERA ABORTED: DeviceSession is NULL"
+            )
+
+            return@flow
         }
+
+        Log.i(
+            TAG,
+            "Current DeviceSession state = " +
+                activeSession.state.value
+        )
+
+        if (
+            activeSession.state.value !=
+            DeviceSessionState.STARTED
+        ) {
+
+            Log.e(
+                TAG,
+                "CAMERA ABORTED: DeviceSession is not STARTED"
+            )
+
+            return@flow
+        }
+
+        // ---------------------------------------------------------------------
+        // Permission
+        // ---------------------------------------------------------------------
+
+        val permission =
+            cameraPermission()
+
+        Log.i(
+            TAG,
+            "Camera permission before camera start = $permission"
+        )
+
+        if (permission != CameraPermission.GRANTED) {
+
+            Log.e(
+                TAG,
+                "CAMERA ABORTED: Meta camera permission is not GRANTED"
+            )
+
+            return@flow
+        }
+
+        // ---------------------------------------------------------------------
+        // Create camera
+        // ---------------------------------------------------------------------
+
+        val activeCamera =
+            try {
+
+                Log.i(
+                    TAG,
+                    "Adding MWDAT camera"
+                )
+
+                activeSession.addCamera(
+                    StreamConfiguration(
+                        videoQuality = VideoQuality.MEDIUM,
+                        frameRate = 7,
+                    )
+                ).getOrElse { error ->
+
+                    Log.e(
+                        TAG,
+                        "addCamera() FAILED: $error"
+                    )
+
+                    Log.e(
+                        TAG,
+                        "addCamera() error type = " +
+                            error::class.java.name
+                    )
+
+                    return@flow
+                }
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "addCamera() THREW EXCEPTION",
+                    e
+                )
+
+                return@flow
+            }
+
+        camera =
+            activeCamera
+
+        Log.i(
+            TAG,
+            "MWDAT camera added successfully"
+        )
+
+        Log.i(
+            TAG,
+            "Camera stream initial state = " +
+                activeCamera.stream.state.value
+        )
+
+        try {
+
+            // -----------------------------------------------------------------
+            // Start camera stream
+            // -----------------------------------------------------------------
+
+            Log.i(
+                TAG,
+                "Starting MWDAT camera stream"
+            )
+
+            try {
+
+                activeCamera.stream
+                    .start()
+                    .getOrElse { error ->
+
+                        Log.e(
+                            TAG,
+                            "camera.stream.start() FAILED: $error"
+                        )
+
+                        Log.e(
+                            TAG,
+                            "Stream start error type = " +
+                                error::class.java.name
+                        )
+
+                        return@flow
+                    }
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "camera.stream.start() THREW EXCEPTION",
+                    e
+                )
+
+                return@flow
+            }
+
+            Log.i(
+                TAG,
+                "camera.stream.start() returned successfully"
+            )
+
+            // -----------------------------------------------------------------
+            // Wait for STREAMING
+            // -----------------------------------------------------------------
+
+            Log.i(
+                TAG,
+                "Waiting for camera StreamState.STREAMING..."
+            )
+
+            val streaming =
+                withTimeoutOrNull(
+                    CAMERA_STREAM_TIMEOUT_MS
+                ) {
+
+                    activeCamera.stream.state.first { state ->
+
+                        Log.i(
+                            TAG,
+                            "CAMERA STREAM STATE -> $state"
+                        )
+
+                        state ==
+                            StreamState.STREAMING
+                    }
+
+                    true
+
+                } ?: false
+
+            if (!streaming) {
+
+                Log.e(
+                    TAG,
+                    "CAMERA FAILED: stream never reached STREAMING"
+                )
+
+                Log.e(
+                    TAG,
+                    "Final stream state = " +
+                        activeCamera.stream.state.value
+                )
+
+                return@flow
+            }
+
+            Log.i(
+                TAG,
+                "================================================"
+            )
+
+            Log.i(
+                TAG,
+                "CAMERA STREAMING"
+            )
+
+            Log.i(
+                TAG,
+                "Ready for capturePhoto()"
+            )
+
+            Log.i(
+                TAG,
+                "================================================"
+            )
+
+            // -----------------------------------------------------------------
+            // Capture photos continuously.
+            //
+            // GlassesCameraSource controls how long this Flow is collected.
+            // When its burst finishes, collection is cancelled and finally{}
+            // below stops/removes the camera.
+            // -----------------------------------------------------------------
+
+            while (true) {
+
+                var capturedBytes:
+                    ByteArray? = null
+
+                try {
+
+                    Log.d(
+                        TAG,
+                        "Calling camera.stream.capturePhoto()"
+                    )
+
+                    activeCamera.stream
+                        .capturePhoto()
+                        .onSuccess { photoData ->
+
+                            capturedBytes =
+                                photoData.data
+
+                            Log.i(
+                                TAG,
+                                "PHOTO CAPTURED: " +
+                                    "${photoData.data.size} bytes"
+                            )
+                        }
+                        .onFailure { error, _ ->
+
+                            Log.e(
+                                TAG,
+                                "capturePhoto() FAILED: $error"
+                            )
+
+                            Log.e(
+                                TAG,
+                                "Capture error type = " +
+                                    error::class.java.name
+                            )
+                        }
+
+                } catch (e: Exception) {
+
+                    Log.e(
+                        TAG,
+                        "capturePhoto() THREW EXCEPTION",
+                        e
+                    )
+                }
+
+                val bytes =
+                    capturedBytes
+
+                if (
+                    bytes != null &&
+                    bytes.isNotEmpty()
+                ) {
+
+                    emit(bytes)
+
+                    Log.d(
+                        TAG,
+                        "JPEG emitted to GlassesCameraSource"
+                    )
+
+                } else {
+
+                    Log.w(
+                        TAG,
+                        "No photo bytes produced for this capture"
+                    )
+                }
+
+                delay(
+                    PHOTO_INTERVAL_MS
+                )
+            }
+
+        } finally {
+
+            Log.i(
+                TAG,
+                "Camera Flow ending; cleaning up camera"
+            )
+
+            stopCameraIfNeeded()
+
+            Log.i(
+                TAG,
+                "Camera Flow cleanup complete"
+            )
+        }
+    }
+
+    // =========================================================================
+    // CAMERA CLEANUP
+    // =========================================================================
+
+    /**
+     * Stops and detaches the current camera.
+     *
+     * This is deliberately separate from stopping the DeviceSession.
+     */
+    private fun stopCameraIfNeeded() {
+
+        val activeCamera =
+            camera
+
+        if (activeCamera == null) {
+            return
+        }
+
+        Log.i(
+            TAG,
+            "Stopping active MWDAT camera"
+        )
+
+        try {
+
+            activeCamera.stop()
+
+            Log.i(
+                TAG,
+                "Camera.stop() called"
+
+            )
+
+        } catch (e: Exception) {
+
+            Log.w(
+                TAG,
+                "Camera.stop() failed",
+                e
+            )
+        }
+
+        val activeSession =
+            session
+
+        if (activeSession != null) {
+
+            try {
+
+                activeSession.removeCamera()
+
+                Log.i(
+                    TAG,
+                    "DeviceSession.removeCamera() called"
+
+                )
+
+            } catch (e: Exception) {
+
+                Log.w(
+                    TAG,
+                    "DeviceSession.removeCamera() failed",
+                    e
+                )
+            }
+        }
+
+        camera = null
     }
 
     // =========================================================================
@@ -1188,6 +1616,8 @@ class RealGlassesBackend @Inject constructor(
         scope.launch {
 
             try {
+
+                stopCameraIfNeeded()
 
                 val activeSession =
                     session
