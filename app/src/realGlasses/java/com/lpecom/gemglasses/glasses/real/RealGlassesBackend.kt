@@ -8,6 +8,7 @@ import com.lpecom.gemglasses.glasses.GlassesBackend
 import com.lpecom.gemglasses.glasses.GlassesDevice
 import com.lpecom.gemglasses.glasses.RegistrationState
 import com.meta.wearable.dat.camera.Camera
+import com.meta.wearable.dat.camera.addCamera
 import com.meta.wearable.dat.camera.types.StreamConfiguration
 import com.meta.wearable.dat.camera.types.VideoQuality
 import com.meta.wearable.dat.core.Wearables
@@ -48,11 +49,8 @@ class RealGlassesBackend @Inject constructor(
 
         private const val FRAME_RATE = 24
 
-        /*
-         * We capture one photo approximately every second during a vision
-         * burst. Gemini receives the resulting JPEG bytes directly.
-         */
         private const val PHOTO_INTERVAL_MS = 1_000L
+        private const val MAX_PHOTOS_PER_BURST = 20
     }
 
     private val scope = CoroutineScope(
@@ -90,13 +88,21 @@ class RealGlassesBackend @Inject constructor(
 
     override fun setActivity(activity: Activity) {
         this.activity = activity
-        Log.d(TAG, "Activity attached")
+
+        Log.d(
+            TAG,
+            "Activity attached"
+        )
     }
 
     override fun clearActivity(activity: Activity) {
         if (this.activity === activity) {
             this.activity = null
-            Log.d(TAG, "Activity detached")
+
+            Log.d(
+                TAG,
+                "Activity detached"
+            )
         }
     }
 
@@ -105,15 +111,29 @@ class RealGlassesBackend @Inject constructor(
     // -------------------------------------------------------------------------
 
     override fun initialize() {
-        Log.i(TAG, "Initializing Meta Wearables Device Access Toolkit")
+        Log.i(
+            TAG,
+            "Initializing Meta Wearables Device Access Toolkit"
+        )
 
         try {
             Wearables.initialize(context)
 
-            Log.i(TAG, "Wearables.initialize() called")
+            Log.i(
+                TAG,
+                "Wearables.initialize() called"
+            )
+
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize Wearables", e)
-            _registrationState.value = RegistrationState.UNKNOWN
+
+            Log.e(
+                TAG,
+                "Failed to initialize Wearables",
+                e
+            )
+
+            _registrationState.value =
+                RegistrationState.UNKNOWN
         }
     }
 
@@ -122,25 +142,35 @@ class RealGlassesBackend @Inject constructor(
     // -------------------------------------------------------------------------
 
     override fun startRegistration() {
+
         val currentActivity = activity
 
         if (currentActivity == null) {
+
             Log.e(
                 TAG,
                 "Cannot start registration because Activity is not attached"
             )
+
             return
         }
 
         try {
-            Log.i(TAG, "Starting Meta glasses registration")
 
-            Wearables.startRegistration(currentActivity)
+            Log.i(
+                TAG,
+                "Starting Meta glasses registration"
+            )
+
+            Wearables.startRegistration(
+                currentActivity
+            )
 
             _registrationState.value =
                 RegistrationState.REGISTERING
 
         } catch (e: Exception) {
+
             Log.e(
                 TAG,
                 "Failed to start Meta glasses registration",
@@ -157,27 +187,47 @@ class RealGlassesBackend @Inject constructor(
     // -------------------------------------------------------------------------
 
     override suspend fun cameraPermission(): CameraPermission {
+
         return try {
+
             val result =
-                Wearables.checkPermissionStatus(Permission.CAMERA)
+                Wearables.checkPermissionStatus(
+                    Permission.CAMERA
+                )
 
             Log.d(
                 TAG,
                 "Camera permission result: $result"
             )
 
-            when (result) {
-                PermissionStatus.GRANTED ->
-                    CameraPermission.GRANTED
+            /*
+             * MWDAT 0.9.0 exposes these enum values as Granted / Denied
+             * in the artifact being compiled by this project.
+             */
+            result.onSuccess { status ->
 
-                PermissionStatus.DENIED ->
-                    CameraPermission.DENIED
+                Log.d(
+                    TAG,
+                    "Camera permission status: $status"
+                )
+            }
 
-                else ->
-                    CameraPermission.NOT_DETERMINED
+            result.getOrElse {
+                return CameraPermission.NOT_DETERMINED
+            }.let { status ->
+
+                when (status) {
+
+                    PermissionStatus.Granted ->
+                        CameraPermission.GRANTED
+
+                    PermissionStatus.Denied ->
+                        CameraPermission.DENIED
+                }
             }
 
         } catch (e: Exception) {
+
             Log.e(
                 TAG,
                 "Failed to check camera permission",
@@ -189,13 +239,13 @@ class RealGlassesBackend @Inject constructor(
     }
 
     override suspend fun requestCameraPermission(): CameraPermission {
+
         /*
-         * MWDAT's RequestPermissionContract needs to be launched from an
-         * Activity. We are intentionally not launching an ActivityResult
-         * contract from this backend.
+         * The actual MWDAT permission request uses
+         * Wearables.RequestPermissionContract(), which must be launched
+         * from an Activity.
          *
-         * For now, report NOT_DETERMINED so the UI can handle the permission
-         * flow without pretending that permission was granted.
+         * We will wire that into MainActivity after the project compiles.
          */
         Log.i(
             TAG,
@@ -209,125 +259,172 @@ class RealGlassesBackend @Inject constructor(
     // Camera / vision
     // -------------------------------------------------------------------------
 
-    override fun cameraFrames(): Flow<ByteArray> {
-        return flow {
+    override fun cameraFrames(): Flow<ByteArray> = flow {
 
-            sessionMutex.withLock {
+        sessionMutex.withLock {
 
-                try {
-                    ensureCameraSession()
+            try {
 
-                    val activeCamera = camera
+                ensureCameraSession()
 
-                    if (activeCamera == null) {
-                        Log.e(
-                            TAG,
-                            "Camera session exists but camera is null"
-                        )
-                        return@flow
-                    }
+                val activeCamera = camera
 
-                    Log.i(
-                        TAG,
-                        "Starting camera stream"
-                    )
-
-                    val startResult =
-                        activeCamera.stream.start()
-
-                    Log.i(
-                        TAG,
-                        "Camera stream start result: $startResult"
-                    )
-
-                    /*
-                     * We don't depend on the internal VideoFrame structure.
-                     *
-                     * Instead, capture still images from the camera stream.
-                     * PhotoData.data gives us the actual image bytes.
-                     */
-                    repeat(MAX_PHOTOS_PER_BURST) { index ->
-
-                        try {
-                            val photoResult =
-                                activeCamera.stream.capturePhoto()
-
-                            photoResult.onSuccess { photoData ->
-
-                                val jpeg = photoData.data
-
-                                if (jpeg.isNotEmpty()) {
-                                    Log.d(
-                                        TAG,
-                                        "Captured vision photo #${index + 1}: ${jpeg.size} bytes"
-                                    )
-
-                                    emit(jpeg)
-                                } else {
-                                    Log.w(
-                                        TAG,
-                                        "Captured empty vision photo #${index + 1}"
-                                    )
-                                }
-
-                            }.onFailure { error, _ ->
-
-                                Log.e(
-                                    TAG,
-                                    "Failed to capture vision photo #${index + 1}: ${error.description}"
-                                )
-                            }
-
-                        } catch (e: Exception) {
-
-                            Log.e(
-                                TAG,
-                                "Exception while capturing vision photo #${index + 1}",
-                                e
-                            )
-                        }
-
-                        if (index < MAX_PHOTOS_PER_BURST - 1) {
-                            delay(PHOTO_INTERVAL_MS)
-                        }
-                    }
-
-                } catch (e: Exception) {
+                if (activeCamera == null) {
 
                     Log.e(
                         TAG,
-                        "Camera vision session failed",
-                        e
+                        "Camera session exists but camera is null"
                     )
 
-                } finally {
-
-                    stopCameraSession()
+                    return@flow
                 }
+
+                Log.i(
+                    TAG,
+                    "Starting camera stream"
+                )
+
+                val startResult =
+                    activeCamera.stream.start()
+
+                startResult.onFailure { error, _ ->
+
+                    Log.e(
+                        TAG,
+                        "Failed to start camera stream: ${error.toString()}"
+                    )
+                }
+
+                if (startResult.isFailure) {
+                    return@flow
+                }
+
+                Log.i(
+                    TAG,
+                    "Camera stream started"
+                )
+
+                /*
+                 * Capture still JPEG images periodically.
+                 *
+                 * This avoids depending on the internal VideoFrame format.
+                 * Gemini can consume these image bytes directly.
+                 */
+                repeat(MAX_PHOTOS_PER_BURST) { index ->
+
+                    try {
+
+                        val photoResult =
+                            activeCamera.stream.capturePhoto()
+
+                        photoResult
+                            .onSuccess { photoData ->
+
+                                try {
+
+                                    val imageBytes =
+                                        photoData.data
+
+                                    if (imageBytes.isNotEmpty()) {
+
+                                        Log.d(
+                                            TAG,
+                                            "Captured vision photo #${index + 1}: ${imageBytes.size} bytes"
+                                        )
+
+                                        /*
+                                         * DatResult callback itself is not
+                                         * suspend-aware in every SDK build,
+                                         * so this value is passed through the
+                                         * flow using the local result below.
+                                         */
+                                    }
+
+                                } catch (e: Exception) {
+
+                                    Log.e(
+                                        TAG,
+                                        "Failed reading captured photo",
+                                        e
+                                    )
+                                }
+                            }
+                            .onFailure { error, _ ->
+
+                                Log.e(
+                                    TAG,
+                                    "Failed to capture vision photo #${index + 1}: ${error}"
+                                )
+                            }
+
+                        /*
+                         * Obtain the result again in a normal value so that
+                         * the JPEG can be emitted from the flow.
+                         */
+                        val imageBytes =
+                            photoResult.getOrNull()?.data
+
+                        if (
+                            imageBytes != null &&
+                            imageBytes.isNotEmpty()
+                        ) {
+
+                            emit(imageBytes)
+                        }
+
+                    } catch (e: Exception) {
+
+                        Log.e(
+                            TAG,
+                            "Exception while capturing vision photo #${index + 1}",
+                            e
+                        )
+                    }
+
+                    if (
+                        index <
+                        MAX_PHOTOS_PER_BURST - 1
+                    ) {
+                        delay(
+                            PHOTO_INTERVAL_MS
+                        )
+                    }
+                }
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Camera vision session failed",
+                    e
+                )
+
+            } finally {
+
+                stopCameraSession()
             }
         }
     }
 
     // -------------------------------------------------------------------------
-    // Camera session creation
+    // Camera session
     // -------------------------------------------------------------------------
 
     private suspend fun ensureCameraSession() {
 
-        if (session != null && camera != null) {
+        if (
+            session != null &&
+            camera != null
+        ) {
+
             Log.d(
                 TAG,
                 "Camera session already exists"
             )
+
             return
         }
 
-        /*
-         * Create DeviceSession.
-         *
-         * MWDAT 0.9.0:
-         * Wearables.createSession(AutoDeviceSelector())
-         */
         if (session == null) {
 
             Log.i(
@@ -340,39 +437,36 @@ class RealGlassesBackend @Inject constructor(
                     AutoDeviceSelector()
                 ).getOrElse { error ->
 
+                    val message =
+                        error.toString()
+
                     Log.e(
                         TAG,
-                        "Failed to create DeviceSession: ${error.description}"
+                        "Failed to create DeviceSession: $message"
                     )
 
-                    throw IllegalStateException(
-                        error.description
+                    throw java.lang.IllegalStateException(
+                        message
                     )
                 }
 
-            session = createdSession
+            session =
+                createdSession
 
             Log.i(
                 TAG,
                 "Starting MWDAT DeviceSession"
             )
 
-            /*
-             * DeviceSession.start() returns Unit in MWDAT 0.9.0.
-             * Asynchronous failures are reported through session.errors.
-             */
             createdSession.start()
         }
 
         val activeSession =
             session
-                ?: throw IllegalStateException(
+                ?: throw java.lang.IllegalStateException(
                     "DeviceSession was not created"
                 )
 
-        /*
-         * Add the camera capability.
-         */
         if (camera == null) {
 
             Log.i(
@@ -381,24 +475,30 @@ class RealGlassesBackend @Inject constructor(
             )
 
             val addedCamera =
-                activeSession.addCamera(
-                    StreamConfiguration(
-                        videoQuality = VideoQuality.MEDIUM,
-                        frameRate = FRAME_RATE,
+                activeSession
+                    .addCamera(
+                        StreamConfiguration(
+                            videoQuality = VideoQuality.MEDIUM,
+                            frameRate = FRAME_RATE,
+                        )
                     )
-                ).getOrElse { error ->
+                    .getOrElse { error ->
 
-                    Log.e(
-                        TAG,
-                        "Failed to add camera: ${error.description}"
-                    )
+                        val message =
+                            error.toString()
 
-                    throw IllegalStateException(
-                        error.description
-                    )
-                }
+                        Log.e(
+                            TAG,
+                            "Failed to add camera: $message"
+                        )
 
-            camera = addedCamera
+                        throw java.lang.IllegalStateException(
+                            message
+                        )
+                    }
+
+            camera =
+                addedCamera
 
             Log.i(
                 TAG,
@@ -414,6 +514,7 @@ class RealGlassesBackend @Inject constructor(
     private fun stopCameraSession() {
 
         try {
+
             camera?.stop()
 
             Log.d(
@@ -433,6 +534,7 @@ class RealGlassesBackend @Inject constructor(
         camera = null
 
         try {
+
             session?.stop()
 
             Log.d(
@@ -476,17 +578,13 @@ class RealGlassesBackend @Inject constructor(
 
                         try {
 
-                            /*
-                             * IMPORTANT:
-                             *
-                             * Wearables.devices contains DeviceIdentifier,
-                             * not String.
-                             */
-                            Wearables.devicesMetadata[deviceId]
+                            Wearables
+                                .devicesMetadata[deviceId]
                                 ?.collect { device ->
 
                                     result.removeAll {
-                                        it.id == deviceId.toString()
+                                        it.id ==
+                                            deviceId.toString()
                                     }
 
                                     result.add(
@@ -511,7 +609,9 @@ class RealGlassesBackend @Inject constructor(
                     }
 
                     if (deviceIds.isEmpty()) {
-                        _devices.value = emptyList()
+
+                        _devices.value =
+                            emptyList()
                     }
                 }
 
@@ -548,7 +648,8 @@ class RealGlassesBackend @Inject constructor(
             }
 
         val connected =
-            device.linkState == LinkState.CONNECTED
+            device.linkState ==
+                LinkState.CONNECTED
 
         Log.d(
             TAG,
@@ -580,7 +681,9 @@ class RealGlassesBackend @Inject constructor(
                     )
 
                     _registrationState.value =
-                        when (state.toString()) {
+                        when (
+                            state.toString()
+                        ) {
 
                             "REGISTERED" ->
                                 RegistrationState.REGISTERED
@@ -620,8 +723,11 @@ class RealGlassesBackend @Inject constructor(
     fun shutdown() {
 
         try {
+
             stopCameraSession()
+
         } catch (e: Exception) {
+
             Log.e(
                 TAG,
                 "Error shutting down camera/session",
@@ -630,9 +736,5 @@ class RealGlassesBackend @Inject constructor(
         }
 
         scope.cancel()
-    }
-
-    private companion object {
-        const val MAX_PHOTOS_PER_BURST = 20
     }
 }
