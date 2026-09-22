@@ -2,42 +2,63 @@ package com.lpecom.gemglasses
 
 import android.app.Application
 import android.util.Log
-import com.lpecom.gemglasses.glasses.GlassesManager
 import com.meta.wearable.dat.core.Wearables
 import dagger.hilt.android.HiltAndroidApp
-import javax.inject.Inject
 
 @HiltAndroidApp
 class GemGlassesApp : Application() {
 
-    @Inject
-    lateinit var glassesManager: GlassesManager
+    companion object {
+        private const val TAG = "GemGlassesApp"
+    }
 
-    override fun onCreate() {
-        super.onCreate()
+    @Volatile
+    private var wearablesInitialized = false
 
-        Log.i("GemGlassesApp", "Initializing MWDAT once for process")
+    /**
+     * Initializes the Meta Wearables DAT SDK exactly once per process.
+     *
+     * IMPORTANT:
+     * This must only be called after the required Bluetooth runtime
+     * permissions have been granted.
+     */
+    fun initializeWearables(): Boolean {
 
-        try {
-            Wearables.initialize(this)
+        if (wearablesInitialized) {
+            Log.i(
+                TAG,
+                "Wearables SDK already initialized; ignoring duplicate call"
+            )
+            return true
+        }
+
+        return try {
 
             Log.i(
-                "GemGlassesApp",
+                TAG,
+                "Initializing MWDAT SDK"
+            )
+
+            Wearables.initialize(this)
+
+            wearablesInitialized = true
+
+            Log.i(
+                TAG,
                 "Wearables.initialize() SUCCESS"
             )
+
+            true
+
         } catch (e: Exception) {
+
             Log.e(
-                "GemGlassesApp",
+                TAG,
                 "Wearables.initialize() FAILED",
                 e
             )
+
+            false
         }
-
-        Log.i(
-            "GemGlassesApp",
-            "Initializing glasses backend"
-        )
-
-        glassesManager.initialize()
     }
 }
