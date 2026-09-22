@@ -137,7 +137,6 @@ init {
     observeRegistrationState()
     observeDevices()
 }
-    }
 
     private fun logBluetoothPermissions() {
 
