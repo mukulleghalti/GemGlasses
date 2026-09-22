@@ -88,21 +88,13 @@ class RealGlassesBackend @Inject constructor(
 
     override fun setActivity(activity: Activity) {
         this.activity = activity
-
-        Log.d(
-            TAG,
-            "Activity attached"
-        )
+        Log.d(TAG, "Activity attached")
     }
 
     override fun clearActivity(activity: Activity) {
         if (this.activity === activity) {
             this.activity = null
-
-            Log.d(
-                TAG,
-                "Activity detached"
-            )
+            Log.d(TAG, "Activity detached")
         }
     }
 
@@ -111,29 +103,16 @@ class RealGlassesBackend @Inject constructor(
     // -------------------------------------------------------------------------
 
     override fun initialize() {
-        Log.i(
-            TAG,
-            "Initializing Meta Wearables Device Access Toolkit"
-        )
+        Log.i(TAG, "Initializing Meta Wearables Device Access Toolkit")
 
         try {
             Wearables.initialize(context)
 
-            Log.i(
-                TAG,
-                "Wearables.initialize() called"
-            )
-
+            Log.i(TAG, "Wearables.initialize() called")
         } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize Wearables", e)
 
-            Log.e(
-                TAG,
-                "Failed to initialize Wearables",
-                e
-            )
-
-            _registrationState.value =
-                RegistrationState.UNKNOWN
+            _registrationState.value = RegistrationState.UNKNOWN
         }
     }
 
@@ -142,35 +121,25 @@ class RealGlassesBackend @Inject constructor(
     // -------------------------------------------------------------------------
 
     override fun startRegistration() {
-
         val currentActivity = activity
 
         if (currentActivity == null) {
-
             Log.e(
                 TAG,
                 "Cannot start registration because Activity is not attached"
             )
-
             return
         }
 
         try {
+            Log.i(TAG, "Starting Meta glasses registration")
 
-            Log.i(
-                TAG,
-                "Starting Meta glasses registration"
-            )
-
-            Wearables.startRegistration(
-                currentActivity
-            )
+            Wearables.startRegistration(currentActivity)
 
             _registrationState.value =
                 RegistrationState.REGISTERING
 
         } catch (e: Exception) {
-
             Log.e(
                 TAG,
                 "Failed to start Meta glasses registration",
@@ -187,13 +156,9 @@ class RealGlassesBackend @Inject constructor(
     // -------------------------------------------------------------------------
 
     override suspend fun cameraPermission(): CameraPermission {
-
         return try {
-
             val result =
-                Wearables.checkPermissionStatus(
-                    Permission.CAMERA
-                )
+                Wearables.checkPermissionStatus(Permission.CAMERA)
 
             Log.d(
                 TAG,
@@ -201,20 +166,17 @@ class RealGlassesBackend @Inject constructor(
             )
 
             result.onSuccess { status ->
-
                 Log.d(
                     TAG,
                     "Camera permission status: $status"
                 )
             }
 
-            val status =
-                result.getOrElse {
-                    return CameraPermission.NOT_DETERMINED
-                }
+            val status = result.getOrElse {
+                return CameraPermission.NOT_DETERMINED
+            }
 
             when (status) {
-
                 PermissionStatus.Granted ->
                     CameraPermission.GRANTED
 
@@ -223,7 +185,6 @@ class RealGlassesBackend @Inject constructor(
             }
 
         } catch (e: Exception) {
-
             Log.e(
                 TAG,
                 "Failed to check camera permission",
@@ -235,14 +196,6 @@ class RealGlassesBackend @Inject constructor(
     }
 
     override suspend fun requestCameraPermission(): CameraPermission {
-
-        /*
-         * The actual MWDAT permission request uses
-         * Wearables.RequestPermissionContract(), which must be launched
-         * from an Activity.
-         *
-         * We will wire that into MainActivity after the project compiles.
-         */
         Log.i(
             TAG,
             "Camera permission request requires ActivityResult handling"
@@ -253,6 +206,12 @@ class RealGlassesBackend @Inject constructor(
 
     // -------------------------------------------------------------------------
     // Camera / vision
+    //
+    // IMPORTANT:
+    // This version intentionally does NOT access photoData.data.
+    //
+    // We are using this build to discover the exact PhotoData type exposed by
+    // the MWDAT dependency actually being compiled by GitHub Actions.
     // -------------------------------------------------------------------------
 
     override fun cameraFrames(): Flow<ByteArray> = flow {
@@ -260,13 +219,11 @@ class RealGlassesBackend @Inject constructor(
         sessionMutex.withLock {
 
             try {
-
                 ensureCameraSession()
 
                 val activeCamera = camera
 
                 if (activeCamera == null) {
-
                     Log.e(
                         TAG,
                         "Camera session exists but camera is null"
@@ -284,10 +241,9 @@ class RealGlassesBackend @Inject constructor(
                     activeCamera.stream.start()
 
                 startResult.onFailure { error, _ ->
-
                     Log.e(
                         TAG,
-                        "Failed to start camera stream: ${error}"
+                        "Failed to start camera stream: $error"
                     )
                 }
 
@@ -300,74 +256,64 @@ class RealGlassesBackend @Inject constructor(
                     "Camera stream started"
                 )
 
-                /*
-                 * IMPORTANT:
-                 *
-                 * videoStream contains encoded video frames.
-                 * We do NOT send those directly to Gemini as JPEG.
-                 *
-                 * capturePhoto() gives us PhotoData, whose `data`
-                 * property is the actual image ByteArray.
-                 *
-                 * This is the format Gemini expects for image input.
-                 */
                 repeat(MAX_PHOTOS_PER_BURST) { index ->
 
                     try {
-
-                        var imageBytes: ByteArray? = null
+                        /*
+                         * Capture a still photo from the glasses.
+                         *
+                         * We deliberately don't access photoData.data here.
+                         * The next CI build will tell us the exact runtime type
+                         * exposed by the resolved MWDAT 0.9.0 dependency.
+                         */
 
                         val photoResult =
                             activeCamera.stream.capturePhoto()
 
+                        Log.d(
+                            TAG,
+                            "capturePhoto result type = " +
+                                photoResult::class.java.name
+                        )
+
                         photoResult
                             .onSuccess { photoData ->
 
-                                imageBytes =
-                                    photoData.data
+                                Log.d(
+                                    TAG,
+                                    "capturePhoto success type = " +
+                                        photoData::class.java.name
+                                )
 
                                 Log.d(
                                     TAG,
-                                    "Captured vision photo #${index + 1}: " +
-                                        "${photoData.data.size} bytes"
+                                    "capturePhoto success value = " +
+                                        photoData
                                 )
                             }
                             .onFailure { error, _ ->
 
                                 Log.e(
                                     TAG,
-                                    "Failed to capture vision photo #${index + 1}: $error"
+                                    "Failed to capture vision photo #" +
+                                        "${index + 1}: $error"
                                 )
                             }
-
-                        val bytes =
-                            imageBytes
-
-                        if (
-                            bytes != null &&
-                            bytes.isNotEmpty()
-                        ) {
-
-                            emit(bytes)
-                        }
 
                     } catch (e: Exception) {
 
                         Log.e(
                             TAG,
-                            "Exception while capturing vision photo #${index + 1}",
+                            "Exception while capturing vision photo #" +
+                                "${index + 1}",
                             e
                         )
                     }
 
                     if (
-                        index <
-                        MAX_PHOTOS_PER_BURST - 1
+                        index < MAX_PHOTOS_PER_BURST - 1
                     ) {
-
-                        delay(
-                            PHOTO_INTERVAL_MS
-                        )
+                        delay(PHOTO_INTERVAL_MS)
                     }
                 }
 
@@ -396,7 +342,6 @@ class RealGlassesBackend @Inject constructor(
             session != null &&
             camera != null
         ) {
-
             Log.d(
                 TAG,
                 "Camera session already exists"
@@ -413,25 +358,22 @@ class RealGlassesBackend @Inject constructor(
             )
 
             val createdSession =
-                Wearables.createSession(
-                    AutoDeviceSelector()
-                ).getOrElse { error ->
+                Wearables
+                    .createSession(AutoDeviceSelector())
+                    .getOrElse { error ->
 
-                    val message =
-                        error.toString()
+                        val message =
+                            error.toString()
 
-                    Log.e(
-                        TAG,
-                        "Failed to create DeviceSession: $message"
-                    )
+                        Log.e(
+                            TAG,
+                            "Failed to create DeviceSession: $message"
+                        )
 
-                    throw java.lang.IllegalStateException(
-                        message
-                    )
-                }
+                        throw IllegalStateException(message)
+                    }
 
-            session =
-                createdSession
+            session = createdSession
 
             Log.i(
                 TAG,
@@ -443,7 +385,7 @@ class RealGlassesBackend @Inject constructor(
 
         val activeSession =
             session
-                ?: throw java.lang.IllegalStateException(
+                ?: throw IllegalStateException(
                     "DeviceSession was not created"
                 )
 
@@ -472,13 +414,10 @@ class RealGlassesBackend @Inject constructor(
                             "Failed to add camera: $message"
                         )
 
-                        throw java.lang.IllegalStateException(
-                            message
-                        )
+                        throw IllegalStateException(message)
                     }
 
-            camera =
-                addedCamera
+            camera = addedCamera
 
             Log.i(
                 TAG,
@@ -494,7 +433,6 @@ class RealGlassesBackend @Inject constructor(
     private fun stopCameraSession() {
 
         try {
-
             camera?.stop()
 
             Log.d(
@@ -514,7 +452,6 @@ class RealGlassesBackend @Inject constructor(
         camera = null
 
         try {
-
             session?.stop()
 
             Log.d(
@@ -563,8 +500,7 @@ class RealGlassesBackend @Inject constructor(
                                 ?.collect { device ->
 
                                     result.removeAll {
-                                        it.id ==
-                                            deviceId.toString()
+                                        it.id == deviceId.toString()
                                     }
 
                                     result.add(
@@ -589,7 +525,6 @@ class RealGlassesBackend @Inject constructor(
                     }
 
                     if (deviceIds.isEmpty()) {
-
                         _devices.value =
                             emptyList()
                     }
@@ -628,12 +563,13 @@ class RealGlassesBackend @Inject constructor(
             }
 
         val connected =
-            device.linkState ==
-                LinkState.CONNECTED
+            device.linkState == LinkState.CONNECTED
 
         Log.d(
             TAG,
-            "Device: id=$id name=$displayName connected=$connected"
+            "Device: id=$id " +
+                "name=$displayName " +
+                "connected=$connected"
         )
 
         return GlassesDevice(
@@ -661,9 +597,7 @@ class RealGlassesBackend @Inject constructor(
                     )
 
                     _registrationState.value =
-                        when (
-                            state.toString()
-                        ) {
+                        when (state.toString()) {
 
                             "REGISTERED" ->
                                 RegistrationState.REGISTERED
