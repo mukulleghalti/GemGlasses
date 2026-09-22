@@ -200,10 +200,6 @@ class RealGlassesBackend @Inject constructor(
                 "Camera permission result: $result"
             )
 
-            /*
-             * MWDAT 0.9.0 exposes these enum values as Granted / Denied
-             * in the artifact being compiled by this project.
-             */
             result.onSuccess { status ->
 
                 Log.d(
@@ -212,18 +208,18 @@ class RealGlassesBackend @Inject constructor(
                 )
             }
 
-            result.getOrElse {
-                return CameraPermission.NOT_DETERMINED
-            }.let { status ->
-
-                when (status) {
-
-                    PermissionStatus.Granted ->
-                        CameraPermission.GRANTED
-
-                    PermissionStatus.Denied ->
-                        CameraPermission.DENIED
+            val status =
+                result.getOrElse {
+                    return CameraPermission.NOT_DETERMINED
                 }
+
+            when (status) {
+
+                PermissionStatus.Granted ->
+                    CameraPermission.GRANTED
+
+                PermissionStatus.Denied ->
+                    CameraPermission.DENIED
             }
 
         } catch (e: Exception) {
@@ -291,7 +287,7 @@ class RealGlassesBackend @Inject constructor(
 
                     Log.e(
                         TAG,
-                        "Failed to start camera stream: ${error.toString()}"
+                        "Failed to start camera stream: ${error}"
                     )
                 }
 
@@ -305,14 +301,21 @@ class RealGlassesBackend @Inject constructor(
                 )
 
                 /*
-                 * Capture still JPEG images periodically.
+                 * IMPORTANT:
                  *
-                 * This avoids depending on the internal VideoFrame format.
-                 * Gemini can consume these image bytes directly.
+                 * videoStream contains encoded video frames.
+                 * We do NOT send those directly to Gemini as JPEG.
+                 *
+                 * capturePhoto() gives us PhotoData, whose `data`
+                 * property is the actual image ByteArray.
+                 *
+                 * This is the format Gemini expects for image input.
                  */
                 repeat(MAX_PHOTOS_PER_BURST) { index ->
 
                     try {
+
+                        var imageBytes: ByteArray? = null
 
                         val photoResult =
                             activeCamera.stream.capturePhoto()
@@ -320,56 +323,32 @@ class RealGlassesBackend @Inject constructor(
                         photoResult
                             .onSuccess { photoData ->
 
-                                try {
+                                imageBytes =
+                                    photoData.data
 
-                                    val imageBytes =
-                                        photoData.data
-
-                                    if (imageBytes.isNotEmpty()) {
-
-                                        Log.d(
-                                            TAG,
-                                            "Captured vision photo #${index + 1}: ${imageBytes.size} bytes"
-                                        )
-
-                                        /*
-                                         * DatResult callback itself is not
-                                         * suspend-aware in every SDK build,
-                                         * so this value is passed through the
-                                         * flow using the local result below.
-                                         */
-                                    }
-
-                                } catch (e: Exception) {
-
-                                    Log.e(
-                                        TAG,
-                                        "Failed reading captured photo",
-                                        e
-                                    )
-                                }
+                                Log.d(
+                                    TAG,
+                                    "Captured vision photo #${index + 1}: " +
+                                        "${photoData.data.size} bytes"
+                                )
                             }
                             .onFailure { error, _ ->
 
                                 Log.e(
                                     TAG,
-                                    "Failed to capture vision photo #${index + 1}: ${error}"
+                                    "Failed to capture vision photo #${index + 1}: $error"
                                 )
                             }
 
-                        /*
-                         * Obtain the result again in a normal value so that
-                         * the JPEG can be emitted from the flow.
-                         */
-                        val imageBytes =
-                            photoResult.getOrNull()?.data
+                        val bytes =
+                            imageBytes
 
                         if (
-                            imageBytes != null &&
-                            imageBytes.isNotEmpty()
+                            bytes != null &&
+                            bytes.isNotEmpty()
                         ) {
 
-                            emit(imageBytes)
+                            emit(bytes)
                         }
 
                     } catch (e: Exception) {
@@ -385,6 +364,7 @@ class RealGlassesBackend @Inject constructor(
                         index <
                         MAX_PHOTOS_PER_BURST - 1
                     ) {
+
                         delay(
                             PHOTO_INTERVAL_MS
                         )
