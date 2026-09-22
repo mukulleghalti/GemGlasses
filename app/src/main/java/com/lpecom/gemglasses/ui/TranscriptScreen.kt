@@ -51,7 +51,7 @@ fun TranscriptScreen(
         if (entries.isEmpty()) {
             item {
                 Text(
-                    "A conversa aparece aqui quando a sessão começa.",
+                    "The conversation will appear here when the session starts.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -63,7 +63,7 @@ fun TranscriptScreen(
             item {
                 HorizontalDivider(Modifier.padding(vertical = 12.dp))
                 Text(
-                    "Lugares citados (Google Maps)",
+                    "Cited Places (Google Maps)",
                     style = MaterialTheme.typography.titleMedium,
                 )
             }
@@ -75,10 +75,11 @@ fun TranscriptScreen(
 @Composable
 private fun TranscriptLine(entry: TranscriptEntry) {
     val (label, weight) = when (entry.speaker) {
-        TranscriptEntry.Speaker.USER -> "Você" to FontWeight.SemiBold
-        TranscriptEntry.Speaker.ASSISTANT -> "Assistente" to FontWeight.Normal
-        TranscriptEntry.Speaker.SYSTEM -> "Sistema" to FontWeight.Light
+        TranscriptEntry.Speaker.USER -> "You" to FontWeight.SemiBold
+        TranscriptEntry.Speaker.ASSISTANT -> "Assistant" to FontWeight.Normal
+        TranscriptEntry.Speaker.SYSTEM -> "System" to FontWeight.Light
     }
+
     Column(Modifier.fillMaxWidth()) {
         Text(
             label,
