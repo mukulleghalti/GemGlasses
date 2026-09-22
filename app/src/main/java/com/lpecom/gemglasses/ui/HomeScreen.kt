@@ -27,11 +27,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
 import com.lpecom.gemglasses.agent.AgentStatus
+import com.lpecom.gemglasses.glasses.GlassesDevice
 import com.lpecom.gemglasses.glasses.RegistrationState
 
 @Composable
@@ -40,13 +41,22 @@ fun HomeScreen(
     viewModel: AgentViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+
     val status by viewModel.status.collectAsStateWithLifecycle()
     val registration by viewModel.registration.collectAsStateWithLifecycle()
     val devices by viewModel.devices.collectAsStateWithLifecycle()
 
-    val micLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted -> if (granted) viewModel.startSession() }
+    val connectedDevice =
+        devices.firstOrNull { it.connected }
+
+    val micLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            if (granted) {
+                viewModel.startSession()
+            }
+        }
 
     Column(
         modifier = modifier
@@ -55,65 +65,149 @@ fun HomeScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
+
         Text(
             text = "GemGlasses",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
         )
+
         Text(
             text = "Gemini on your Ray-Ban",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        GlassesCard(registration = registration, deviceName = devices.firstOrNull()?.name)
+        GlassesCard(
+            registration = registration,
+            device = devices.firstOrNull(),
+        )
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(
+            modifier = Modifier.height(8.dp)
+        )
 
         StatusDot(status)
 
-        val running = status != AgentStatus.IDLE
+        val running =
+            status != AgentStatus.IDLE
+
         Button(
             onClick = {
+
                 if (running) {
+
                     viewModel.stopSession()
+
                 } else {
-                    val granted = ContextCompat.checkSelfPermission(
-                        context, Manifest.permission.RECORD_AUDIO,
-                    ) == PackageManager.PERMISSION_GRANTED
-                    if (granted) viewModel.startSession()
-                    else micLauncher.launch(Manifest.permission.RECORD_AUDIO)
+
+                    val granted =
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO,
+                        ) == PackageManager.PERMISSION_GRANTED
+
+                    if (granted) {
+                        viewModel.startSession()
+                    } else {
+                        micLauncher.launch(
+                            Manifest.permission.RECORD_AUDIO
+                        )
+                    }
                 }
             },
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (running) MaterialTheme.colorScheme.error
-                else MaterialTheme.colorScheme.primary,
+                containerColor =
+                    if (running) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
             ),
         ) {
-            Text(if (running) "Encerrar" else "Start Assistant")
+            Text(
+                if (running) {
+                    "Stop Assistant"
+                } else {
+                    "Start Assistant"
+                }
+            )
         }
 
+        /*
+         * Registration and physical connection are different things.
+         *
+         * A registered account may still have connected=false.
+         */
         if (registration != RegistrationState.REGISTERED) {
+
             Button(
                 onClick = viewModel::registerGlasses,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Conectar óculos (Meta AI)") }
+            ) {
+                Text("Register glasses")
+            }
+
+        } else if (connectedDevice == null) {
+
+            Button(
+                onClick = viewModel::connectGlasses,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Connect glasses")
+            }
+
+        } else {
+
+            Text(
+                text = "Glasses connected",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }
 
 @Composable
-private fun GlassesCard(registration: RegistrationState, deviceName: String?) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Glasses", style = MaterialTheme.typography.labelLarge)
+private fun GlassesCard(
+    registration: RegistrationState,
+    device: GlassesDevice?,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+
             Text(
-                text = deviceName ?: "Nenhum dispositivo",
+                text = "Glasses",
+                style = MaterialTheme.typography.labelLarge,
+            )
+
+            Text(
+                text = device?.name ?: "No device found",
                 style = MaterialTheme.typography.bodyLarge,
             )
+
             Text(
-                text = registration.label(),
+                text = when {
+
+                    device?.connected == true ->
+                        "Connected"
+
+                    registration == RegistrationState.REGISTERED ->
+                        "Registered — not connected"
+
+                    else ->
+                        registration.label()
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -122,32 +216,63 @@ private fun GlassesCard(registration: RegistrationState, deviceName: String?) {
 }
 
 @Composable
-private fun StatusDot(status: AgentStatus) {
-    val (color, label) = when (status) {
-        AgentStatus.IDLE -> Color.Gray to "Stopped"
-        AgentStatus.CONNECTING -> Color(0xFFF59E0B) to "Conectando…"
-        AgentStatus.LISTENING -> Color(0xFF22C55E) to "Ouvindo"
-        AgentStatus.RECONNECTING -> Color(0xFFF59E0B) to "Reconectando…"
-        AgentStatus.ERROR -> Color(0xFFEF4444) to "Erro"
-    }
+private fun StatusDot(
+    status: AgentStatus,
+) {
+    val (color, label) =
+        when (status) {
+
+            AgentStatus.IDLE ->
+                Color.Gray to "Stopped"
+
+            AgentStatus.CONNECTING ->
+                Color(0xFFF59E0B) to "Connecting…"
+
+            AgentStatus.LISTENING ->
+                Color(0xFF22C55E) to "Listening"
+
+            AgentStatus.RECONNECTING ->
+                Color(0xFFF59E0B) to "Reconnecting…"
+
+            AgentStatus.ERROR ->
+                Color(0xFFEF4444) to "Error"
+        }
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+
         Spacer(
-            Modifier
+            modifier = Modifier
                 .size(16.dp)
                 .clip(CircleShape)
                 .background(color),
         )
-        Text(label, color = color, fontWeight = FontWeight.Medium)
+
+        Text(
+            text = label,
+            color = color,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 
-private fun RegistrationState.label(): String = when (this) {
-    RegistrationState.REGISTERED -> "Connected to Meta AI"
-    RegistrationState.REGISTERING -> "Registrando…"
-    RegistrationState.NOT_REGISTERED -> "Não registrado"
-    RegistrationState.REVOKED -> "Registro revogado — reconecte"
-    RegistrationState.UNKNOWN -> "Status desconhecido"
-}
+private fun RegistrationState.label(): String =
+    when (this) {
+
+        RegistrationState.REGISTERED ->
+            "Registered"
+
+        RegistrationState.REGISTERING ->
+            "Registering…"
+
+        RegistrationState.NOT_REGISTERED ->
+            "Not registered"
+
+        RegistrationState.REVOKED ->
+            "Registration revoked — reconnect"
+
+        RegistrationState.UNKNOWN ->
+            "Status unknown"
+    }
