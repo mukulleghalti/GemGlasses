@@ -19,6 +19,7 @@ import com.meta.wearable.dat.camera.removeCamera
 import com.meta.wearable.dat.camera.types.PhotoData
 import com.meta.wearable.dat.camera.types.StreamConfiguration
 import com.meta.wearable.dat.camera.types.StreamState
+import com.meta.wearable.dat.camera.types.VideoFrame
 import com.meta.wearable.dat.camera.types.VideoQuality
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.selectors.AutoDeviceSelector
@@ -41,6 +42,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayOutputStream
@@ -63,10 +65,10 @@ class RealGlassesBackend @Inject constructor(
 
         private const val CAMERA_STREAM_TIMEOUT_MS = 15_000L
 
-        // Wait after STREAMING before asking the glasses for the first photo.
         private const val CAMERA_SETTLE_DELAY_MS = 1_500L
 
-        // JPEG quality used when converting MWDAT Bitmap/HEIC photos.
+        private const val CAMERA_TEST_FRAME_RATE = 24
+
         private const val JPEG_QUALITY = 90
     }
 
@@ -79,6 +81,13 @@ class RealGlassesBackend @Inject constructor(
 
     /**
      * Currently attached MWDAT camera.
+     *
+     * This is shared by:
+     *
+     * 1. The existing Gemini cameraFrames() diagnostic flow.
+     * 2. The new Camera Test screen.
+     *
+     * Only one camera should be attached to the DeviceSession at a time.
      */
     private var camera:
         com.meta.wearable.dat.camera.Camera? = null
@@ -957,14 +966,6 @@ class RealGlassesBackend @Inject constructor(
     override suspend fun requestCameraPermission():
         CameraPermission {
 
-        /*
-         * IMPORTANT:
-         *
-         * Never launch the Activity Result permission request if MWDAT
-         * already says that CAMERA is granted.
-         *
-         * This prevents the repeated permission behavior.
-         */
         val currentPermission =
             cameraPermission()
 
@@ -1015,12 +1016,6 @@ class RealGlassesBackend @Inject constructor(
                 "Meta CAMERA permission request completed: $result"
             )
 
-            /*
-             * Re-check MWDAT after the Activity Result.
-             *
-             * This makes MWDAT the source of truth instead of relying only
-             * on the Activity Result callback.
-             */
             val verifiedPermission =
                 cameraPermission()
 
@@ -1045,32 +1040,15 @@ class RealGlassesBackend @Inject constructor(
     }
 
     // =========================================================================
-    // CAMERA
+    // EXISTING GEMINI CAMERA FLOW
     // =========================================================================
 
     /**
-     * Diagnostic camera flow.
+     * Existing diagnostic/Gemini camera flow.
      *
-     * IMPORTANT:
+     * This is intentionally kept separate from the Camera Test API below.
      *
-     * This version intentionally performs ONLY ONE photo capture.
-     *
-     * The purpose is to isolate the current problem:
-     *
-     *     DeviceSession
-     *          ->
-     *     Camera attached
-     *          ->
-     *     Stream started
-     *          ->
-     *     STREAMING
-     *          ->
-     *     capturePhoto()
-     *
-     * We are deliberately NOT doing continuous captures or retries.
-     *
-     * If capturePhoto() fails here, we know the failure is inside the
-     * MWDAT photo-capture path rather than in the Gemini image pipeline.
+     * It performs one capturePhoto() and emits one JPEG.
      */
     override fun cameraFrames():
         Flow<ByteArray> = flow {
@@ -1078,10 +1056,6 @@ class RealGlassesBackend @Inject constructor(
         Log.i(TAG, "================================================")
         Log.i(TAG, "CAMERA FLOW STARTING - SINGLE PHOTO DIAGNOSTIC")
         Log.i(TAG, "================================================")
-
-        // ---------------------------------------------------------------------
-        // Ensure MWDAT DeviceSession exists before adding the camera.
-        // ---------------------------------------------------------------------
 
         var activeSession =
             session
@@ -1167,18 +1141,6 @@ class RealGlassesBackend @Inject constructor(
                 activeSession.state.value
         )
 
-        // ---------------------------------------------------------------------
-        // Permission
-        // ---------------------------------------------------------------------
-
-        /*
-         * cameraFrames() NEVER requests permission.
-         *
-         * AgentController -> GlassesManager.ensureCameraPermission()
-         * is responsible for requesting permission.
-         *
-         * Here we only verify the current MWDAT state.
-         */
         val permission =
             cameraPermission()
 
@@ -1199,10 +1161,6 @@ class RealGlassesBackend @Inject constructor(
 
             return@flow
         }
-
-        // ---------------------------------------------------------------------
-        // Add camera
-        // ---------------------------------------------------------------------
 
         val activeCamera =
             try {
@@ -1261,10 +1219,6 @@ class RealGlassesBackend @Inject constructor(
 
         try {
 
-            // -----------------------------------------------------------------
-            // Start stream
-            // -----------------------------------------------------------------
-
             Log.i(
                 TAG,
                 "Starting MWDAT camera stream"
@@ -1305,10 +1259,6 @@ class RealGlassesBackend @Inject constructor(
                 TAG,
                 "camera.stream.start() returned successfully"
             )
-
-            // -----------------------------------------------------------------
-            // Wait for STREAMING
-            // -----------------------------------------------------------------
 
             Log.i(
                 TAG,
@@ -1356,10 +1306,6 @@ class RealGlassesBackend @Inject constructor(
             Log.i(TAG, "Ready for capturePhoto()")
             Log.i(TAG, "================================================")
 
-            // -----------------------------------------------------------------
-            // Camera settle delay
-            // -----------------------------------------------------------------
-
             Log.i(
                 TAG,
                 "Waiting ${CAMERA_SETTLE_DELAY_MS}ms for camera pipeline to settle"
@@ -1373,10 +1319,6 @@ class RealGlassesBackend @Inject constructor(
                 TAG,
                 "Camera settle delay complete"
             )
-
-            // -----------------------------------------------------------------
-            // SINGLE PHOTO CAPTURE
-            // -----------------------------------------------------------------
 
             Log.i(TAG, "================================================")
             Log.i(TAG, "SINGLE PHOTO CAPTURE TEST")
@@ -1472,10 +1414,6 @@ class RealGlassesBackend @Inject constructor(
                     )
                     Log.i(TAG, "================================================")
 
-                    // ---------------------------------------------------------
-                    // Convert photo to JPEG
-                    // ---------------------------------------------------------
-
                     val jpegBytes =
                         photoDataToJpeg(
                             photoData
@@ -1533,13 +1471,6 @@ class RealGlassesBackend @Inject constructor(
                 Log.e(TAG, "================================================")
             }
 
-            // -----------------------------------------------------------------
-            // Diagnostic test intentionally ends here.
-            //
-            // We do NOT retry capturePhoto().
-            // We do NOT continuously capture photos.
-            // -----------------------------------------------------------------
-
             Log.i(TAG, "================================================")
             Log.i(
                 TAG,
@@ -1568,20 +1499,535 @@ class RealGlassesBackend @Inject constructor(
     }
 
     // =========================================================================
+    // NEW CAMERA TEST - LIVE VIDEO STREAM
+    // =========================================================================
+
+    /**
+     * Live camera stream specifically for the Camera Test screen.
+     *
+     * IMPORTANT:
+     *
+     * This does NOT:
+     *
+     * - start Gemini
+     * - start MicStreamer
+     * - route audio
+     * - start Bluetooth SCO
+     * - send frames to Gemini
+     *
+     * It only opens the MWDAT camera and exposes VideoFrame objects.
+     *
+     * The MWDAT 0.9.0 AAR confirms that:
+     *
+     * Stream.videoStream
+     *     -> Flow<VideoFrame>
+     *
+     * and that when compressVideo = false the SDK emits decoded frames.
+     */
+    fun cameraTestFrames():
+        Flow<VideoFrame> = flow {
+
+        Log.i(TAG, "================================================")
+        Log.i(TAG, "CAMERA TEST - LIVE STREAM STARTING")
+        Log.i(TAG, "================================================")
+
+        var activeSession =
+            session
+
+        // ---------------------------------------------------------------------
+        // Ensure DeviceSession
+        // ---------------------------------------------------------------------
+
+        if (
+            activeSession == null ||
+            activeSession.state.value !=
+                DeviceSessionState.STARTED
+        ) {
+
+            Log.i(
+                TAG,
+                "CAMERA TEST: DeviceSession unavailable; connecting"
+            )
+
+            val connected =
+                try {
+                    connect()
+                } catch (e: Exception) {
+                    Log.e(
+                        TAG,
+                        "CAMERA TEST: connect() failed",
+                        e
+                    )
+                    false
+                }
+
+            if (!connected) {
+
+                Log.e(
+                    TAG,
+                    "CAMERA TEST ABORTED: Could not connect"
+                )
+
+                return@flow
+            }
+
+            activeSession =
+                session
+        }
+
+        if (activeSession == null) {
+
+            Log.e(
+                TAG,
+                "CAMERA TEST ABORTED: session is NULL"
+            )
+
+            return@flow
+        }
+
+        if (
+            activeSession.state.value !=
+                DeviceSessionState.STARTED
+        ) {
+
+            Log.e(
+                TAG,
+                "CAMERA TEST ABORTED: session not STARTED"
+            )
+
+            return@flow
+        }
+
+        // ---------------------------------------------------------------------
+        // Permission
+        // ---------------------------------------------------------------------
+
+        val permission =
+            cameraPermission()
+
+        Log.i(
+            TAG,
+            "CAMERA TEST permission = $permission"
+        )
+
+        if (
+            permission !=
+                CameraPermission.GRANTED
+        ) {
+
+            Log.e(
+                TAG,
+                "CAMERA TEST ABORTED: camera permission not granted"
+            )
+
+            return@flow
+        }
+
+        // ---------------------------------------------------------------------
+        // Prevent accidentally attaching two cameras.
+        // ---------------------------------------------------------------------
+
+        if (camera != null) {
+
+            Log.w(
+                TAG,
+                "CAMERA TEST: Existing camera found; stopping it first"
+            )
+
+            stopCameraIfNeeded()
+        }
+
+        // ---------------------------------------------------------------------
+        // Add camera
+        // ---------------------------------------------------------------------
+
+        val activeCamera =
+            try {
+
+                Log.i(
+                    TAG,
+                    "CAMERA TEST: Adding camera"
+                )
+
+                /*
+                 * This is the important difference from the old diagnostic
+                 * flow.
+                 *
+                 * compressVideo = false
+                 *
+                 * The MWDAT 0.9.0 AAR exposes decoded VideoFrame objects
+                 * through videoStream in this mode.
+                 */
+                activeSession.addCamera(
+                    StreamConfiguration(
+                        videoQuality =
+                            VideoQuality.MEDIUM,
+                        frameRate =
+                            CAMERA_TEST_FRAME_RATE,
+                        compressVideo = false,
+                    )
+                ).getOrElse { error ->
+
+                    Log.e(
+                        TAG,
+                        "CAMERA TEST addCamera() FAILED: $error"
+                    )
+
+                    return@flow
+                }
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "CAMERA TEST addCamera() threw",
+                    e
+                )
+
+                return@flow
+            }
+
+        camera =
+            activeCamera
+
+        Log.i(
+            TAG,
+            "CAMERA TEST: camera added"
+        )
+
+        // ---------------------------------------------------------------------
+        // Start stream
+        // ---------------------------------------------------------------------
+
+        try {
+
+            Log.i(
+                TAG,
+                "CAMERA TEST: starting stream"
+            )
+
+            val startResult =
+                activeCamera.stream.start()
+
+            if (!startResult.isSuccess) {
+
+                Log.e(
+                    TAG,
+                    "CAMERA TEST: stream.start() failed: " +
+                        startResult.errorOrNull()
+                )
+
+                return@flow
+            }
+
+            Log.i(
+                TAG,
+                "CAMERA TEST: stream.start() returned successfully"
+            )
+
+            // -----------------------------------------------------------------
+            // Wait for STREAMING
+            // -----------------------------------------------------------------
+
+            val streaming =
+                withTimeoutOrNull(
+                    CAMERA_STREAM_TIMEOUT_MS
+                ) {
+
+                    activeCamera.stream.state.first { state ->
+
+                        Log.i(
+                            TAG,
+                            "CAMERA TEST STREAM STATE -> $state"
+                        )
+
+                        state ==
+                            StreamState.STREAMING
+                    }
+
+                    true
+
+                } ?: false
+
+            if (!streaming) {
+
+                Log.e(
+                    TAG,
+                    "CAMERA TEST: stream never reached STREAMING"
+                )
+
+                return@flow
+            }
+
+            Log.i(TAG, "================================================")
+            Log.i(TAG, "CAMERA TEST: STREAMING")
+            Log.i(
+                TAG,
+                "compressVideo = false"
+            )
+            Log.i(TAG, "Waiting for VideoFrame objects...")
+            Log.i(TAG, "================================================")
+
+            // -----------------------------------------------------------------
+            // Expose live VideoFrame stream
+            // -----------------------------------------------------------------
+
+            activeCamera.stream.videoStream.collect { frame ->
+
+                if (frame.isCodecConfig) {
+
+                    Log.d(
+                        TAG,
+                        "CAMERA TEST: codec config frame ignored"
+                    )
+
+                    return@collect
+                }
+
+                Log.d(
+                    TAG,
+                    "CAMERA TEST FRAME: " +
+                        "${frame.width}x${frame.height}, " +
+                        "bytes=${frame.buffer.remaining()}, " +
+                        "compressed=${frame.isCompressed}, " +
+                        "codecConfig=${frame.isCodecConfig}"
+                )
+
+                emit(frame)
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "CAMERA TEST live stream failed",
+                e
+            )
+
+        } finally {
+
+            Log.i(
+                TAG,
+                "CAMERA TEST live stream ending"
+            )
+
+            stopCameraIfNeeded()
+
+            Log.i(
+                TAG,
+                "CAMERA TEST camera cleanup complete"
+            )
+        }
+    }
+
+    // =========================================================================
+    // NEW CAMERA TEST - PHOTO CAPTURE
+    // =========================================================================
+
+    /**
+     * Captures a photo using the SAME camera currently being used by
+     * cameraTestFrames().
+     *
+     * This is deliberately separate from cameraFrames().
+     *
+     * The Camera Test screen can therefore:
+     *
+     *     cameraTestFrames()
+     *             +
+     *     captureCameraTestPhoto()
+     *
+     * without starting Gemini.
+     */
+    suspend fun captureCameraTestPhoto():
+        Result<ByteArray> {
+
+        Log.i(TAG, "================================================")
+        Log.i(TAG, "CAMERA TEST PHOTO CAPTURE")
+        Log.i(TAG, "================================================")
+
+        val activeCamera =
+            camera
+
+        if (activeCamera == null) {
+
+            val message =
+                "No active camera. Start the camera stream first."
+
+            Log.e(
+                TAG,
+                message
+            )
+
+            return Result.failure(
+                IllegalStateException(message)
+            )
+        }
+
+        val currentState =
+            activeCamera.stream.state.value
+
+        Log.i(
+            TAG,
+            "Camera stream state before capture = $currentState"
+        )
+
+        if (
+            currentState !=
+                StreamState.STREAMING
+        ) {
+
+            val message =
+                "Camera stream is not STREAMING: $currentState"
+
+            Log.e(
+                TAG,
+                message
+            )
+
+            return Result.failure(
+                IllegalStateException(message)
+            )
+        }
+
+        try {
+
+            Log.i(
+                TAG,
+                "Calling capturePhoto() from Camera Test"
+            )
+
+            val captureResult =
+                activeCamera.stream.capturePhoto()
+
+            Log.i(
+                TAG,
+                "Camera Test capturePhoto() returned"
+            )
+
+            Log.i(
+                TAG,
+                "Capture result = $captureResult"
+            )
+
+            val photoData =
+                captureResult.getOrNull()
+
+            if (photoData == null) {
+
+                val captureError =
+                    captureResult.errorOrNull()
+
+                val captureException =
+                    captureResult.exceptionOrNull()
+
+                Log.e(
+                    TAG,
+                    "CAMERA TEST PHOTO FAILED"
+                )
+
+                Log.e(
+                    TAG,
+                    "Capture error = $captureError"
+                )
+
+                Log.e(
+                    TAG,
+                    "Capture exception = $captureException"
+                )
+
+                if (captureException != null) {
+
+                    Log.e(
+                        TAG,
+                        "Capture exception details",
+                        captureException
+                    )
+                }
+
+                return Result.failure(
+                    captureException
+                        ?: IllegalStateException(
+                            "capturePhoto failed: $captureError"
+                        )
+                )
+            }
+
+            Log.i(
+                TAG,
+                "CAMERA TEST PHOTO CAPTURED"
+            )
+
+            Log.i(
+                TAG,
+                "PhotoData type = ${photoData::class.java.name}"
+            )
+
+            val jpeg =
+                photoDataToJpeg(
+                    photoData
+                )
+
+            if (
+                jpeg == null ||
+                jpeg.isEmpty()
+            ) {
+
+                val message =
+                    "Photo captured but JPEG conversion failed"
+
+                Log.e(
+                    TAG,
+                    message
+                )
+
+                return Result.failure(
+                    IllegalStateException(message)
+                )
+            }
+
+            Log.i(
+                TAG,
+                "CAMERA TEST PHOTO JPEG SIZE = ${jpeg.size} bytes"
+            )
+
+            return Result.success(
+                jpeg
+            )
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "CAMERA TEST capturePhoto() threw exception",
+                e
+            )
+
+            return Result.failure(e)
+        }
+    }
+
+    /**
+     * Explicitly stops the Camera Test camera.
+     *
+     * This is public because the Camera Test ViewModel should be able to
+     * stop the live stream when leaving the screen.
+     */
+    fun stopCameraTest() {
+
+        Log.i(
+            TAG,
+            "Stopping Camera Test"
+        )
+
+        stopCameraIfNeeded()
+    }
+
+    // =========================================================================
     // PHOTO CONVERSION
     // =========================================================================
 
     /**
-     * Converts MWDAT PhotoData into JPEG bytes suitable for the Gemini
-     * image input path.
-     *
-     * MWDAT 0.9.0 exposes:
-     *
-     * PhotoData.Bitmap
-     *     -> bitmap
-     *
-     * PhotoData.HEIC
-     *     -> data: ByteBuffer
+     * Converts MWDAT PhotoData into JPEG bytes.
      */
     private fun photoDataToJpeg(
         photoData: PhotoData,
@@ -1709,11 +2155,6 @@ class RealGlassesBackend @Inject constructor(
 
     /**
      * Convert MWDAT's HEIC ByteBuffer to JPEG.
-     *
-     * Android 11+ exposes ImageDecoder.createSource(ByteBuffer),
-     * which lets us decode the HEIC directly into a Bitmap.
-     *
-     * For older Android versions we attempt BitmapFactory as a fallback.
      */
     private fun heicToJpeg(
         buffer: ByteBuffer,
@@ -1835,11 +2276,7 @@ class RealGlassesBackend @Inject constructor(
     /**
      * Stops and removes the current MWDAT camera.
      *
-     * IMPORTANT:
-     * We do NOT stop the DeviceSession here.
-     *
-     * The DeviceSession must remain STARTED so the next vision burst can
-     * simply attach another camera.
+     * We intentionally keep the DeviceSession alive.
      */
     private fun stopCameraIfNeeded() {
 
