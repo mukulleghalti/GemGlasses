@@ -42,6 +42,7 @@ import com.meta.wearable.dat.camera.types.VideoFrame
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun CameraTestScreen(
@@ -658,7 +659,7 @@ private class H265SurfaceDecoder {
  * on a particular lifecycle-compose extension version.
  */
 @Composable
-private fun <T> CameraTestViewModel.collectAsStateWithLifecycleCompat(
+private fun <T> CameraTestViewModel.collectAsStateWithLifecycle(
     selector: CameraTestViewModel.() -> kotlinx.coroutines.flow.StateFlow<T> =
         { uiState },
 ): androidx.compose.runtime.State<T> {
