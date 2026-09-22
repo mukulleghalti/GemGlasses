@@ -68,13 +68,12 @@ class RealGlassesBackend @Inject constructor(
 
     override val devices: Flow<List<GlassesDevice>> =
         _devices.asStateFlow()
+    @Volatile
+    private var initialized = false
 
-    init {
-        Log.i(TAG, "RealGlassesBackend created")
-
-        observeRegistrationState()
-        observeDevices()
-    }
+init {
+    Log.i(TAG, "RealGlassesBackend created")
+}
 
     // =========================================================================
     // ACTIVITY
@@ -103,43 +102,41 @@ class RealGlassesBackend @Inject constructor(
 
     override fun initialize() {
 
+    if (initialized) {
         Log.i(
             TAG,
-            "================================================"
+            "Glasses backend already initialized; ignoring duplicate call"
         )
+        return
+    }
 
-        Log.i(
-            TAG,
-            "INITIALIZING MWDAT"
-        )
+    initialized = true
 
-        Log.i(
-            TAG,
-            "================================================"
-        )
+    Log.i(
+        TAG,
+        "================================================"
+    )
 
-        logBluetoothPermissions()
+    Log.i(
+        TAG,
+        "INITIALIZING GLASSES BACKEND"
+    )
 
-        try {
+    Log.i(
+        TAG,
+        "MWDAT SDK is initialized by GemGlassesApp"
+    )
 
-            Wearables.initialize(context)
+    Log.i(
+        TAG,
+        "================================================"
+    )
 
-            Log.i(
-                TAG,
-                "Wearables.initialize() SUCCESS"
-            )
+    logBluetoothPermissions()
 
-        } catch (e: Exception) {
-
-            Log.e(
-                TAG,
-                "Wearables.initialize() FAILED",
-                e
-            )
-
-            _registrationState.value =
-                RegistrationState.UNKNOWN
-        }
+    observeRegistrationState()
+    observeDevices()
+}
     }
 
     private fun logBluetoothPermissions() {
