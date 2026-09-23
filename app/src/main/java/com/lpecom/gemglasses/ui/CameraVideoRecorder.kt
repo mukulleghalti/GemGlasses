@@ -127,8 +127,11 @@ class CameraVideoRecorder @Inject constructor(
              * EXPLICIT CODEC CONFIG
              * -------------------------------------------------
              *
-             * If MWDAT ever supplies a dedicated codec config
-             * frame, keep supporting it.
+             * MWDAT normally does NOT provide a separate
+             * codec-config frame for this camera stream.
+             *
+             * Keep support here anyway in case a future SDK
+             * provides one.
              */
 
             if (frame.isCodecConfig) {
@@ -156,76 +159,101 @@ class CameraVideoRecorder @Inject constructor(
              * -------------------------------------------------
              * PARSE ACCESS UNIT
              * -------------------------------------------------
+             *
+             * Ray-Ban Meta compressed camera frames are HEVC
+             * Annex-B access units.
+             *
+             * IMPORTANT:
+             *
+             * Do NOT convert these samples to length-prefixed
+             * NAL units before passing them to MediaMuxer.
+             *
+             * MediaMuxer expects the Annex-B representation
+             * for this Android/MWDAT camera stream.
              */
 
-            val nalUnits =
+            val annexBNalUnits =
                 splitAnnexB(bytes)
 
-            if (nalUnits.isEmpty()) {
-
-                /*
-                 * Some encoders can provide length-prefixed
-                 * HEVC instead of Annex-B.
-                 *
-                 * Try that format as a fallback.
-                 */
-
-                val lengthPrefixedUnits =
-                    splitLengthPrefixed(bytes)
-
-                if (lengthPrefixedUnits.isNotEmpty()) {
-
-                    if (!loggedNalFormat) {
-
-                        Log.i(
-                            TAG,
-                            "Detected length-prefixed HEVC access units",
-                        )
-
-                        loggedNalFormat = true
-                    }
-
-                    processNalUnits(
-                        frame,
-                        lengthPrefixedUnits,
-                    )
-
-                    return
-                }
+            if (annexBNalUnits.isNotEmpty()) {
 
                 if (!loggedNalFormat) {
 
-                    Log.w(
+                    Log.i(
                         TAG,
-                        "Could not parse HEVC frame " +
+                        "Detected Annex-B HEVC access units " +
                             "bytes=${bytes.size} " +
-                            "firstBytes=${hexPrefix(bytes)}",
+                            "nalCount=${annexBNalUnits.size}",
                     )
+
+                    logNalTypes(annexBNalUnits)
 
                     loggedNalFormat = true
                 }
+
+                processNalUnits(
+                    frame = frame,
+                    nalUnits = annexBNalUnits,
+                    originalAccessUnit = bytes,
+                )
+
+                return
+            }
+
+            /*
+             * -------------------------------------------------
+             * LENGTH-PREFIXED FALLBACK
+             * -------------------------------------------------
+             *
+             * This is only a defensive fallback.
+             *
+             * MediaMuxer still needs Annex-B samples, so if
+             * the source happens to arrive length-prefixed,
+             * convert it BACK to Annex-B before writing.
+             */
+
+            val lengthPrefixedUnits =
+                splitLengthPrefixed(bytes)
+
+            if (lengthPrefixedUnits.isNotEmpty()) {
+
+                if (!loggedNalFormat) {
+
+                    Log.i(
+                        TAG,
+                        "Detected length-prefixed HEVC access units",
+                    )
+
+                    logNalTypes(lengthPrefixedUnits)
+
+                    loggedNalFormat = true
+                }
+
+                val annexBAccessUnit =
+                    convertNalUnitsToAnnexB(
+                        lengthPrefixedUnits,
+                    )
+
+                processNalUnits(
+                    frame = frame,
+                    nalUnits = lengthPrefixedUnits,
+                    originalAccessUnit = annexBAccessUnit,
+                )
 
                 return
             }
 
             if (!loggedNalFormat) {
 
-                Log.i(
+                Log.w(
                     TAG,
-                    "Detected Annex-B HEVC access units " +
+                    "Could not parse HEVC frame " +
                         "bytes=${bytes.size} " +
-                        "nalCount=${nalUnits.size}",
+                        "firstBytes=${hexPrefix(bytes)}",
                 )
-
-                logNalTypes(nalUnits)
 
                 loggedNalFormat = true
             }
-
-            processNalUnits(
-                frame,
-                nalUnits,
-            )
 
         } catch (e: Exception) {
 
@@ -240,6 +268,7 @@ class CameraVideoRecorder @Inject constructor(
     private fun processNalUnits(
         frame: VideoFrame,
         nalUnits: List<ByteArray>,
+        originalAccessUnit: ByteArray,
     ) {
 
         if (nalUnits.isEmpty()) {
@@ -251,10 +280,13 @@ class CameraVideoRecorder @Inject constructor(
          * EXTRACT VPS / SPS / PPS
          * -------------------------------------------------
          *
-         * We do NOT rely on frame.isCodecConfig.
+         * MWDAT sends VPS/SPS/PPS inline in the first keyframe.
          *
-         * HEVC parameter sets can be present inside the
-         * normal access units.
+         * HEVC:
+         *
+         * 32 = VPS
+         * 33 = SPS
+         * 34 = PPS
          */
 
         val parameterSets =
@@ -295,7 +327,7 @@ class CameraVideoRecorder @Inject constructor(
 
         /*
          * -------------------------------------------------
-         * WE NEED PARAMETER SETS + KEYFRAME
+         * WAIT FOR PARAMETER SETS + KEYFRAME
          * -------------------------------------------------
          */
 
@@ -358,14 +390,21 @@ class CameraVideoRecorder @Inject constructor(
          * -------------------------------------------------
          * WRITE ACCESS UNIT
          * -------------------------------------------------
+         *
+         * IMPORTANT:
+         *
+         * Do NOT use:
+         *
+         * convertAccessUnitToLengthPrefixed(...)
+         *
+         * here.
+         *
+         * The Meta glasses HEVC stream is Annex-B and the
+         * Annex-B access unit should be passed directly to
+         * MediaMuxer.
          */
 
-        val sample =
-            convertAccessUnitToLengthPrefixed(
-                nalUnits,
-            )
-
-        if (sample.isEmpty()) {
+        if (originalAccessUnit.isEmpty()) {
             return
         }
 
@@ -376,7 +415,7 @@ class CameraVideoRecorder @Inject constructor(
 
         val buffer =
             ByteBuffer.wrap(
-                sample,
+                originalAccessUnit,
             )
 
         val flags =
@@ -390,7 +429,7 @@ class CameraVideoRecorder @Inject constructor(
             MediaCodec.BufferInfo().apply {
                 set(
                     0,
-                    sample.size,
+                    originalAccessUnit.size,
                     normalizedTimestamp,
                     flags,
                 )
@@ -418,7 +457,7 @@ class CameraVideoRecorder @Inject constructor(
                     TAG,
                     "HEVC sample written " +
                         "frame=$writtenFrameCount " +
-                        "bytes=${sample.size} " +
+                        "bytes=${originalAccessUnit.size} " +
                         "timestampUs=${frame.presentationTimeUs} " +
                         "keyFrame=$keyFrame",
                 )
@@ -456,10 +495,14 @@ class CameraVideoRecorder @Inject constructor(
             )
 
         /*
-         * MediaMuxer expects HEVC codec initialization data
-         * through csd-0.
+         * Android requires HEVC VPS + SPS + PPS as HEVC
+         * codec-specific data in csd-0.
          *
-         * The extracted VPS/SPS/PPS are kept together here.
+         * The data is stored as Annex-B with:
+         *
+         * 00 00 00 01 VPS
+         * 00 00 00 01 SPS
+         * 00 00 00 01 PPS
          */
 
         format.setByteBuffer(
@@ -554,6 +597,9 @@ class CameraVideoRecorder @Inject constructor(
                 "uri=$uri",
         )
 
+        var muxerFinalized =
+            false
+
         try {
 
             if (
@@ -562,6 +608,9 @@ class CameraVideoRecorder @Inject constructor(
             ) {
 
                 currentMuxer.stop()
+
+                muxerFinalized = true
+
                 currentMuxer.release()
 
             } else {
@@ -576,9 +625,24 @@ class CameraVideoRecorder @Inject constructor(
                 "Failed to finalize video",
                 e,
             )
+
+            try {
+                currentMuxer?.release()
+            } catch (_: Exception) {
+            }
         }
 
-        if (uri != null) {
+        /*
+         * Only publish the MediaStore item if MediaMuxer was
+         * successfully stopped.
+         *
+         * If muxer.stop() failed, the MP4 is not trustworthy.
+         */
+
+        if (
+            uri != null &&
+            muxerFinalized
+        ) {
 
             try {
 
@@ -610,6 +674,40 @@ class CameraVideoRecorder @Inject constructor(
                     e,
                 )
             }
+
+        } else if (
+            uri != null &&
+            started
+        ) {
+
+            /*
+             * Muxer failed to finalize.
+             *
+             * Delete the broken pending item instead of
+             * leaving an invalid video in Gallery.
+             */
+
+            try {
+
+                context.contentResolver.delete(
+                    uri,
+                    null,
+                    null,
+                )
+
+                Log.w(
+                    TAG,
+                    "Deleted video because muxer finalization failed",
+                )
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Failed to delete invalid video",
+                    e,
+                )
+            }
         }
 
         val durationMs =
@@ -633,7 +731,7 @@ class CameraVideoRecorder @Inject constructor(
                 "duration=${durationMs}ms " +
                 "receivedFrames=$receivedFrameCount " +
                 "writtenFrames=$writtenFrameCount " +
-                "uri=$uri",
+                "uri=${if (muxerFinalized) uri else null}",
         )
 
         started = false
@@ -649,7 +747,11 @@ class CameraVideoRecorder @Inject constructor(
         receivedFrameCount = 0L
         writtenFrameCount = 0L
 
-        return uri
+        return if (muxerFinalized) {
+            uri
+        } else {
+            null
+        }
     }
 
     fun cancel() {
@@ -705,6 +807,8 @@ class CameraVideoRecorder @Inject constructor(
 
         receivedFrameCount = 0L
         writtenFrameCount = 0L
+
+        loggedNalFormat = false
     }
 
     private fun createMuxer(): MuxerCreationResult {
@@ -981,7 +1085,8 @@ class CameraVideoRecorder @Inject constructor(
             )
 
             offset +=
-                4 + size
+                4 +
+                    size
         }
 
         return if (
@@ -1013,6 +1118,17 @@ class CameraVideoRecorder @Inject constructor(
                 (
                     nal[0].toInt() shr 1
                 ) and 0x3F
+
+            /*
+             * HEVC IRAP pictures:
+             *
+             * 16 = BLA_W_LP
+             * 17 = BLA_W_RADL
+             * 18 = BLA_N_LP
+             * 19 = IDR_W_RADL
+             * 20 = IDR_N_LP
+             * 21 = CRA_NUT
+             */
 
             nalType in 16..21
         }
@@ -1084,15 +1200,15 @@ class CameraVideoRecorder @Inject constructor(
         }
 
         /*
-         * Store parameter sets as Annex-B.
-         *
-         * This is the form Android HEVC MediaFormat commonly
-         * accepts for csd-0.
+         * Android MediaFormat expects HEVC codec-specific
+         * data in csd-0 as VPS + SPS + PPS, each beginning
+         * with a 00 00 00 01 start code.
          */
 
         var totalSize = 0
 
         for (nal in parameterSets) {
+
             totalSize +=
                 4 +
                     nal.size
@@ -1135,7 +1251,20 @@ class CameraVideoRecorder @Inject constructor(
         return result
     }
 
-    private fun convertAccessUnitToLengthPrefixed(
+    /*
+     * ---------------------------------------------------------
+     * Convert length-prefixed NALs back to Annex-B
+     * ---------------------------------------------------------
+     *
+     * This is only used if a future MWDAT implementation
+     * supplies length-prefixed data.
+     *
+     * The normal Ray-Ban Meta stream should take the
+     * originalAccessUnit path and therefore preserve the
+     * original bytes untouched.
+     */
+
+    private fun convertNalUnitsToAnnexB(
         nalUnits: List<ByteArray>,
     ): ByteArray {
 
@@ -1156,44 +1285,29 @@ class CameraVideoRecorder @Inject constructor(
 
         for (nal in nalUnits) {
 
-            val size =
-                nal.size
-
             output[offset] =
-                (
-                    (size shr 24) and
-                        0xFF
-                    ).toByte()
+                0
 
             output[offset + 1] =
-                (
-                    (size shr 16) and
-                        0xFF
-                    ).toByte()
+                0
 
             output[offset + 2] =
-                (
-                    (size shr 8) and
-                        0xFF
-                    ).toByte()
+                0
 
             output[offset + 3] =
-                (
-                    size and
-                        0xFF
-                    ).toByte()
+                1
 
             System.arraycopy(
                 nal,
                 0,
                 output,
                 offset + 4,
-                size,
+                nal.size,
             )
 
             offset +=
                 4 +
-                    size
+                    nal.size
         }
 
         return output
