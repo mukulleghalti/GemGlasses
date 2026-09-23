@@ -1,6 +1,7 @@
 package com.lpecom.gemglasses.ui
 
 import android.graphics.BitmapFactory
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lpecom.gemglasses.glasses.real.RealGlassesBackend
@@ -58,11 +59,20 @@ class CameraTestViewModel @Inject constructor(
 
     private var recordingTimerJob: Job? = null
 
+    private var totalFrameCount = 0L
+    private var recordingFrameCount = 0L
+
     fun startPreview() {
 
         if (previewJob?.isActive == true) {
+            Log.d(TAG, "startPreview ignored - preview already active")
             return
         }
+
+        Log.i(TAG, "Starting camera preview")
+
+        totalFrameCount = 0L
+        recordingFrameCount = 0L
 
         _uiState.value =
             _uiState.value.copy(
@@ -78,6 +88,33 @@ class CameraTestViewModel @Inject constructor(
 
                     backend.cameraTestFrames()
                         .collect { frame ->
+
+                            totalFrameCount++
+
+                            if (
+                                totalFrameCount == 1L
+                            ) {
+                                Log.i(
+                                    TAG,
+                                    "FIRST CAMERA FRAME received " +
+                                        "size=${frame.buffer.remaining()} " +
+                                        "resolution=${frame.width}x${frame.height} " +
+                                        "timestampUs=${frame.presentationTimeUs} " +
+                                        "compressed=${frame.isCompressed} " +
+                                        "codecConfig=${frame.isCodecConfig}",
+                                )
+                            }
+
+                            if (
+                                frame.isCodecConfig
+                            ) {
+                                Log.d(
+                                    TAG,
+                                    "Codec config frame received " +
+                                        "size=${frame.buffer.remaining()} " +
+                                        "timestampUs=${frame.presentationTimeUs}",
+                                )
+                            }
 
                             if (!frame.isCodecConfig) {
 
@@ -103,11 +140,69 @@ class CameraTestViewModel @Inject constructor(
                             if (
                                 _uiState.value.recording
                             ) {
-                                videoRecorder.writeFrame(frame)
+
+                                recordingFrameCount++
+
+                                if (
+                                    recordingFrameCount == 1L
+                                ) {
+                                    Log.i(
+                                        TAG,
+                                        "FIRST RECORDING FRAME -> recorder " +
+                                            "size=${frame.buffer.remaining()} " +
+                                            "resolution=${frame.width}x${frame.height} " +
+                                            "timestampUs=${frame.presentationTimeUs} " +
+                                            "compressed=${frame.isCompressed} " +
+                                            "codecConfig=${frame.isCodecConfig}",
+                                    )
+                                }
+
+                                if (
+                                    recordingFrameCount % 30L == 0L
+                                ) {
+                                    Log.i(
+                                        TAG,
+                                        "Recording frame #$recordingFrameCount " +
+                                            "totalFrame=$totalFrameCount " +
+                                            "size=${frame.buffer.remaining()} " +
+                                            "timestampUs=${frame.presentationTimeUs} " +
+                                            "codecConfig=${frame.isCodecConfig}",
+                                    )
+                                }
+
+                                try {
+
+                                    videoRecorder.writeFrame(frame)
+
+                                } catch (e: Exception) {
+
+                                    Log.e(
+                                        TAG,
+                                        "videoRecorder.writeFrame() FAILED " +
+                                            "at recordingFrame=$recordingFrameCount",
+                                        e,
+                                    )
+
+                                    _uiState.value =
+                                        _uiState.value.copy(
+                                            error =
+                                                "Recorder frame error: ${
+                                                    e.message
+                                                        ?: e::class.java.simpleName
+                                                }",
+                                        )
+                                }
                             }
 
                             _frames.emit(frame)
                         }
+
+                    Log.i(
+                        TAG,
+                        "cameraTestFrames() flow completed " +
+                            "totalFrames=$totalFrameCount " +
+                            "recordingFrames=$recordingFrameCount",
+                    )
 
                     if (
                         _uiState.value.recording
@@ -125,9 +220,20 @@ class CameraTestViewModel @Inject constructor(
                     e: kotlinx.coroutines.CancellationException
                 ) {
 
+                    Log.d(
+                        TAG,
+                        "Camera preview coroutine cancelled",
+                    )
+
                     throw e
 
                 } catch (e: Exception) {
+
+                    Log.e(
+                        TAG,
+                        "Camera preview failed",
+                        e,
+                    )
 
                     if (
                         _uiState.value.recording
@@ -163,6 +269,8 @@ class CameraTestViewModel @Inject constructor(
             return
         }
 
+        Log.i(TAG, "Capture photo requested")
+
         viewModelScope.launch {
 
             _uiState.value =
@@ -188,6 +296,11 @@ class CameraTestViewModel @Inject constructor(
 
                         if (bitmap == null) {
 
+                            Log.e(
+                                TAG,
+                                "Photo captured but JPEG decode failed",
+                            )
+
                             _uiState.value =
                                 _uiState.value.copy(
                                     capturing = false,
@@ -196,6 +309,12 @@ class CameraTestViewModel @Inject constructor(
                                 )
 
                         } else {
+
+                            Log.i(
+                                TAG,
+                                "Photo captured successfully " +
+                                    "bytes=${jpeg.size}",
+                            )
 
                             _uiState.value =
                                 _uiState.value.copy(
@@ -208,6 +327,12 @@ class CameraTestViewModel @Inject constructor(
                     }
                     .onFailure { error ->
 
+                        Log.e(
+                            TAG,
+                            "Photo capture failed",
+                            error,
+                        )
+
                         _uiState.value =
                             _uiState.value.copy(
                                 capturing = false,
@@ -219,6 +344,12 @@ class CameraTestViewModel @Inject constructor(
                     }
 
             } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Photo capture threw exception",
+                    e,
+                )
 
                 _uiState.value =
                     _uiState.value.copy(
@@ -235,18 +366,56 @@ class CameraTestViewModel @Inject constructor(
     fun startRecording() {
 
         if (_uiState.value.recording) {
+            Log.d(TAG, "startRecording ignored - already recording")
             return
         }
 
         if (!_uiState.value.streaming) {
+            Log.w(
+                TAG,
+                "startRecording ignored - camera is not streaming",
+            )
             return
         }
 
         if (_uiState.value.capturing) {
+            Log.w(
+                TAG,
+                "startRecording ignored - photo capture in progress",
+            )
             return
         }
 
-        videoRecorder.start()
+        Log.i(
+            TAG,
+            "Starting video recording " +
+                "totalFramesBeforeRecording=$totalFrameCount",
+        )
+
+        recordingFrameCount = 0L
+
+        try {
+
+            videoRecorder.start()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "videoRecorder.start() FAILED",
+                e,
+            )
+
+            _uiState.value =
+                _uiState.value.copy(
+                    error =
+                        e.message
+                            ?: e::class.java.simpleName,
+                    status = "Recording failed",
+                )
+
+            return
+        }
 
         recordingStartTimeMs =
             System.currentTimeMillis()
@@ -259,6 +428,11 @@ class CameraTestViewModel @Inject constructor(
                 error = null,
                 status = "Recording — 00:00",
             )
+
+        Log.i(
+            TAG,
+            "Recording state active; waiting for camera frames",
+        )
 
         recordingTimerJob =
             viewModelScope.launch {
@@ -286,13 +460,43 @@ class CameraTestViewModel @Inject constructor(
     fun stopRecording() {
 
         if (!_uiState.value.recording) {
+            Log.d(TAG, "stopRecording ignored - not recording")
             return
         }
+
+        val elapsed =
+            System.currentTimeMillis() -
+                recordingStartTimeMs
+
+        Log.i(
+            TAG,
+            "Stopping video recording " +
+                "elapsedMs=$elapsed " +
+                "recordingFrames=$recordingFrameCount " +
+                "totalFrames=$totalFrameCount " +
+                "recorderActive=${videoRecorder.isRecording()}",
+        )
 
         stopRecordingTimer()
 
         val uri =
-            videoRecorder.stop()
+            try {
+                videoRecorder.stop()
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "videoRecorder.stop() FAILED",
+                    e,
+                )
+
+                null
+            }
+
+        Log.i(
+            TAG,
+            "videoRecorder.stop() returned uri=$uri",
+        )
 
         _uiState.value =
             _uiState.value.copy(
@@ -315,6 +519,13 @@ class CameraTestViewModel @Inject constructor(
     }
 
     fun stopPreview() {
+
+        Log.i(
+            TAG,
+            "Stopping camera preview " +
+                "totalFrames=$totalFrameCount " +
+                "recordingFrames=$recordingFrameCount",
+        )
 
         if (_uiState.value.recording) {
             stopRecording()
@@ -361,6 +572,13 @@ class CameraTestViewModel @Inject constructor(
 
     override fun onCleared() {
 
+        Log.i(
+            TAG,
+            "CameraTestViewModel cleared " +
+                "totalFrames=$totalFrameCount " +
+                "recordingFrames=$recordingFrameCount",
+        )
+
         stopRecordingTimer()
 
         if (videoRecorder.isRecording()) {
@@ -372,5 +590,9 @@ class CameraTestViewModel @Inject constructor(
         backend.stopCameraTest()
 
         super.onCleared()
+    }
+
+    private companion object {
+        const val TAG = "CameraTestViewModel"
     }
 }
