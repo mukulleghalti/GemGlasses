@@ -31,6 +31,7 @@ import com.meta.wearable.dat.core.types.DeviceIdentifier
 import com.meta.wearable.dat.core.types.LinkState
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
+import com.meta.wearable.dat.core.types.RegistrationState as MWDATRegistrationState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -272,28 +273,77 @@ class RealGlassesBackend @Inject constructor(
         }
     }
 
+    /**
+     * Resolve registration using the ACTUAL MWDAT registration state.
+     *
+     * Previously this method waited on our custom _registrationState.
+     * That caused a problem because MWDAT 0.9.0 has its own enum:
+     *
+     *   AVAILABLE
+     *   REGISTERED
+     *   REGISTERING
+     *   UNAVAILABLE
+     *   UNREGISTERING
+     *
+     * We now read Wearables.registrationState directly.
+     */
     private suspend fun waitForRegistration():
         RegistrationState {
 
-        val current =
-            _registrationState.value
+        val actualState =
+            Wearables.registrationState.value
 
         Log.i(
             TAG,
-            "Registration check before wait = $current"
+            "Actual MWDAT registration state = $actualState"
         )
 
-        if (
-            current == RegistrationState.REGISTERED ||
-            current == RegistrationState.NOT_REGISTERED ||
-            current == RegistrationState.REVOKED
-        ) {
-            return current
+        when (actualState) {
+
+            MWDATRegistrationState.REGISTERED -> {
+                Log.i(
+                    TAG,
+                    "Actual MWDAT registration state is REGISTERED"
+                )
+
+                _registrationState.value =
+                    RegistrationState.REGISTERED
+
+                return RegistrationState.REGISTERED
+            }
+
+            MWDATRegistrationState.REGISTERING -> {
+                Log.i(
+                    TAG,
+                    "MWDAT registration is currently REGISTERING"
+                )
+            }
+
+            MWDATRegistrationState.AVAILABLE -> {
+                Log.i(
+                    TAG,
+                    "MWDAT registration state is AVAILABLE"
+                )
+            }
+
+            MWDATRegistrationState.UNAVAILABLE -> {
+                Log.w(
+                    TAG,
+                    "MWDAT registration state is UNAVAILABLE"
+                )
+            }
+
+            MWDATRegistrationState.UNREGISTERING -> {
+                Log.w(
+                    TAG,
+                    "MWDAT registration state is UNREGISTERING"
+                )
+            }
         }
 
         Log.i(
             TAG,
-            "MWDAT registration is still unresolved; waiting up to " +
+            "MWDAT registration unresolved; waiting up to " +
                 "${REGISTRATION_TIMEOUT_MS}ms"
         )
 
@@ -302,33 +352,47 @@ class RealGlassesBackend @Inject constructor(
                 REGISTRATION_TIMEOUT_MS
             ) {
 
-                _registrationState.first { state ->
+                Wearables.registrationState.first { state ->
 
                     Log.i(
                         TAG,
-                        "Waiting for registration -> $state"
+                        "Actual MWDAT registration -> $state"
                     )
 
-                    state == RegistrationState.REGISTERED ||
-                        state == RegistrationState.NOT_REGISTERED ||
-                        state == RegistrationState.REVOKED
+                    state ==
+                        MWDATRegistrationState.REGISTERED ||
+                        state ==
+                        MWDATRegistrationState.AVAILABLE ||
+                        state ==
+                        MWDATRegistrationState.UNAVAILABLE
                 }
+
             }
 
         if (resolved == null) {
 
             Log.e(
                 TAG,
-                "Timed out waiting for MWDAT registration state"
+                "Timed out waiting for actual MWDAT registration state"
             )
+
+            val finalState =
+                Wearables.registrationState.value
 
             Log.e(
                 TAG,
-                "Registration state after timeout = " +
-                    _registrationState.value
+                "Actual MWDAT registration after timeout = $finalState"
             )
 
-            return RegistrationState.UNKNOWN
+            /*
+             * Keep our public app state synchronized with the actual
+             * MWDAT state before returning.
+             */
+            mapMWDATRegistrationState(
+                finalState
+            )
+
+            return _registrationState.value
         }
 
         Log.i(
@@ -336,7 +400,11 @@ class RealGlassesBackend @Inject constructor(
             "MWDAT registration resolved = $resolved"
         )
 
-        return resolved
+        mapMWDATRegistrationState(
+            resolved
+        )
+
+        return _registrationState.value
     }
 
     // =========================================================================
@@ -751,7 +819,7 @@ class RealGlassesBackend @Inject constructor(
                             }
                         }
 
-                        DeviceSessionState.STOPPED-> {
+                        DeviceSessionState.STOPPED -> {
 
                             if (
                                 session === activeSession
@@ -1023,27 +1091,12 @@ class RealGlassesBackend @Inject constructor(
 
                     Log.i(
                         TAG,
-                        "MWDAT registration state = $state"
+                        "ACTUAL MWDAT registration state = $state"
                     )
 
-                    _registrationState.value =
-                        when (state.toString()) {
-
-                            "REGISTERED" ->
-                                RegistrationState.REGISTERED
-
-                            "REGISTERING" ->
-                                RegistrationState.REGISTERING
-
-                            "NOT_REGISTERED" ->
-                                RegistrationState.NOT_REGISTERED
-
-                            "REVOKED" ->
-                                RegistrationState.REVOKED
-
-                            else ->
-                                RegistrationState.UNKNOWN
-                        }
+                    mapMWDATRegistrationState(
+                        state
+                    )
                 }
 
             } catch (e: Exception) {
@@ -1058,6 +1111,38 @@ class RealGlassesBackend @Inject constructor(
                     RegistrationState.UNKNOWN
             }
         }
+    }
+
+    private fun mapMWDATRegistrationState(
+        state: MWDATRegistrationState,
+    ) {
+
+        val mapped =
+            when (state) {
+
+                MWDATRegistrationState.REGISTERED ->
+                    RegistrationState.REGISTERED
+
+                MWDATRegistrationState.REGISTERING ->
+                    RegistrationState.REGISTERING
+
+                MWDATRegistrationState.AVAILABLE ->
+                    RegistrationState.NOT_REGISTERED
+
+                MWDATRegistrationState.UNAVAILABLE ->
+                    RegistrationState.UNKNOWN
+
+                MWDATRegistrationState.UNREGISTERING ->
+                    RegistrationState.REVOKED
+            }
+
+        Log.i(
+            TAG,
+            "Mapping MWDAT registration $state -> app state $mapped"
+        )
+
+        _registrationState.value =
+            mapped
     }
 
     // =========================================================================
