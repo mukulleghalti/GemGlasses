@@ -32,6 +32,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
 import com.lpecom.gemglasses.agent.AgentStatus
+import com.lpecom.gemglasses.glasses.ConnectionState
 import com.lpecom.gemglasses.glasses.GlassesDevice
 import com.lpecom.gemglasses.glasses.RegistrationState
 
@@ -43,17 +44,40 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
 
-    val status by viewModel.status.collectAsStateWithLifecycle()
-    val registration by viewModel.registration.collectAsStateWithLifecycle()
-    val devices by viewModel.devices.collectAsStateWithLifecycle()
+    val status by
+        viewModel.status.collectAsStateWithLifecycle()
 
-    val connectedDevice =
-        devices.firstOrNull { it.connected }
+    val registration by
+        viewModel.registration.collectAsStateWithLifecycle()
+
+    val devices by
+        viewModel.devices.collectAsStateWithLifecycle()
+
+    val connectionState by
+        viewModel.connectionState.collectAsStateWithLifecycle()
+
+    /*
+     * IMPORTANT:
+     *
+     * devices.firstOrNull { it.connected }
+     *
+     * is intentionally NOT used to determine whether the
+     * MWDAT DeviceSession is connected.
+     *
+     * That "connected" value represents the underlying
+     * Bluetooth/device link.
+     *
+     * connectionState represents our actual MWDAT
+     * DeviceSession state.
+     */
+    val device =
+        devices.firstOrNull()
 
     val micLauncher =
         rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission(),
         ) { granted ->
+
             if (granted) {
                 viewModel.startSession()
             }
@@ -81,7 +105,8 @@ fun HomeScreen(
 
         GlassesCard(
             registration = registration,
-            device = devices.firstOrNull(),
+            connectionState = connectionState,
+            device = device,
         )
 
         Spacer(
@@ -109,8 +134,11 @@ fun HomeScreen(
                         ) == PackageManager.PERMISSION_GRANTED
 
                     if (granted) {
+
                         viewModel.startSession()
+
                     } else {
+
                         micLauncher.launch(
                             Manifest.permission.RECORD_AUDIO
                         )
@@ -129,6 +157,7 @@ fun HomeScreen(
                     },
             ),
         ) {
+
             Text(
                 if (running) {
                     "Stop Assistant"
@@ -158,40 +187,86 @@ fun HomeScreen(
                 .fillMaxWidth()
                 .height(56.dp),
         ) {
+
             Text("📷 Camera Test")
         }
 
         /*
-         * Registration and physical connection are different things.
+         * ---------------------------------------------------------
+         * Registration / MWDAT DeviceSession connection
+         * ---------------------------------------------------------
          *
-         * A registered account may still have connected=false.
+         * Registration and connection are different states.
+         *
+         * RegistrationState:
+         *
+         *   REGISTERED
+         *
+         * means the app is authorized/registered with Meta.
+         *
+         * ConnectionState:
+         *
+         *   CONNECTED
+         *
+         * means our MWDAT DeviceSession has actually started.
+         *
+         * The Bluetooth link is deliberately NOT used here.
          */
-        if (registration != RegistrationState.REGISTERED) {
 
-            Button(
-                onClick = viewModel::registerGlasses,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Register glasses")
+        when {
+
+            registration != RegistrationState.REGISTERED -> {
+
+                Button(
+                    onClick = viewModel::registerGlasses,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+
+                    Text("Register glasses")
+                }
             }
 
-        } else if (connectedDevice == null) {
+            connectionState == ConnectionState.CONNECTING -> {
 
-            Button(
-                onClick = viewModel::connectGlasses,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Connect glasses")
+                Text(
+                    text = "Connecting to glasses…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
 
-        } else {
+            connectionState == ConnectionState.CONNECTED -> {
 
-            Text(
-                text = "Glasses connected",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary,
-            )
+                Text(
+                    text = "Glasses connected",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+
+            connectionState == ConnectionState.ERROR -> {
+
+                Button(
+                    onClick = viewModel::connectGlasses,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+
+                    Text("Retry connection")
+                }
+            }
+
+            else -> {
+
+                Button(
+                    onClick = viewModel::connectGlasses,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+
+                    Text("Connect glasses")
+                }
+            }
         }
     }
 }
@@ -199,6 +274,7 @@ fun HomeScreen(
 @Composable
 private fun GlassesCard(
     registration: RegistrationState,
+    connectionState: ConnectionState,
     device: GlassesDevice?,
 ) {
     Card(
@@ -223,8 +299,14 @@ private fun GlassesCard(
             Text(
                 text = when {
 
-                    device?.connected == true ->
+                    connectionState == ConnectionState.CONNECTED ->
                         "Connected"
+
+                    connectionState == ConnectionState.CONNECTING ->
+                        "Connecting…"
+
+                    connectionState == ConnectionState.ERROR ->
+                        "Connection error"
 
                     registration == RegistrationState.REGISTERED ->
                         "Registered — not connected"
