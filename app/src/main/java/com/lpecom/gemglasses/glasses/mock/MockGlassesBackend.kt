@@ -15,8 +15,7 @@ import kotlinx.coroutines.flow.flow
 import java.io.ByteArrayOutputStream
 import android.app.Activity
 import com.lpecom.gemglasses.glasses.ConnectionState
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+
 
 /**
  * Hardware-free stand-in for the Meta DAT SDK. Reports one connected pair of
