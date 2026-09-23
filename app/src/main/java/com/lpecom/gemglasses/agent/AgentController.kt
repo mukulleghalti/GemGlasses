@@ -67,7 +67,7 @@ class AgentController @Inject constructor(
         if (running) return
         _status.value = AgentStatus.CONNECTING
         visionBridge.delegate = this
-        router.routeToGlasses()
+        //router.routeToGlasses()
         speaker.open()
 
         eventJob = scope.launch { collectEvents() }
