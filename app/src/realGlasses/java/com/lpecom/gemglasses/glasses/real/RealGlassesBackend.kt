@@ -33,6 +33,7 @@ import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.core.types.RegistrationState as MWDATRegistrationState
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,9 +42,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayOutputStream
@@ -1458,11 +1459,34 @@ class RealGlassesBackend @Inject constructor(
     // EXISTING GEMINI CAMERA FLOW
     // =========================================================================
 
+    /*
+     * IMPORTANT CHANGE:
+     *
+     * This is now a channelFlow instead of a normal flow.
+     *
+     * The reason is that MWDAT's videoStream collector must remain active
+     * while capturePhoto() is running.
+     *
+     * Previously we used:
+     *
+     *     videoStream.first { ... }
+     *
+     * That cancelled the videoStream collection immediately after the
+     * first real frame arrived.
+     *
+     * Camera Test works with a continuously active:
+     *
+     *     videoStream.collect { ... }
+     *
+     * and capturePhoto() succeeds while that collector remains active.
+     *
+     * This implementation reproduces that lifecycle.
+     */
     override fun cameraFrames():
-        Flow<ByteArray> = flow {
+        Flow<ByteArray> = channelFlow {
 
         Log.i(TAG, "================================================")
-        Log.i(TAG, "CAMERA FLOW STARTING - SINGLE PHOTO DIAGNOSTIC")
+        Log.i(TAG, "CAMERA FLOW STARTING - CONTINUOUS STREAM + PHOTO")
         Log.i(TAG, "================================================")
 
         var activeSession =
@@ -1507,7 +1531,7 @@ class RealGlassesBackend @Inject constructor(
                     "CAMERA ABORTED: Could not establish DeviceSession"
                 )
 
-                return@flow
+                return@channelFlow
             }
 
             activeSession =
@@ -1521,7 +1545,7 @@ class RealGlassesBackend @Inject constructor(
                 "CAMERA ABORTED: DeviceSession is still NULL after connect()"
             )
 
-            return@flow
+            return@channelFlow
         }
 
         if (
@@ -1540,7 +1564,7 @@ class RealGlassesBackend @Inject constructor(
                     activeSession.state.value
             )
 
-            return@flow
+            return@channelFlow
         }
 
         Log.i(
@@ -1572,7 +1596,7 @@ class RealGlassesBackend @Inject constructor(
                 "CAMERA ABORTED: Meta camera permission is not GRANTED"
             )
 
-            return@flow
+            return@channelFlow
         }
 
         val activeCamera =
@@ -1586,7 +1610,7 @@ class RealGlassesBackend @Inject constructor(
                 /*
                  * IMPORTANT:
                  *
-                 * This now exactly matches the configuration proven
+                 * This exactly matches the configuration proven
                  * to work in Camera Test.
                  */
                 activeSession.addCamera(
@@ -1610,7 +1634,7 @@ class RealGlassesBackend @Inject constructor(
                             error::class.java.name
                     )
 
-                    return@flow
+                    return@channelFlow
                 }
 
             } catch (e: Exception) {
@@ -1621,7 +1645,7 @@ class RealGlassesBackend @Inject constructor(
                     e
                 )
 
-                return@flow
+                return@channelFlow
             }
 
         camera =
@@ -1686,7 +1710,7 @@ class RealGlassesBackend @Inject constructor(
                                 error::class.java.name
                         )
 
-                        return@flow
+                        return@channelFlow
                     }
 
             } catch (e: Exception) {
@@ -1697,7 +1721,7 @@ class RealGlassesBackend @Inject constructor(
                     e
                 )
 
-                return@flow
+                return@channelFlow
             }
 
             Log.i(
@@ -1747,7 +1771,7 @@ class RealGlassesBackend @Inject constructor(
                         activeCamera.stream.state.value
                 )
 
-                return@flow
+                return@channelFlow
             }
 
             Log.i(TAG, "================================================")
@@ -1756,49 +1780,150 @@ class RealGlassesBackend @Inject constructor(
             Log.i(TAG, "================================================")
 
             // -----------------------------------------------------------------
-            // WAIT FOR REAL VIDEO FRAME
+            // KEEP VIDEO STREAM COLLECTOR ACTIVE
             // -----------------------------------------------------------------
 
             /*
              * IMPORTANT:
              *
-             * STREAMING means the stream has started, but we want to
-             * prove that actual camera data is flowing before calling
-             * capturePhoto().
+             * DO NOT use:
              *
-             * We intentionally ignore codec-config frames here.
+             *     videoStream.first { ... }
+             *
+             * here.
+             *
+             * That cancels collection after the first frame.
+             *
+             * Camera Test proves that capturePhoto() works while a
+             * continuous videoStream.collect {} remains active.
+             *
+             * Therefore this collector remains alive while capturePhoto()
+             * is called below.
              */
+
+            val firstRealFrame =
+                CompletableDeferred<VideoFrame>()
+
+            val videoCollectorJob =
+                launch {
+
+                    try {
+
+                        activeCamera.stream.videoStream.collect { frame ->
+
+                            val remainingBytes =
+                                frame.buffer.remaining()
+
+                            Log.d(
+                                TAG,
+                                "CAMERA VIDEO FRAME: " +
+                                    "${frame.width}x${frame.height}, " +
+                                    "bytes=$remainingBytes, " +
+                                    "compressed=${frame.isCompressed}, " +
+                                    "codecConfig=${frame.isCodecConfig}"
+                            )
+
+                            /*
+                             * Only use the first actual camera frame to
+                             * signal that the camera pipeline is producing
+                             * real data.
+                             *
+                             * We intentionally do NOT send these raw frames
+                             * to Gemini here because the existing Gemini
+                             * camera flow is a photo/JPEG flow.
+                             */
+                            if (
+                                !frame.isCodecConfig &&
+                                remainingBytes > 0 &&
+                                !firstRealFrame.isCompleted
+                            ) {
+
+                                Log.i(TAG, "================================================")
+                                Log.i(
+                                    TAG,
+                                    "FIRST REAL VIDEO FRAME RECEIVED"
+                                )
+                                Log.i(
+                                    TAG,
+                                    "Frame = ${frame.width}x${frame.height}"
+                                )
+                                Log.i(
+                                    TAG,
+                                    "Frame bytes = $remainingBytes"
+                                )
+                                Log.i(
+                                    TAG,
+                                    "Compressed = ${frame.isCompressed}"
+                                )
+                                Log.i(
+                                    TAG,
+                                    "Codec config = ${frame.isCodecConfig}"
+                                )
+                                Log.i(TAG, "================================================")
+
+                                firstRealFrame.complete(
+                                    frame
+                                )
+                            }
+                        }
+
+                        Log.w(
+                            TAG,
+                            "CAMERA videoStream collector ended"
+                        )
+
+                    } catch (e: Exception) {
+
+                        Log.e(
+                            TAG,
+                            "CAMERA videoStream collector failed",
+                            e
+                        )
+
+                        if (
+                            !firstRealFrame.isCompleted
+                        ) {
+
+                            firstRealFrame.completeExceptionally(
+                                e
+                            )
+                        }
+                    }
+                }
+
+            // -----------------------------------------------------------------
+            // WAIT FOR FIRST REAL FRAME
+            // -----------------------------------------------------------------
+
             Log.i(
                 TAG,
                 "Waiting for first REAL video frame before capturePhoto()..."
             )
 
-            val firstRealFrame =
+            val firstFrameReceived =
                 withTimeoutOrNull(
                     CAMERA_FIRST_FRAME_TIMEOUT_MS
                 ) {
 
-                    activeCamera.stream.videoStream.first { frame ->
+                    try {
 
-                        val remainingBytes =
-                            frame.buffer.remaining()
+                        firstRealFrame.await()
 
-                        Log.i(
+                        true
+
+                    } catch (e: Exception) {
+
+                        Log.e(
                             TAG,
-                            "CAMERA FIRST-FRAME CHECK: " +
-                                "${frame.width}x${frame.height}, " +
-                                "bytes=$remainingBytes, " +
-                                "compressed=${frame.isCompressed}, " +
-                                "codecConfig=${frame.isCodecConfig}"
+                            "Error waiting for first real camera frame",
+                            e
                         )
 
-                        !frame.isCodecConfig &&
-                            remainingBytes > 0
+                        false
                     }
+                } ?: false
 
-                }
-
-            if (firstRealFrame == null) {
+            if (!firstFrameReceived) {
 
                 Log.e(TAG, "================================================")
                 Log.e(
@@ -1820,31 +1945,10 @@ class RealGlassesBackend @Inject constructor(
                 )
                 Log.e(TAG, "================================================")
 
-                return@flow
-            }
+                videoCollectorJob.cancel()
 
-            Log.i(TAG, "================================================")
-            Log.i(
-                TAG,
-                "FIRST REAL VIDEO FRAME RECEIVED"
-            )
-            Log.i(
-                TAG,
-                "Frame = ${firstRealFrame.width}x${firstRealFrame.height}"
-            )
-            Log.i(
-                TAG,
-                "Frame bytes = ${firstRealFrame.buffer.remaining()}"
-            )
-            Log.i(
-                TAG,
-                "Compressed = ${firstRealFrame.isCompressed}"
-            )
-            Log.i(
-                TAG,
-                "Codec config = ${firstRealFrame.isCodecConfig}"
-            )
-            Log.i(TAG, "================================================")
+                return@channelFlow
+            }
 
             // -----------------------------------------------------------------
             // CAMERA PIPELINE SETTLE
@@ -1897,16 +2001,28 @@ class RealGlassesBackend @Inject constructor(
                     "Current state = $stateBeforeCapture"
                 )
 
-                return@flow
+                videoCollectorJob.cancel()
+
+                return@channelFlow
             }
 
             // -----------------------------------------------------------------
-            // CAPTURE PHOTO
+            // CAPTURE PHOTO WHILE VIDEO STREAM COLLECTOR IS ACTIVE
             // -----------------------------------------------------------------
 
             Log.i(
                 TAG,
+                "================================================"
+            )
+
+            Log.i(
+                TAG,
                 "SINGLE PHOTO CAPTURE TEST"
+            )
+
+            Log.i(
+                TAG,
+                "VideoStream collector is STILL ACTIVE"
             )
 
             Log.i(
@@ -2019,15 +2135,21 @@ class RealGlassesBackend @Inject constructor(
                     ) {
 
                         Log.i(TAG, "================================================")
-                        Log.i(TAG, "PHOTO CONVERTED TO JPEG")
+                        Log.i(
+                            TAG,
+                            "PHOTO CONVERTED TO JPEG"
+                        )
                         Log.i(
                             TAG,
                             "JPEG size = ${jpegBytes.size} bytes"
                         )
-                        Log.i(TAG, "Emitting ONE JPEG to camera flow")
+                        Log.i(
+                            TAG,
+                            "Emitting ONE JPEG to camera flow"
+                        )
                         Log.i(TAG, "================================================")
 
-                        emit(
+                        send(
                             jpegBytes
                         )
 
@@ -2063,6 +2185,22 @@ class RealGlassesBackend @Inject constructor(
                     e
                 )
                 Log.e(TAG, "================================================")
+            } finally {
+
+                /*
+                 * IMPORTANT:
+                 *
+                 * Do not stop the camera before capturePhoto() returns.
+                 *
+                 * Now that capturePhoto() has completed, we can stop the
+                 * continuous video collector.
+                 */
+                Log.i(
+                    TAG,
+                    "Stopping continuous videoStream collector after capturePhoto()"
+                )
+
+                videoCollectorJob.cancel()
             }
 
             Log.i(TAG, "================================================")
@@ -2097,7 +2235,7 @@ class RealGlassesBackend @Inject constructor(
     // =========================================================================
 
     fun cameraTestFrames():
-        Flow<VideoFrame> = flow {
+        Flow<VideoFrame> = channelFlow {
 
         Log.i(TAG, "================================================")
         Log.i(TAG, "CAMERA TEST - LIVE STREAM STARTING")
@@ -2141,7 +2279,7 @@ class RealGlassesBackend @Inject constructor(
                     "CAMERA TEST ABORTED: Could not connect"
                 )
 
-                return@flow
+                return@channelFlow
             }
 
             activeSession =
@@ -2155,7 +2293,7 @@ class RealGlassesBackend @Inject constructor(
                 "CAMERA TEST ABORTED: session is NULL"
             )
 
-            return@flow
+            return@channelFlow
         }
 
         if (
@@ -2168,7 +2306,7 @@ class RealGlassesBackend @Inject constructor(
                 "CAMERA TEST ABORTED: session not STARTED"
             )
 
-            return@flow
+            return@channelFlow
         }
 
         Log.i(
@@ -2194,7 +2332,7 @@ class RealGlassesBackend @Inject constructor(
                 "CAMERA TEST ABORTED: camera permission not granted"
             )
 
-            return@flow
+            return@channelFlow
         }
 
         if (camera != null) {
@@ -2230,7 +2368,7 @@ class RealGlassesBackend @Inject constructor(
                         "CAMERA TEST addCamera() FAILED: $error"
                     )
 
-                    return@flow
+                    return@channelFlow
                 }
 
             } catch (e: Exception) {
@@ -2241,7 +2379,7 @@ class RealGlassesBackend @Inject constructor(
                     e
                 )
 
-                return@flow
+                return@channelFlow
             }
 
         camera =
@@ -2270,7 +2408,7 @@ class RealGlassesBackend @Inject constructor(
                         startResult.errorOrNull()
                 )
 
-                return@flow
+                return@channelFlow
             }
 
             Log.i(
@@ -2311,7 +2449,7 @@ class RealGlassesBackend @Inject constructor(
                         activeCamera.stream.state.value
                 )
 
-                return@flow
+                return@channelFlow
             }
 
             Log.i(TAG, "================================================")
@@ -2334,7 +2472,7 @@ class RealGlassesBackend @Inject constructor(
                         "codecConfig=${frame.isCodecConfig}"
                 )
 
-                emit(frame)
+                send(frame)
             }
 
         } catch (e: Exception) {
@@ -2860,12 +2998,12 @@ class RealGlassesBackend @Inject constructor(
 
         scope.launch {
 
+            val activeSession =
+                session ?: sharedSession
+
             try {
 
                 stopCameraIfNeeded()
-
-                val activeSession =
-                    session ?: sharedSession
 
                 if (activeSession != null) {
 
@@ -2918,7 +3056,7 @@ class RealGlassesBackend @Inject constructor(
 
             } finally {
 
-                if (sharedSession === activeSessionOrNull()) {
+                if (sharedSession === activeSession) {
                     sharedSession = null
                 }
 
