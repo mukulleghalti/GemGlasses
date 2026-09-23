@@ -22,11 +22,13 @@ data class CameraTestUiState(
     val capturing: Boolean = false,
     val capturedPhoto: android.graphics.Bitmap? = null,
     val error: String? = null,
+    val photoSaved: Boolean = false,
 )
 
 @HiltViewModel
 class CameraTestViewModel @Inject constructor(
     private val backend: RealGlassesBackend,
+    private val mediaSaver: CameraMediaSaver,
 ) : ViewModel() {
 
     private val _uiState =
@@ -56,11 +58,6 @@ class CameraTestViewModel @Inject constructor(
 
     fun startPreview() {
 
-        /*
-         * Don't start another camera stream if one is already
-         * running.
-         */
-
         if (previewJob?.isActive == true) {
             return
         }
@@ -70,6 +67,7 @@ class CameraTestViewModel @Inject constructor(
                 status = "Starting camera…",
                 streaming = false,
                 error = null,
+                photoSaved = false,
             )
 
         previewJob =
@@ -81,22 +79,15 @@ class CameraTestViewModel @Inject constructor(
                         .cameraTestFrames()
                         .collect { frame ->
 
-                            /*
-                             * Codec configuration frames are
-                             * required by MediaCodec, but they do
-                             * NOT mean that an actual video frame
-                             * has arrived yet.
-                             *
-                             * Therefore don't mark the camera
-                             * as streaming on a codec-config frame.
-                             */
-
                             if (!frame.isCodecConfig) {
 
                                 _uiState.value =
                                     _uiState.value.copy(
                                         status =
-                                            "Live — ${frame.width} × ${frame.height}",
+                                            "Live — " +
+                                                "${frame.width} × " +
+                                                "${frame.height}",
+
                                         streaming = true,
                                         error = null,
                                     )
@@ -104,10 +95,6 @@ class CameraTestViewModel @Inject constructor(
 
                             _frames.emit(frame)
                         }
-
-                    /*
-                     * Flow completed normally.
-                     */
 
                     _uiState.value =
                         _uiState.value.copy(
@@ -118,11 +105,6 @@ class CameraTestViewModel @Inject constructor(
                 } catch (
                     e: kotlinx.coroutines.CancellationException
                 ) {
-
-                    /*
-                     * Normal when the user presses Stop Camera
-                     * or leaves the screen.
-                     */
 
                     throw e
 
@@ -162,6 +144,7 @@ class CameraTestViewModel @Inject constructor(
                 _uiState.value.copy(
                     capturing = true,
                     error = null,
+                    photoSaved = false,
                 )
 
             try {
@@ -188,16 +171,49 @@ class CameraTestViewModel @Inject constructor(
                                         "Photo captured but could not decode JPEG",
                                 )
 
-                        } else {
-
-                            _uiState.value =
-                                _uiState.value.copy(
-                                    capturing = false,
-                                    capturedPhoto = bitmap,
-                                    status = "Photo captured",
-                                    error = null,
-                                )
+                            return@onSuccess
                         }
+
+                        /*
+                         * Save the exact JPEG returned by MWDAT.
+                         *
+                         * This means the Gallery copy is not a
+                         * recompressed version of the preview bitmap.
+                         */
+                        val saveResult =
+                            mediaSaver.savePhoto(jpeg)
+
+                        saveResult
+                            .onSuccess { fileName ->
+
+                                _uiState.value =
+                                    _uiState.value.copy(
+                                        capturing = false,
+                                        capturedPhoto = bitmap,
+                                        status =
+                                            "Photo saved to Gallery",
+                                        error = null,
+                                        photoSaved = true,
+                                    )
+                            }
+                            .onFailure { error ->
+
+                                _uiState.value =
+                                    _uiState.value.copy(
+                                        capturing = false,
+                                        capturedPhoto = bitmap,
+                                        status =
+                                            "Photo captured",
+                                        error =
+                                            "Photo captured, " +
+                                                "but Gallery save failed: " +
+                                                (
+                                                    error.message
+                                                        ?: error::class.java.simpleName
+                                                ),
+                                        photoSaved = false,
+                                    )
+                            }
                     }
                     .onFailure { error ->
 
@@ -232,11 +248,6 @@ class CameraTestViewModel @Inject constructor(
      */
 
     fun stopPreview() {
-
-        /*
-         * Update UI immediately so the buttons change without
-         * waiting for the backend flow to finish cancelling.
-         */
 
         _uiState.value =
             _uiState.value.copy(
