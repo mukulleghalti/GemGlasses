@@ -90,6 +90,13 @@ fun CameraTestScreen(
      * SurfaceView becomes ready.
      *
      * The user must press "Start Camera".
+     *
+     * The same VideoFrame stream is used for:
+     *
+     * 1. Live H.265 preview
+     * 2. Video recording
+     *
+     * Recording itself is handled by CameraTestViewModel.
      */
 
     LaunchedEffect(Unit) {
@@ -151,6 +158,7 @@ fun CameraTestScreen(
                     decoder.resetDecoder()
                     onBack()
                 },
+                enabled = !uiState.recording,
             ) {
                 Text("Back")
             }
@@ -266,6 +274,47 @@ fun CameraTestScreen(
 
                 CircularProgressIndicator()
             }
+
+            /*
+             * Recording indicator.
+             */
+
+            if (uiState.recording) {
+
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 16.dp)
+                        .background(
+                            MaterialTheme.colorScheme.errorContainer
+                        )
+                        .padding(
+                            horizontal = 16.dp,
+                            vertical = 8.dp,
+                        ),
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally,
+                ) {
+
+                    Text(
+                        text = "● RECORDING",
+                        color =
+                            MaterialTheme.colorScheme.onErrorContainer,
+                        style =
+                            MaterialTheme.typography.labelLarge,
+                    )
+
+                    Text(
+                        text = formatRecordingDuration(
+                            uiState.recordingDurationMs
+                        ),
+                        color =
+                            MaterialTheme.colorScheme.onErrorContainer,
+                        style =
+                            MaterialTheme.typography.titleMedium,
+                    )
+                }
+            }
         }
 
         /*
@@ -306,6 +355,29 @@ fun CameraTestScreen(
 
         /*
          * -----------------------------------------------------
+         * VIDEO SAVED
+         * -----------------------------------------------------
+         */
+
+        if (uiState.savedVideoUri != null) {
+
+            Text(
+                text = "Video saved to Gallery",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 6.dp,
+                    ),
+                color =
+                    MaterialTheme.colorScheme.primary,
+                style =
+                    MaterialTheme.typography.bodyMedium,
+            )
+        }
+
+        /*
+         * -----------------------------------------------------
          * CAMERA CONTROLS
          * -----------------------------------------------------
          */
@@ -333,7 +405,8 @@ fun CameraTestScreen(
                 enabled =
                     surfaceReady &&
                         !uiState.streaming &&
-                        !uiState.capturing,
+                        !uiState.capturing &&
+                        !uiState.recording,
 
                 modifier = Modifier
                     .weight(1f)
@@ -361,8 +434,11 @@ fun CameraTestScreen(
                 },
 
                 enabled =
-                    uiState.streaming ||
-                        uiState.status == "Starting camera…",
+                    !uiState.recording &&
+                        (
+                            uiState.streaming ||
+                                uiState.status == "Starting camera…"
+                            ),
 
                 modifier = Modifier
                     .weight(1f)
@@ -370,6 +446,65 @@ fun CameraTestScreen(
             ) {
 
                 Text("Stop Camera")
+            }
+        }
+
+        /*
+         * -----------------------------------------------------
+         * VIDEO RECORDING
+         * -----------------------------------------------------
+         */
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 16.dp,
+                    vertical = 4.dp,
+                ),
+            horizontalArrangement =
+                Arrangement.spacedBy(12.dp),
+        ) {
+
+            /*
+             * START RECORDING
+             */
+
+            Button(
+                onClick = {
+                    viewModel.startRecording()
+                },
+
+                enabled =
+                    uiState.streaming &&
+                        !uiState.recording &&
+                        !uiState.capturing,
+
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
+            ) {
+
+                Text("Record Video")
+            }
+
+            /*
+             * STOP RECORDING
+             */
+
+            Button(
+                onClick = {
+                    viewModel.stopRecording()
+                },
+
+                enabled = uiState.recording,
+
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
+            ) {
+
+                Text("Stop Recording")
             }
         }
 
@@ -384,13 +519,15 @@ fun CameraTestScreen(
 
             enabled =
                 uiState.streaming &&
-                    !uiState.capturing,
+                    !uiState.capturing &&
+                    !uiState.recording,
 
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
                     start = 16.dp,
                     end = 16.dp,
+                    top = 8.dp,
                     bottom = 8.dp,
                 )
                 .height(56.dp),
@@ -417,6 +554,8 @@ fun CameraTestScreen(
         Button(
             onClick = onCameraSettingsClick,
 
+            enabled = !uiState.recording,
+
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
@@ -430,6 +569,32 @@ fun CameraTestScreen(
             Text("Camera Settings")
         }
     }
+}
+
+/*
+ * =============================================================
+ * RECORDING DURATION
+ * =============================================================
+ */
+
+private fun formatRecordingDuration(
+    durationMs: Long,
+): String {
+
+    val totalSeconds =
+        durationMs / 1_000L
+
+    val minutes =
+        totalSeconds / 60L
+
+    val seconds =
+        totalSeconds % 60L
+
+    return String.format(
+        "%02d:%02d",
+        minutes,
+        seconds,
+    )
 }
 
 /*
