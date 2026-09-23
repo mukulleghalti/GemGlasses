@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaFormat
+import android.net.Uri
 import android.provider.MediaStore
 import android.util.Log
 import com.meta.wearable.dat.camera.types.VideoFrame
@@ -35,217 +36,367 @@ class CameraVideoRecorder @Inject constructor(
 
     private var pendingCodecConfig: ByteArray? = null
 
-    private var outputUri: android.net.Uri? = null
+    private var outputUri: Uri? = null
 
     private var sawKeyFrame = false
+
+    private var receivedFrameCount = 0L
+
+    private var writtenFrameCount = 0L
+
+    private var loggedNalFormat = false
 
     fun isRecording(): Boolean = recording
 
     fun start() {
-        if (recording) return
+
+        if (recording) {
+            return
+        }
 
         recording = true
         started = false
+
         trackIndex = -1
+
         width = 0
         height = 0
+
         firstTimestampUs = -1L
         lastTimestampUs = -1L
+
         pendingCodecConfig = null
         outputUri = null
+
         sawKeyFrame = false
 
-        Log.i(TAG, "Video recording armed")
+        receivedFrameCount = 0L
+        writtenFrameCount = 0L
+
+        loggedNalFormat = false
+
+        muxer = null
+
+        Log.i(
+            TAG,
+            "Video recording armed",
+        )
     }
 
-    fun writeFrame(frame: VideoFrame) {
-        if (!recording) return
-        if (!frame.isCompressed) return
+    fun writeFrame(
+        frame: VideoFrame,
+    ) {
+
+        if (!recording) {
+            return
+        }
+
+        if (!frame.isCompressed) {
+            Log.w(
+                TAG,
+                "Ignoring uncompressed frame",
+            )
+            return
+        }
+
+        receivedFrameCount++
 
         try {
-            val bytes = readBuffer(frame.buffer)
 
-            if (bytes.isEmpty()) return
+            val bytes =
+                readBuffer(frame.buffer)
+
+            if (bytes.isEmpty()) {
+                Log.w(
+                    TAG,
+                    "Received empty compressed frame #$receivedFrameCount",
+                )
+                return
+            }
+
+            if (
+                frame.width > 0 &&
+                frame.height > 0
+            ) {
+                width = frame.width
+                height = frame.height
+            }
 
             /*
              * -------------------------------------------------
-             * CODEC CONFIG
+             * EXPLICIT CODEC CONFIG
              * -------------------------------------------------
              *
-             * MWDAT gives us the HEVC codec configuration
-             * separately.
-             *
-             * We retain it until we know the stream resolution.
+             * If MWDAT ever supplies a dedicated codec config
+             * frame, keep supporting it.
              */
 
             if (frame.isCodecConfig) {
-                pendingCodecConfig = bytes
 
-                if (width == 0) {
-                    width = frame.width
-                    height = frame.height
-                }
+                pendingCodecConfig =
+                    extractParameterSets(bytes)
 
-                Log.d(
-                    TAG,
-                    "Received HEVC codec config " +
-                        "bytes=${bytes.size} " +
-                        "resolution=${frame.width}x${frame.height}"
-                )
-
-                return
-            }
-
-            if (frame.width > 0 && frame.height > 0) {
                 if (
-                    width != frame.width ||
-                    height != frame.height
+                    pendingCodecConfig == null
                 ) {
-                    width = frame.width
-                    height = frame.height
+                    pendingCodecConfig = bytes
                 }
-            }
-
-            /*
-             * -------------------------------------------------
-             * WAIT FOR CODEC CONFIG
-             * -------------------------------------------------
-             */
-
-            val codecConfig = pendingCodecConfig
-
-            if (!started && codecConfig == null) {
-                return
-            }
-
-            /*
-             * -------------------------------------------------
-             * PARSE HEVC ACCESS UNIT
-             * -------------------------------------------------
-             */
-
-            val nalUnits = splitAnnexB(bytes)
-
-            if (nalUnits.isEmpty()) {
-                return
-            }
-
-            val keyFrame = containsKeyFrame(nalUnits)
-
-            /*
-             * Don't start the MP4 until we have an actual
-             * decodable key frame.
-             */
-
-            if (!started && !keyFrame) {
-                return
-            }
-
-            /*
-             * -------------------------------------------------
-             * CREATE MUXER
-             * -------------------------------------------------
-             */
-
-            if (!started) {
-                if (width <= 0 || height <= 0) {
-                    Log.w(TAG, "Cannot start recorder without resolution")
-                    return
-                }
-
-                val config =
-                    buildHevcCodecSpecificData(codecConfig ?: bytes)
-
-                if (config.isEmpty()) {
-                    Log.w(TAG, "Could not extract HEVC codec configuration")
-                    return
-                }
-
-                val format =
-                    MediaFormat.createVideoFormat(
-                        MediaFormat.MIMETYPE_VIDEO_HEVC,
-                        width,
-                        height,
-                    )
-
-                /*
-                 * The HEVC parameter sets are supplied as codec
-                 * specific data.
-                 *
-                 * We keep them in Annex-B form because Android's
-                 * HEVC MediaFormat accepts codec initialization
-                 * data in this form on supported devices.
-                 */
-
-                format.setByteBuffer(
-                    "csd-0",
-                    ByteBuffer.wrap(config),
-                )
-
-                val created =
-                    createMuxer()
-
-                muxer = created.muxer
-                outputUri = created.uri
-
-                trackIndex =
-                    muxer!!.addTrack(format)
-
-                muxer!!.start()
-
-                started = true
-                sawKeyFrame = true
-
-                firstTimestampUs =
-                    frame.presentationTimeUs
 
                 Log.i(
                     TAG,
-                    "Video recording started " +
-                        "${width}x$height " +
-                        "uri=$outputUri"
+                    "Received explicit HEVC codec config " +
+                        "bytes=${bytes.size} " +
+                        "resolution=${frame.width}x${frame.height}",
                 )
+
+                return
             }
 
             /*
              * -------------------------------------------------
-             * WRITE SAMPLE
+             * PARSE ACCESS UNIT
              * -------------------------------------------------
              */
 
-            val normalizedTimestamp =
-                normalizeTimestamp(
-                    frame.presentationTimeUs,
-                )
+            val nalUnits =
+                splitAnnexB(bytes)
 
-            val sample =
-                convertAccessUnitToLengthPrefixed(
-                    nalUnits,
-                )
+            if (nalUnits.isEmpty()) {
 
-            if (sample.isEmpty()) {
+                /*
+                 * Some encoders can provide length-prefixed
+                 * HEVC instead of Annex-B.
+                 *
+                 * Try that format as a fallback.
+                 */
+
+                val lengthPrefixedUnits =
+                    splitLengthPrefixed(bytes)
+
+                if (lengthPrefixedUnits.isNotEmpty()) {
+
+                    if (!loggedNalFormat) {
+
+                        Log.i(
+                            TAG,
+                            "Detected length-prefixed HEVC access units",
+                        )
+
+                        loggedNalFormat = true
+                    }
+
+                    processNalUnits(
+                        frame,
+                        lengthPrefixedUnits,
+                    )
+
+                    return
+                }
+
+                if (!loggedNalFormat) {
+
+                    Log.w(
+                        TAG,
+                        "Could not parse HEVC frame " +
+                            "bytes=${bytes.size} " +
+                            "firstBytes=${hexPrefix(bytes)}",
+                    )
+
+                    loggedNalFormat = true
+                }
+
                 return
             }
 
-            val buffer =
-                ByteBuffer.wrap(sample)
+            if (!loggedNalFormat) {
 
-            val flags =
-                if (keyFrame) {
-                    MediaCodec.BUFFER_FLAG_KEY_FRAME
-                } else {
-                    0
-                }
+                Log.i(
+                    TAG,
+                    "Detected Annex-B HEVC access units " +
+                        "bytes=${bytes.size} " +
+                        "nalCount=${nalUnits.size}",
+                )
 
-            val info =
-                MediaCodec.BufferInfo().apply {
-                    set(
-                        0,
-                        sample.size,
-                        normalizedTimestamp,
-                        flags,
+                logNalTypes(nalUnits)
+
+                loggedNalFormat = true
+            }
+
+            processNalUnits(
+                frame,
+                nalUnits,
+            )
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Failed to write video frame #$receivedFrameCount",
+                e,
+            )
+        }
+    }
+
+    private fun processNalUnits(
+        frame: VideoFrame,
+        nalUnits: List<ByteArray>,
+    ) {
+
+        if (nalUnits.isEmpty()) {
+            return
+        }
+
+        /*
+         * -------------------------------------------------
+         * EXTRACT VPS / SPS / PPS
+         * -------------------------------------------------
+         *
+         * We do NOT rely on frame.isCodecConfig.
+         *
+         * HEVC parameter sets can be present inside the
+         * normal access units.
+         */
+
+        val parameterSets =
+            extractParameterSetsFromNalUnits(
+                nalUnits,
+            )
+
+        if (
+            parameterSets != null
+        ) {
+
+            pendingCodecConfig =
+                parameterSets
+
+            Log.d(
+                TAG,
+                "HEVC parameter sets extracted " +
+                    "bytes=${parameterSets.size}",
+            )
+        }
+
+        val keyFrame =
+            containsKeyFrame(
+                nalUnits,
+            )
+
+        if (keyFrame && !sawKeyFrame) {
+
+            sawKeyFrame = true
+
+            Log.i(
+                TAG,
+                "HEVC key frame detected " +
+                    "timestampUs=${frame.presentationTimeUs} " +
+                    "nalTypes=${nalTypes(nalUnits)}",
+            )
+        }
+
+        /*
+         * -------------------------------------------------
+         * WE NEED PARAMETER SETS + KEYFRAME
+         * -------------------------------------------------
+         */
+
+        if (!started) {
+
+            val codecConfig =
+                pendingCodecConfig
+
+            if (codecConfig == null) {
+
+                if (receivedFrameCount <= 10L) {
+
+                    Log.d(
+                        TAG,
+                        "Waiting for HEVC VPS/SPS/PPS " +
+                            "frame=$receivedFrameCount " +
+                            "keyFrame=$keyFrame " +
+                            "nalTypes=${nalTypes(nalUnits)}",
                     )
                 }
+
+                return
+            }
+
+            if (!keyFrame) {
+
+                if (receivedFrameCount <= 10L) {
+
+                    Log.d(
+                        TAG,
+                        "HEVC config available but waiting for key frame " +
+                            "frame=$receivedFrameCount " +
+                            "nalTypes=${nalTypes(nalUnits)}",
+                    )
+                }
+
+                return
+            }
+
+            if (
+                width <= 0 ||
+                height <= 0
+            ) {
+
+                Log.w(
+                    TAG,
+                    "Cannot start recorder without resolution",
+                )
+
+                return
+            }
+
+            startMuxer(
+                codecConfig = codecConfig,
+                frame = frame,
+            )
+        }
+
+        /*
+         * -------------------------------------------------
+         * WRITE ACCESS UNIT
+         * -------------------------------------------------
+         */
+
+        val sample =
+            convertAccessUnitToLengthPrefixed(
+                nalUnits,
+            )
+
+        if (sample.isEmpty()) {
+            return
+        }
+
+        val normalizedTimestamp =
+            normalizeTimestamp(
+                frame.presentationTimeUs,
+            )
+
+        val buffer =
+            ByteBuffer.wrap(
+                sample,
+            )
+
+        val flags =
+            if (keyFrame) {
+                MediaCodec.BUFFER_FLAG_KEY_FRAME
+            } else {
+                0
+            }
+
+        val info =
+            MediaCodec.BufferInfo().apply {
+                set(
+                    0,
+                    sample.size,
+                    normalizedTimestamp,
+                    flags,
+                )
+            }
+
+        try {
 
             muxer?.writeSampleData(
                 trackIndex,
@@ -253,38 +404,173 @@ class CameraVideoRecorder @Inject constructor(
                 info,
             )
 
+            writtenFrameCount++
+
             lastTimestampUs =
                 frame.presentationTimeUs
 
+            if (
+                writtenFrameCount == 1L ||
+                writtenFrameCount % 60L == 0L
+            ) {
+
+                Log.i(
+                    TAG,
+                    "HEVC sample written " +
+                        "frame=$writtenFrameCount " +
+                        "bytes=${sample.size} " +
+                        "timestampUs=${frame.presentationTimeUs} " +
+                        "keyFrame=$keyFrame",
+                )
+            }
+
         } catch (e: Exception) {
+
             Log.e(
                 TAG,
-                "Failed to write video frame",
+                "MediaMuxer.writeSampleData failed " +
+                    "frame=$writtenFrameCount",
                 e,
             )
         }
     }
 
-    fun stop(): android.net.Uri? {
+    private fun startMuxer(
+        codecConfig: ByteArray,
+        frame: VideoFrame,
+    ) {
+
+        Log.i(
+            TAG,
+            "Starting MP4 muxer " +
+                "resolution=${width}x$height " +
+                "codecConfigBytes=${codecConfig.size} " +
+                "timestampUs=${frame.presentationTimeUs}",
+        )
+
+        val format =
+            MediaFormat.createVideoFormat(
+                MediaFormat.MIMETYPE_VIDEO_HEVC,
+                width,
+                height,
+            )
+
+        /*
+         * MediaMuxer expects HEVC codec initialization data
+         * through csd-0.
+         *
+         * The extracted VPS/SPS/PPS are kept together here.
+         */
+
+        format.setByteBuffer(
+            "csd-0",
+            ByteBuffer.wrap(
+                codecConfig,
+            ),
+        )
+
+        val created =
+            createMuxer()
+
+        try {
+
+            muxer =
+                created.muxer
+
+            outputUri =
+                created.uri
+
+            trackIndex =
+                muxer!!.addTrack(
+                    format,
+                )
+
+            muxer!!.start()
+
+            started = true
+
+            firstTimestampUs =
+                frame.presentationTimeUs
+
+            Log.i(
+                TAG,
+                "MP4 muxer started " +
+                    "trackIndex=$trackIndex " +
+                    "uri=$outputUri",
+            )
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Failed to start MP4 muxer",
+                e,
+            )
+
+            try {
+                created.muxer.release()
+            } catch (_: Exception) {
+            }
+
+            try {
+                context.contentResolver.delete(
+                    created.uri,
+                    null,
+                    null,
+                )
+            } catch (_: Exception) {
+            }
+
+            muxer = null
+            outputUri = null
+            trackIndex = -1
+
+            throw e
+        }
+    }
+
+    fun stop(): Uri? {
+
         if (!recording) {
             return outputUri
         }
 
         recording = false
 
-        val currentMuxer = muxer
-        val uri = outputUri
+        val currentMuxer =
+            muxer
+
+        val uri =
+            outputUri
 
         muxer = null
 
+        Log.i(
+            TAG,
+            "Stopping video recording " +
+                "receivedFrames=$receivedFrameCount " +
+                "writtenFrames=$writtenFrameCount " +
+                "started=$started " +
+                "uri=$uri",
+        )
+
         try {
-            if (started && currentMuxer != null) {
+
+            if (
+                started &&
+                currentMuxer != null
+            ) {
+
                 currentMuxer.stop()
                 currentMuxer.release()
+
             } else {
+
                 currentMuxer?.release()
             }
+
         } catch (e: Exception) {
+
             Log.e(
                 TAG,
                 "Failed to finalize video",
@@ -293,7 +579,9 @@ class CameraVideoRecorder @Inject constructor(
         }
 
         if (uri != null) {
+
             try {
+
                 val values =
                     ContentValues().apply {
                         put(
@@ -308,7 +596,14 @@ class CameraVideoRecorder @Inject constructor(
                     null,
                     null,
                 )
+
+                Log.i(
+                    TAG,
+                    "Video published to MediaStore uri=$uri",
+                )
+
             } catch (e: Exception) {
+
                 Log.e(
                     TAG,
                     "Failed to publish video in MediaStore",
@@ -319,10 +614,15 @@ class CameraVideoRecorder @Inject constructor(
 
         val durationMs =
             if (
-                firstTimestampUs >= 0 &&
+                firstTimestampUs >= 0L &&
                 lastTimestampUs >= firstTimestampUs
             ) {
-                (lastTimestampUs - firstTimestampUs) / 1_000L
+
+                (
+                    lastTimestampUs -
+                        firstTimestampUs
+                    ) / 1_000L
+
             } else {
                 0L
             }
@@ -331,23 +631,44 @@ class CameraVideoRecorder @Inject constructor(
             TAG,
             "Video recording stopped " +
                 "duration=${durationMs}ms " +
-                "uri=$uri"
+                "receivedFrames=$receivedFrameCount " +
+                "writtenFrames=$writtenFrameCount " +
+                "uri=$uri",
         )
 
         started = false
         trackIndex = -1
+
         pendingCodecConfig = null
+
         firstTimestampUs = -1L
         lastTimestampUs = -1L
+
         sawKeyFrame = false
+
+        receivedFrameCount = 0L
+        writtenFrameCount = 0L
 
         return uri
     }
 
     fun cancel() {
-        if (!recording && muxer == null) return
+
+        if (
+            !recording &&
+            muxer == null
+        ) {
+            return
+        }
 
         recording = false
+
+        Log.i(
+            TAG,
+            "Cancelling video recording " +
+                "receivedFrames=$receivedFrameCount " +
+                "writtenFrames=$writtenFrameCount",
+        )
 
         try {
             muxer?.release()
@@ -357,28 +678,37 @@ class CameraVideoRecorder @Inject constructor(
         muxer = null
 
         outputUri?.let { uri ->
+
             try {
+
                 context.contentResolver.delete(
                     uri,
                     null,
                     null,
                 )
+
             } catch (_: Exception) {
             }
         }
 
         outputUri = null
+
         started = false
         trackIndex = -1
+
         pendingCodecConfig = null
+
         firstTimestampUs = -1L
         lastTimestampUs = -1L
+
         sawKeyFrame = false
 
-        Log.i(TAG, "Video recording cancelled")
+        receivedFrameCount = 0L
+        writtenFrameCount = 0L
     }
 
     private fun createMuxer(): MuxerCreationResult {
+
         val resolver =
             context.contentResolver
 
@@ -387,18 +717,22 @@ class CameraVideoRecorder @Inject constructor(
 
         val values =
             ContentValues().apply {
+
                 put(
                     MediaStore.Video.Media.DISPLAY_NAME,
                     name,
                 )
+
                 put(
                     MediaStore.Video.Media.MIME_TYPE,
                     "video/mp4",
                 )
+
                 put(
                     MediaStore.Video.Media.RELATIVE_PATH,
                     "Movies/GemGlasses",
                 )
+
                 put(
                     MediaStore.Video.Media.IS_PENDING,
                     1,
@@ -411,23 +745,23 @@ class CameraVideoRecorder @Inject constructor(
                 values,
             )
                 ?: throw IllegalStateException(
-                    "Could not create MediaStore video"
+                    "Could not create MediaStore video",
                 )
 
         try {
+
             val descriptor =
                 resolver.openFileDescriptor(
                     uri,
                     "rw",
                 )
                     ?: throw IllegalStateException(
-                        "Could not open MediaStore video"
+                        "Could not open MediaStore video",
                     )
 
             val muxer =
                 MediaMuxerCompat(
                     descriptor,
-                    uri,
                 )
 
             return MuxerCreationResult(
@@ -436,11 +770,13 @@ class CameraVideoRecorder @Inject constructor(
             )
 
         } catch (e: Exception) {
+
             resolver.delete(
                 uri,
                 null,
                 null,
             )
+
             throw e
         }
     }
@@ -448,19 +784,25 @@ class CameraVideoRecorder @Inject constructor(
     private fun normalizeTimestamp(
         timestampUs: Long,
     ): Long {
-        if (firstTimestampUs < 0L) {
-            firstTimestampUs = timestampUs
+
+        if (
+            firstTimestampUs < 0L
+        ) {
+            firstTimestampUs =
+                timestampUs
         }
 
         return maxOf(
             0L,
-            timestampUs - firstTimestampUs,
+            timestampUs -
+                firstTimestampUs,
         )
     }
 
     private fun readBuffer(
         source: ByteBuffer,
     ): ByteArray {
+
         val duplicate =
             source.duplicate()
 
@@ -473,6 +815,12 @@ class CameraVideoRecorder @Inject constructor(
 
         return result
     }
+
+    /*
+     * ---------------------------------------------------------
+     * Annex-B parser
+     * ---------------------------------------------------------
+     */
 
     private fun splitAnnexB(
         data: ByteArray,
@@ -506,7 +854,8 @@ class CameraVideoRecorder @Inject constructor(
                 }
 
             val nalStart =
-                start + startCodeLength
+                start +
+                    startCodeLength
 
             val nextStart =
                 findStartCode(
@@ -521,16 +870,21 @@ class CameraVideoRecorder @Inject constructor(
                     data.size
                 }
 
-            if (nalEnd > nalStart) {
+            if (
+                nalEnd >
+                nalStart
+            ) {
+
                 result.add(
                     data.copyOfRange(
                         nalStart,
                         nalEnd,
-                    )
+                    ),
                 )
             }
 
-            start = nextStart
+            start =
+                nextStart
         }
 
         return result
@@ -541,25 +895,39 @@ class CameraVideoRecorder @Inject constructor(
         from: Int,
     ): Int {
 
-        var index = from
+        var index =
+            from
 
-        while (index + 3 < data.size) {
+        while (
+            index + 3 <
+            data.size
+        ) {
 
             if (
-                data[index] == 0.toByte() &&
-                data[index + 1] == 0.toByte() &&
-                data[index + 2] == 1.toByte()
+                data[index] ==
+                    0.toByte() &&
+                data[index + 1] ==
+                    0.toByte() &&
+                data[index + 2] ==
+                    1.toByte()
             ) {
+
                 return index
             }
 
             if (
-                index + 4 < data.size &&
-                data[index] == 0.toByte() &&
-                data[index + 1] == 0.toByte() &&
-                data[index + 2] == 0.toByte() &&
-                data[index + 3] == 1.toByte()
+                index + 4 <
+                data.size &&
+                data[index] ==
+                    0.toByte() &&
+                data[index + 1] ==
+                    0.toByte() &&
+                data[index + 2] ==
+                    0.toByte() &&
+                data[index + 3] ==
+                    1.toByte()
             ) {
+
                 return index
             }
 
@@ -569,47 +937,139 @@ class CameraVideoRecorder @Inject constructor(
         return -1
     }
 
+    /*
+     * ---------------------------------------------------------
+     * Length-prefixed HEVC fallback
+     * ---------------------------------------------------------
+     */
+
+    private fun splitLengthPrefixed(
+        data: ByteArray,
+    ): List<ByteArray> {
+
+        val result =
+            mutableListOf<ByteArray>()
+
+        var offset = 0
+
+        while (
+            offset + 4 <=
+            data.size
+        ) {
+
+            val size =
+                (
+                    ((data[offset].toInt() and 0xFF) shl 24) or
+                        ((data[offset + 1].toInt() and 0xFF) shl 16) or
+                        ((data[offset + 2].toInt() and 0xFF) shl 8) or
+                        (data[offset + 3].toInt() and 0xFF)
+                    )
+
+            if (
+                size <= 0 ||
+                offset + 4 + size >
+                data.size
+            ) {
+                return emptyList()
+            }
+
+            result.add(
+                data.copyOfRange(
+                    offset + 4,
+                    offset + 4 + size,
+                ),
+            )
+
+            offset +=
+                4 + size
+        }
+
+        return if (
+            offset == data.size
+        ) {
+            result
+        } else {
+            emptyList()
+        }
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * HEVC helpers
+     * ---------------------------------------------------------
+     */
+
     private fun containsKeyFrame(
         nalUnits: List<ByteArray>,
     ): Boolean {
+
         return nalUnits.any { nal ->
+
             if (nal.isEmpty()) {
                 return@any false
             }
 
             val nalType =
-                (nal[0].toInt() shr 1) and 0x3F
-
-            /*
-             * HEVC IRAP pictures:
-             *
-             * 16–21 = IRAP
-             *
-             * 19/20 are the most common IDR types.
-             */
+                (
+                    nal[0].toInt() shr 1
+                ) and 0x3F
 
             nalType in 16..21
         }
     }
 
-    private fun buildHevcCodecSpecificData(
-        config: ByteArray,
-    ): ByteArray {
+    private fun extractParameterSets(
+        data: ByteArray,
+    ): ByteArray? {
 
-        val units =
-            splitAnnexB(config)
+        val annexB =
+            splitAnnexB(data)
 
-        if (units.isEmpty()) {
-            return config
+        if (annexB.isNotEmpty()) {
+
+            return extractParameterSetsFromNalUnits(
+                annexB,
+            )
         }
 
+        val lengthPrefixed =
+            splitLengthPrefixed(data)
+
+        if (
+            lengthPrefixed.isNotEmpty()
+        ) {
+
+            return extractParameterSetsFromNalUnits(
+                lengthPrefixed,
+            )
+        }
+
+        return null
+    }
+
+    private fun extractParameterSetsFromNalUnits(
+        nalUnits: List<ByteArray>,
+    ): ByteArray? {
+
         val parameterSets =
-            units.filter { nal ->
+            nalUnits.filter { nal ->
+
                 if (nal.isEmpty()) {
                     false
                 } else {
+
                     val type =
-                        (nal[0].toInt() shr 1) and 0x3F
+                        (
+                            nal[0].toInt() shr 1
+                        ) and 0x3F
+
+                    /*
+                     * HEVC:
+                     *
+                     * 32 = VPS
+                     * 33 = SPS
+                     * 34 = PPS
+                     */
 
                     type == 32 ||
                         type == 33 ||
@@ -617,20 +1077,62 @@ class CameraVideoRecorder @Inject constructor(
                 }
             }
 
-        if (parameterSets.isEmpty()) {
-            return config
+        if (
+            parameterSets.isEmpty()
+        ) {
+            return null
         }
 
-        return parameterSets.fold(
-            ByteArray(0),
-        ) { accumulator, nal ->
-            accumulator + byteArrayOf(
-                0,
-                0,
-                0,
-                1,
-            ) + nal
+        /*
+         * Store parameter sets as Annex-B.
+         *
+         * This is the form Android HEVC MediaFormat commonly
+         * accepts for csd-0.
+         */
+
+        var totalSize = 0
+
+        for (nal in parameterSets) {
+            totalSize +=
+                4 +
+                    nal.size
         }
+
+        val result =
+            ByteArray(
+                totalSize,
+            )
+
+        var offset = 0
+
+        for (nal in parameterSets) {
+
+            result[offset] =
+                0
+
+            result[offset + 1] =
+                0
+
+            result[offset + 2] =
+                0
+
+            result[offset + 3] =
+                1
+
+            System.arraycopy(
+                nal,
+                0,
+                result,
+                offset + 4,
+                nal.size,
+            )
+
+            offset +=
+                4 +
+                    nal.size
+        }
+
+        return result
     }
 
     private fun convertAccessUnitToLengthPrefixed(
@@ -640,11 +1142,15 @@ class CameraVideoRecorder @Inject constructor(
         var totalSize = 0
 
         for (nal in nalUnits) {
-            totalSize += 4 + nal.size
+            totalSize +=
+                4 +
+                    nal.size
         }
 
         val output =
-            ByteArray(totalSize)
+            ByteArray(
+                totalSize,
+            )
 
         var offset = 0
 
@@ -654,16 +1160,28 @@ class CameraVideoRecorder @Inject constructor(
                 nal.size
 
             output[offset] =
-                ((size shr 24) and 0xFF).toByte()
+                (
+                    (size shr 24) and
+                        0xFF
+                    ).toByte()
 
             output[offset + 1] =
-                ((size shr 16) and 0xFF).toByte()
+                (
+                    (size shr 16) and
+                        0xFF
+                    ).toByte()
 
             output[offset + 2] =
-                ((size shr 8) and 0xFF).toByte()
+                (
+                    (size shr 8) and
+                        0xFF
+                    ).toByte()
 
             output[offset + 3] =
-                (size and 0xFF).toByte()
+                (
+                    size and
+                        0xFF
+                    ).toByte()
 
             System.arraycopy(
                 nal,
@@ -673,19 +1191,73 @@ class CameraVideoRecorder @Inject constructor(
                 size,
             )
 
-            offset += 4 + size
+            offset +=
+                4 +
+                    size
         }
 
         return output
     }
 
+    private fun nalTypes(
+        nalUnits: List<ByteArray>,
+    ): String {
+
+        return nalUnits.joinToString(
+            separator = ",",
+        ) { nal ->
+
+            if (nal.isEmpty()) {
+                "-"
+            } else {
+
+                (
+                    (nal[0].toInt() shr 1) and
+                        0x3F
+                    ).toString()
+            }
+        }
+    }
+
+    private fun logNalTypes(
+        nalUnits: List<ByteArray>,
+    ) {
+
+        Log.i(
+            TAG,
+            "HEVC NAL types=${nalTypes(nalUnits)}",
+        )
+    }
+
+    private fun hexPrefix(
+        bytes: ByteArray,
+        count: Int = 16,
+    ): String {
+
+        return bytes
+            .take(
+                minOf(
+                    count,
+                    bytes.size,
+                ),
+            )
+            .joinToString(
+                separator = " ",
+            ) {
+                "%02X".format(
+                    it.toInt() and 0xFF,
+                )
+            }
+    }
+
     private data class MuxerCreationResult(
         val muxer: MediaMuxerCompat,
-        val uri: android.net.Uri,
+        val uri: Uri,
     )
 
     private companion object {
-        const val TAG = "CameraVideoRecorder"
+        const val TAG =
+            "CameraVideoRecorder"
     }
 }
 
@@ -693,13 +1265,10 @@ class CameraVideoRecorder @Inject constructor(
  * -------------------------------------------------------------
  * MediaMuxer wrapper
  * -------------------------------------------------------------
- *
- * Kept here so the recorder has a single implementation point.
  */
 
 private class MediaMuxerCompat(
     private val descriptor: android.os.ParcelFileDescriptor,
-    private val uri: android.net.Uri,
 ) {
 
     private val muxer =
@@ -711,7 +1280,9 @@ private class MediaMuxerCompat(
     fun addTrack(
         format: MediaFormat,
     ): Int {
-        return muxer.addTrack(format)
+        return muxer.addTrack(
+            format,
+        )
     }
 
     fun start() {
@@ -723,6 +1294,7 @@ private class MediaMuxerCompat(
         buffer: ByteBuffer,
         info: MediaCodec.BufferInfo,
     ) {
+
         muxer.writeSampleData(
             trackIndex,
             buffer,
@@ -731,6 +1303,7 @@ private class MediaMuxerCompat(
     }
 
     fun stop() {
+
         try {
             muxer.stop()
         } finally {
@@ -739,9 +1312,11 @@ private class MediaMuxerCompat(
     }
 
     fun release() {
+
         try {
             muxer.release()
         } finally {
+
             try {
                 descriptor.close()
             } catch (_: Exception) {
