@@ -11,6 +11,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.lpecom.gemglasses.glasses.CameraPermission
+import com.lpecom.gemglasses.glasses.ConnectionState
 import com.lpecom.gemglasses.glasses.GlassesBackend
 import com.lpecom.gemglasses.glasses.GlassesDevice
 import com.lpecom.gemglasses.glasses.RegistrationState
@@ -62,10 +63,6 @@ class RealGlassesBackend @Inject constructor(
 
         private const val SESSION_START_TIMEOUT_MS = 20_000L
 
-        /*
-         * How long connect() will wait for the asynchronous
-         * MWDAT registration observer to resolve UNKNOWN.
-         */
         private const val REGISTRATION_TIMEOUT_MS = 10_000L
 
         private const val CAMERA_STREAM_TIMEOUT_MS = 15_000L
@@ -84,22 +81,9 @@ class RealGlassesBackend @Inject constructor(
 
     private var session: DeviceSession? = null
 
-    /**
-     * Currently attached MWDAT camera.
-     *
-     * This is shared by:
-     *
-     * 1. The existing Gemini cameraFrames() diagnostic flow.
-     * 2. The new Camera Test screen.
-     *
-     * Only one camera should be attached to the DeviceSession at a time.
-     */
     private var camera:
         com.meta.wearable.dat.camera.Camera? = null
 
-    /**
-     * MainActivity supplies the actual Activity Result permission request.
-     */
     private var cameraPermissionRequester:
         (suspend () -> CameraPermission)? = null
 
@@ -108,6 +92,25 @@ class RealGlassesBackend @Inject constructor(
 
     override val registrationState: Flow<RegistrationState> =
         _registrationState.asStateFlow()
+
+    /*
+     * IMPORTANT:
+     *
+     * This represents the MWDAT DeviceSession connection.
+     *
+     * It is deliberately separate from:
+     *
+     *     Device.linkState == LinkState.CONNECTED
+     *
+     * Bluetooth/device link state only tells us that the glasses are
+     * linked. It does NOT mean that our app has an active MWDAT
+     * DeviceSession.
+     */
+    private val _connectionState =
+        MutableStateFlow(ConnectionState.DISCONNECTED)
+
+    override val connectionState: Flow<ConnectionState> =
+        _connectionState.asStateFlow()
 
     private val _devices =
         MutableStateFlow<List<GlassesDevice>>(emptyList())
@@ -269,18 +272,6 @@ class RealGlassesBackend @Inject constructor(
         }
     }
 
-    /**
-     * Waits for the asynchronous MWDAT registration observer to resolve.
-     *
-     * This fixes a startup race where:
-     *
-     *     _registrationState == UNKNOWN
-     *
-     * simply because observeRegistrationState() has not received its
-     * first value yet.
-     *
-     * We do NOT assume that UNKNOWN means "not registered".
-     */
     private suspend fun waitForRegistration():
         RegistrationState {
 
@@ -292,15 +283,11 @@ class RealGlassesBackend @Inject constructor(
             "Registration check before wait = $current"
         )
 
-        /*
-         * Already resolved.
-         */
         if (
             current == RegistrationState.REGISTERED ||
             current == RegistrationState.NOT_REGISTERED ||
             current == RegistrationState.REVOKED
         ) {
-
             return current
         }
 
@@ -326,7 +313,6 @@ class RealGlassesBackend @Inject constructor(
                         state == RegistrationState.NOT_REGISTERED ||
                         state == RegistrationState.REVOKED
                 }
-
             }
 
         if (resolved == null) {
@@ -360,8 +346,16 @@ class RealGlassesBackend @Inject constructor(
     override suspend fun connect(): Boolean {
 
         Log.i(TAG, "================================================")
-        Log.i(TAG, "STARTING MINIMAL MWDAT CONNECTION TEST")
+        Log.i(TAG, "STARTING MWDAT CONNECTION")
         Log.i(TAG, "================================================")
+
+        /*
+         * This is the state that drives the HomeScreen.
+         *
+         * It is NOT derived from Bluetooth LinkState.
+         */
+        _connectionState.value =
+            ConnectionState.CONNECTING
 
         logBluetoothPermissions()
 
@@ -369,15 +363,6 @@ class RealGlassesBackend @Inject constructor(
         // Registration
         // ---------------------------------------------------------------------
 
-        /*
-         * IMPORTANT:
-         *
-         * Do NOT immediately read _registrationState.value and abort when
-         * it is UNKNOWN.
-         *
-         * The registration observer is asynchronous and may simply not have
-         * delivered the current MWDAT registration state yet.
-         */
         val registration =
             waitForRegistration()
 
@@ -397,6 +382,9 @@ class RealGlassesBackend @Inject constructor(
                 TAG,
                 "Resolved registration state = $registration"
             )
+
+            _connectionState.value =
+                ConnectionState.ERROR
 
             return false
         }
@@ -423,7 +411,7 @@ class RealGlassesBackend @Inject constructor(
             Log.i(TAG, "Device:")
             Log.i(TAG, "  id = ${device.id}")
             Log.i(TAG, "  name = ${device.name}")
-            Log.i(TAG, "  connected = ${device.connected}")
+            Log.i(TAG, "  bluetooth connected = ${device.connected}")
         }
 
         if (devices.isEmpty()) {
@@ -433,12 +421,11 @@ class RealGlassesBackend @Inject constructor(
                 "ABORTING: MWDAT reports zero devices"
             )
 
+            _connectionState.value =
+                ConnectionState.ERROR
+
             return false
         }
-
-        // ---------------------------------------------------------------------
-        // AutoDeviceSelector
-        // ---------------------------------------------------------------------
 
         Log.i(
             TAG,
@@ -511,6 +498,9 @@ class RealGlassesBackend @Inject constructor(
                     e
                 )
 
+                _connectionState.value =
+                    ConnectionState.ERROR
+
                 return false
             }
 
@@ -531,6 +521,9 @@ class RealGlassesBackend @Inject constructor(
                 Log.e(TAG, "================================================")
 
                 logCreateSessionError(error)
+
+                _connectionState.value =
+                    ConnectionState.ERROR
 
                 return false
             }
@@ -585,6 +578,9 @@ class RealGlassesBackend @Inject constructor(
                 e
             )
 
+            _connectionState.value =
+                ConnectionState.ERROR
+
             return false
         }
 
@@ -623,16 +619,23 @@ class RealGlassesBackend @Inject constructor(
 
         if (started) {
 
+            _connectionState.value =
+                ConnectionState.CONNECTED
+
             Log.i(TAG, "================================================")
-            Log.i(TAG, "MWDAT CONNECTION TEST SUCCESS")
+            Log.i(TAG, "MWDAT CONNECTION SUCCESS")
             Log.i(TAG, "SESSION STATE = STARTED")
+            Log.i(TAG, "CONNECTION STATE = CONNECTED")
             Log.i(TAG, "================================================")
 
             return true
         }
 
+        _connectionState.value =
+            ConnectionState.ERROR
+
         Log.e(TAG, "================================================")
-        Log.e(TAG, "MWDAT CONNECTION TEST FAILED")
+        Log.e(TAG, "MWDAT CONNECTION FAILED")
         Log.e(TAG, "Session never reached STARTED")
         Log.e(
             TAG,
@@ -731,6 +734,39 @@ class RealGlassesBackend @Inject constructor(
                         TAG,
                         "SESSION STATE EVENT -> $state"
                     )
+
+                    /*
+                     * Keep the UI connection state synchronized with the
+                     * actual MWDAT DeviceSession.
+                     */
+                    when (state) {
+
+                        DeviceSessionState.STARTED -> {
+
+                            if (
+                                session === activeSession
+                            ) {
+                                _connectionState.value =
+                                    ConnectionState.CONNECTED
+                            }
+                        }
+
+                        DeviceSessionState.STOPPED,
+                        DeviceSessionState.CLOSED -> {
+
+                            if (
+                                session === activeSession
+                            ) {
+                                _connectionState.value =
+                                    ConnectionState.DISCONNECTED
+                            }
+                        }
+
+                        else -> {
+                            // STARTING and other intermediate states
+                            // are handled by connect()'s CONNECTING state.
+                        }
+                    }
                 }
 
             } catch (e: Exception) {
@@ -740,6 +776,13 @@ class RealGlassesBackend @Inject constructor(
                     "Session state observer failed",
                     e
                 )
+
+                if (
+                    session === activeSession
+                ) {
+                    _connectionState.value =
+                        ConnectionState.ERROR
+                }
             }
         }
     }
@@ -766,6 +809,13 @@ class RealGlassesBackend @Inject constructor(
                         "Error type = ${error::class.java.name}"
                     )
                     Log.e(TAG, "================================================")
+
+                    if (
+                        session === activeSession
+                    ) {
+                        _connectionState.value =
+                            ConnectionState.ERROR
+                    }
                 }
 
             } catch (e: Exception) {
@@ -941,6 +991,14 @@ class RealGlassesBackend @Inject constructor(
                 rawName
             }
 
+        /*
+         * IMPORTANT:
+         *
+         * This remains Bluetooth/device-link state.
+         *
+         * It is NOT used by HomeScreen to determine whether our
+         * MWDAT DeviceSession is connected.
+         */
         val connected =
             device.linkState ==
                 LinkState.CONNECTED
@@ -1151,13 +1209,6 @@ class RealGlassesBackend @Inject constructor(
     // EXISTING GEMINI CAMERA FLOW
     // =========================================================================
 
-    /**
-     * Existing diagnostic/Gemini camera flow.
-     *
-     * This is intentionally kept separate from the Camera Test API below.
-     *
-     * It performs one capturePhoto() and emits one JPEG.
-     */
     override fun cameraFrames():
         Flow<ByteArray> = flow {
 
@@ -1610,21 +1661,6 @@ class RealGlassesBackend @Inject constructor(
     // NEW CAMERA TEST - LIVE VIDEO STREAM
     // =========================================================================
 
-    /**
-     * Live camera stream specifically for the Camera Test screen.
-     *
-     * IMPORTANT:
-     *
-     * This does NOT:
-     *
-     * - start Gemini
-     * - start MicStreamer
-     * - route audio
-     * - start Bluetooth SCO
-     * - send frames to Gemini
-     *
-     * It only opens the MWDAT camera and exposes VideoFrame objects.
-     */
     fun cameraTestFrames():
         Flow<VideoFrame> = flow {
 
@@ -1634,10 +1670,6 @@ class RealGlassesBackend @Inject constructor(
 
         var activeSession =
             session
-
-        // ---------------------------------------------------------------------
-        // Ensure DeviceSession
-        // ---------------------------------------------------------------------
 
         if (
             activeSession == null ||
@@ -1699,10 +1731,6 @@ class RealGlassesBackend @Inject constructor(
             return@flow
         }
 
-        // ---------------------------------------------------------------------
-        // Permission
-        // ---------------------------------------------------------------------
-
         val permission =
             cameraPermission()
 
@@ -1724,10 +1752,6 @@ class RealGlassesBackend @Inject constructor(
             return@flow
         }
 
-        // ---------------------------------------------------------------------
-        // Prevent accidentally attaching two cameras.
-        // ---------------------------------------------------------------------
-
         if (camera != null) {
 
             Log.w(
@@ -1737,10 +1761,6 @@ class RealGlassesBackend @Inject constructor(
 
             stopCameraIfNeeded()
         }
-
-        // ---------------------------------------------------------------------
-        // Add camera
-        // ---------------------------------------------------------------------
 
         val activeCamera =
             try {
@@ -1787,10 +1807,6 @@ class RealGlassesBackend @Inject constructor(
             "CAMERA TEST: camera added"
         )
 
-        // ---------------------------------------------------------------------
-        // Start stream
-        // ---------------------------------------------------------------------
-
         try {
 
             Log.i(
@@ -1816,10 +1832,6 @@ class RealGlassesBackend @Inject constructor(
                 TAG,
                 "CAMERA TEST: stream.start() returned successfully"
             )
-
-            // -----------------------------------------------------------------
-            // Wait for STREAMING
-            // -----------------------------------------------------------------
 
             val streaming =
                 withTimeoutOrNull(
@@ -1859,10 +1871,6 @@ class RealGlassesBackend @Inject constructor(
             )
             Log.i(TAG, "Waiting for VideoFrame objects...")
             Log.i(TAG, "================================================")
-
-            // -----------------------------------------------------------------
-            // Expose live VideoFrame stream
-            // -----------------------------------------------------------------
 
             activeCamera.stream.videoStream.collect { frame ->
 
@@ -1906,20 +1914,6 @@ class RealGlassesBackend @Inject constructor(
     // NEW CAMERA TEST - PHOTO CAPTURE
     // =========================================================================
 
-    /**
-     * Captures a photo using the SAME camera currently being used by
-     * cameraTestFrames().
-     *
-     * This is deliberately separate from cameraFrames().
-     *
-     * The Camera Test screen can therefore:
-     *
-     *     cameraTestFrames()
-     *             +
-     *     captureCameraTestPhoto()
-     *
-     * without starting Gemini.
-     */
     suspend fun captureCameraTestPhoto():
         Result<ByteArray> {
 
@@ -2088,12 +2082,6 @@ class RealGlassesBackend @Inject constructor(
         }
     }
 
-    /**
-     * Explicitly stops the Camera Test camera.
-     *
-     * This is public because the Camera Test ViewModel should be able to
-     * stop the live stream when leaving the screen.
-     */
     fun stopCameraTest() {
 
         Log.i(
@@ -2108,9 +2096,6 @@ class RealGlassesBackend @Inject constructor(
     // PHOTO CONVERSION
     // =========================================================================
 
-    /**
-     * Converts MWDAT PhotoData into JPEG bytes.
-     */
     private fun photoDataToJpeg(
         photoData: PhotoData,
     ): ByteArray? {
@@ -2183,9 +2168,6 @@ class RealGlassesBackend @Inject constructor(
         }
     }
 
-    /**
-     * Compress an Android Bitmap to JPEG.
-     */
     private fun bitmapToJpeg(
         bitmap: Bitmap,
     ): ByteArray? {
@@ -2235,9 +2217,6 @@ class RealGlassesBackend @Inject constructor(
         }
     }
 
-    /**
-     * Convert MWDAT's HEIC ByteBuffer to JPEG.
-     */
     private fun heicToJpeg(
         buffer: ByteBuffer,
     ): ByteArray? {
@@ -2328,10 +2307,6 @@ class RealGlassesBackend @Inject constructor(
         }
     }
 
-    /**
-     * Copies the remaining contents of a ByteBuffer without modifying
-     * the original buffer's position.
-     */
     private fun byteBufferToByteArray(
         buffer: ByteBuffer,
     ): ByteArray {
@@ -2355,11 +2330,6 @@ class RealGlassesBackend @Inject constructor(
     // CAMERA CLEANUP
     // =========================================================================
 
-    /**
-     * Stops and removes the current MWDAT camera.
-     *
-     * We intentionally keep the DeviceSession alive.
-     */
     private fun stopCameraIfNeeded() {
 
         val activeCamera =
@@ -2369,7 +2339,6 @@ class RealGlassesBackend @Inject constructor(
             session
 
         if (activeCamera == null) {
-
             return
         }
 
@@ -2473,6 +2442,9 @@ class RealGlassesBackend @Inject constructor(
             } finally {
 
                 session = null
+
+                _connectionState.value =
+                    ConnectionState.DISCONNECTED
 
                 scope.cancel()
             }
