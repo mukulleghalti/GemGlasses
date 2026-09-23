@@ -6,6 +6,7 @@ on:
       - main
       - master
       - CameraTest
+      - AddVideoPhotosave
 
   workflow_dispatch:
     inputs:
