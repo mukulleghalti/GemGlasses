@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import java.io.ByteArrayOutputStream
 import android.app.Activity
+import com.lpecom.gemglasses.glasses.ConnectionState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Hardware-free stand-in for the Meta DAT SDK. Reports one connected pair of
@@ -50,6 +53,12 @@ class MockGlassesBackend : GlassesBackend {
     override suspend fun cameraPermission() = CameraPermission.GRANTED
 
     override suspend fun requestCameraPermission() = CameraPermission.GRANTED
+
+    private val _connectionState =
+    MutableStateFlow(ConnectionState.DISCONNECTED)
+
+    override val connectionState =
+    _connectionState.asStateFlow()
 
     override fun cameraFrames(): Flow<ByteArray> = flow {
         var i = 0
