@@ -73,6 +73,18 @@ class RealGlassesBackend @Inject constructor(
         private const val CAMERA_TEST_FRAME_RATE = 24
 
         private const val JPEG_QUALITY = 90
+
+        /*
+         * IMPORTANT:
+         *
+         * MWDAT only allows one DeviceSession for a device.
+         *
+         * Keep the session at process level as an additional safeguard
+         * against accidentally creating two DeviceSessions if another
+         * RealGlassesBackend instance is ever created.
+         */
+        @Volatile
+        private var sharedSession: DeviceSession? = null
     }
 
     private val scope =
@@ -80,6 +92,12 @@ class RealGlassesBackend @Inject constructor(
 
     private var activity: Activity? = null
 
+    /*
+     * This is the local reference to the process-wide MWDAT session.
+     *
+     * It is synchronized with sharedSession whenever we create/reuse/
+     * clear the session.
+     */
     private var session: DeviceSession? = null
 
     private var camera:
@@ -123,7 +141,24 @@ class RealGlassesBackend @Inject constructor(
     private var initialized = false
 
     init {
+        /*
+         * Pick up an already-created process-wide session if one exists.
+         */
+        session = sharedSession
+
         Log.i(TAG, "RealGlassesBackend created")
+
+        if (session != null) {
+            Log.i(
+                TAG,
+                "Recovered existing process-wide MWDAT DeviceSession"
+            )
+
+            Log.i(
+                TAG,
+                "Recovered session state = ${session?.state?.value}"
+            )
+        }
     }
 
     // =========================================================================
@@ -181,6 +216,14 @@ class RealGlassesBackend @Inject constructor(
 
         initialized = true
 
+        /*
+         * Recover the process-wide session again in case it was created
+         * after this object was instantiated.
+         */
+        if (session == null) {
+            session = sharedSession
+        }
+
         Log.i(TAG, "================================================")
         Log.i(TAG, "INITIALIZING GLASSES BACKEND")
         Log.i(TAG, "MWDAT SDK is initialized by GemGlassesApp")
@@ -190,6 +233,30 @@ class RealGlassesBackend @Inject constructor(
 
         observeRegistrationState()
         observeDevices()
+
+        /*
+         * If a session already exists and is STARTED, immediately expose
+         * the correct connection state.
+         */
+        val existingSession = session
+
+        if (
+            existingSession != null &&
+            existingSession.state.value ==
+                DeviceSessionState.STARTED
+        ) {
+
+            Log.i(
+                TAG,
+                "initialize(): existing MWDAT session is already STARTED"
+            )
+
+            _connectionState.value =
+                ConnectionState.CONNECTED
+
+            observeSessionErrors(existingSession)
+            observeSessionState(existingSession)
+        }
     }
 
     private fun logBluetoothPermissions() {
@@ -275,17 +342,6 @@ class RealGlassesBackend @Inject constructor(
 
     /**
      * Resolve registration using the ACTUAL MWDAT registration state.
-     *
-     * Previously this method waited on our custom _registrationState.
-     * That caused a problem because MWDAT 0.9.0 has its own enum:
-     *
-     *   AVAILABLE
-     *   REGISTERED
-     *   REGISTERING
-     *   UNAVAILABLE
-     *   UNREGISTERING
-     *
-     * We now read Wearables.registrationState directly.
      */
     private suspend fun waitForRegistration():
         RegistrationState {
@@ -301,6 +357,7 @@ class RealGlassesBackend @Inject constructor(
         when (actualState) {
 
             MWDATRegistrationState.REGISTERED -> {
+
                 Log.i(
                     TAG,
                     "Actual MWDAT registration state is REGISTERED"
@@ -313,6 +370,7 @@ class RealGlassesBackend @Inject constructor(
             }
 
             MWDATRegistrationState.REGISTERING -> {
+
                 Log.i(
                     TAG,
                     "MWDAT registration is currently REGISTERING"
@@ -320,6 +378,7 @@ class RealGlassesBackend @Inject constructor(
             }
 
             MWDATRegistrationState.AVAILABLE -> {
+
                 Log.i(
                     TAG,
                     "MWDAT registration state is AVAILABLE"
@@ -327,6 +386,7 @@ class RealGlassesBackend @Inject constructor(
             }
 
             MWDATRegistrationState.UNAVAILABLE -> {
+
                 Log.w(
                     TAG,
                     "MWDAT registration state is UNAVAILABLE"
@@ -334,6 +394,7 @@ class RealGlassesBackend @Inject constructor(
             }
 
             MWDATRegistrationState.UNREGISTERING -> {
+
                 Log.w(
                     TAG,
                     "MWDAT registration state is UNREGISTERING"
@@ -366,7 +427,6 @@ class RealGlassesBackend @Inject constructor(
                         state ==
                         MWDATRegistrationState.UNAVAILABLE
                 }
-
             }
 
         if (resolved == null) {
@@ -384,10 +444,6 @@ class RealGlassesBackend @Inject constructor(
                 "Actual MWDAT registration after timeout = $finalState"
             )
 
-            /*
-             * Keep our public app state synchronized with the actual
-             * MWDAT state before returning.
-             */
             mapMWDATRegistrationState(
                 finalState
             )
@@ -417,11 +473,6 @@ class RealGlassesBackend @Inject constructor(
         Log.i(TAG, "STARTING MWDAT CONNECTION")
         Log.i(TAG, "================================================")
 
-        /*
-         * This is the state that drives the HomeScreen.
-         *
-         * It is NOT derived from Bluetooth LinkState.
-         */
         _connectionState.value =
             ConnectionState.CONNECTING
 
@@ -463,18 +514,22 @@ class RealGlassesBackend @Inject constructor(
         )
 
         // ---------------------------------------------------------------------
-        // Log devices
+        // Recover process-wide session
         // ---------------------------------------------------------------------
 
-        val devices =
-            _devices.value
+        if (session == null) {
+            session = sharedSession
+        }
+
+        var activeSession =
+            session
 
         Log.i(
             TAG,
-            "Known MWDAT devices = ${devices.size}"
+            "Known MWDAT devices = ${_devices.value.size}"
         )
 
-        devices.forEach { device ->
+        _devices.value.forEach { device ->
 
             Log.i(TAG, "Device:")
             Log.i(TAG, "  id = ${device.id}")
@@ -482,56 +537,134 @@ class RealGlassesBackend @Inject constructor(
             Log.i(TAG, "  bluetooth connected = ${device.connected}")
         }
 
-        Log.i(
-            TAG,
-            "Using AutoDeviceSelector()"
-        )
+        /*
+         * IMPORTANT:
+         *
+         * Do NOT abort because _devices is empty.
+         *
+         * AutoDeviceSelector() is responsible for selecting the eligible
+         * registered device.
+         */
 
         // ---------------------------------------------------------------------
-        // Stop previous session
+        // REUSE EXISTING SESSION
         // ---------------------------------------------------------------------
 
-        val oldSession =
-            session
+        if (activeSession != null) {
 
-        if (oldSession != null) {
+            val existingState =
+                activeSession.state.value
 
             Log.i(
                 TAG,
-                "Existing session found"
+                "Existing MWDAT DeviceSession found"
             )
 
             Log.i(
                 TAG,
-                "Existing session state = ${oldSession.state.value}"
+                "Existing session state = $existingState"
             )
 
-            try {
+            when (existingState) {
 
-                stopCameraIfNeeded()
+                DeviceSessionState.STARTED -> {
 
-                oldSession.stop()
+                    Log.i(
+                        TAG,
+                        "Reusing existing STARTED DeviceSession"
+                    )
 
-                Log.i(
-                    TAG,
-                    "Existing session stop() called"
-                )
+                    observeSessionErrors(
+                        activeSession
+                    )
 
-            } catch (e: Exception) {
+                    observeSessionState(
+                        activeSession
+                    )
 
-                Log.w(
-                    TAG,
-                    "Could not stop existing session",
-                    e
-                )
+                    _connectionState.value =
+                        ConnectionState.CONNECTED
+
+                    return true
+                }
+
+                DeviceSessionState.STARTING -> {
+
+                    Log.i(
+                        TAG,
+                        "Existing session is STARTING; waiting for STARTED"
+                    )
+
+                    val started =
+                        withTimeoutOrNull(
+                            SESSION_START_TIMEOUT_MS
+                        ) {
+
+                            activeSession.state.first { state ->
+
+                                Log.i(
+                                    TAG,
+                                    "Existing session state -> $state"
+                                )
+
+                                state ==
+                                    DeviceSessionState.STARTED ||
+                                    state ==
+                                    DeviceSessionState.STOPPED
+                            }
+                        }
+
+                    if (
+                        activeSession.state.value ==
+                            DeviceSessionState.STARTED
+                    ) {
+
+                        _connectionState.value =
+                            ConnectionState.CONNECTED
+
+                        return true
+                    }
+
+                    Log.w(
+                        TAG,
+                        "Existing session did not reach STARTED"
+                    )
+                }
+
+                DeviceSessionState.STOPPED -> {
+
+                    Log.i(
+                        TAG,
+                        "Existing session is STOPPED; clearing it"
+                    )
+
+                    session = null
+
+                    if (sharedSession === activeSession) {
+                        sharedSession = null
+                    }
+
+                    activeSession = null
+                }
+
+                else -> {
+
+                    Log.i(
+                        TAG,
+                        "Existing session is in state $existingState"
+                    )
+                }
             }
-
-            session = null
         }
 
         // ---------------------------------------------------------------------
         // CREATE SESSION
         // ---------------------------------------------------------------------
+
+        Log.i(
+            TAG,
+            "Using AutoDeviceSelector()"
+        )
 
         Log.i(
             TAG,
@@ -584,6 +717,9 @@ class RealGlassesBackend @Inject constructor(
             }
 
         session =
+            createdSession
+
+        sharedSession =
             createdSession
 
         Log.i(TAG, "================================================")
@@ -761,6 +897,28 @@ class RealGlassesBackend @Inject constructor(
                 )
             }
 
+            text.contains(
+                "A session already exists",
+                ignoreCase = true
+            ) -> {
+
+                Log.e(
+                    TAG,
+                    "RESULT: SESSION_ALREADY_EXISTS"
+                )
+
+                Log.e(
+                    TAG,
+                    "MWDAT reports that a DeviceSession already exists " +
+                        "for this device."
+                )
+
+                Log.e(
+                    TAG,
+                    "The backend will not create another DeviceSession."
+                )
+            }
+
             else -> {
 
                 Log.e(
@@ -790,10 +948,6 @@ class RealGlassesBackend @Inject constructor(
                         "SESSION STATE EVENT -> $state"
                     )
 
-                    /*
-                     * Keep the UI connection state synchronized with the
-                     * actual MWDAT DeviceSession.
-                     */
                     when (state) {
 
                         DeviceSessionState.STARTED -> {
@@ -801,6 +955,7 @@ class RealGlassesBackend @Inject constructor(
                             if (
                                 session === activeSession
                             ) {
+
                                 _connectionState.value =
                                     ConnectionState.CONNECTED
                             }
@@ -811,14 +966,29 @@ class RealGlassesBackend @Inject constructor(
                             if (
                                 session === activeSession
                             ) {
+
+                                Log.i(
+                                    TAG,
+                                    "Tracked MWDAT session reached STOPPED"
+                                )
+
                                 _connectionState.value =
                                     ConnectionState.DISCONNECTED
+
+                                if (
+                                    sharedSession ===
+                                        activeSession
+                                ) {
+                                    sharedSession = null
+                                }
+
+                                session = null
                             }
                         }
 
                         else -> {
                             // STARTING and other intermediate states
-                            // are handled by connect()'s CONNECTING state.
+                            // are handled by connect().
                         }
                     }
                 }
@@ -834,6 +1004,7 @@ class RealGlassesBackend @Inject constructor(
                 if (
                     session === activeSession
                 ) {
+
                     _connectionState.value =
                         ConnectionState.ERROR
                 }
@@ -867,6 +1038,7 @@ class RealGlassesBackend @Inject constructor(
                     if (
                         session === activeSession
                     ) {
+
                         _connectionState.value =
                             ConnectionState.ERROR
                     }
@@ -1045,14 +1217,6 @@ class RealGlassesBackend @Inject constructor(
                 rawName
             }
 
-        /*
-         * IMPORTANT:
-         *
-         * This remains Bluetooth/device-link state.
-         *
-         * It is NOT used by HomeScreen to determine whether our
-         * MWDAT DeviceSession is connected.
-         */
         val connected =
             device.linkState ==
                 LinkState.CONNECTED
@@ -1290,6 +1454,11 @@ class RealGlassesBackend @Inject constructor(
         var activeSession =
             session
 
+        if (activeSession == null) {
+            activeSession = sharedSession
+            session = activeSession
+        }
+
         if (
             activeSession == null ||
             activeSession.state.value !=
@@ -1328,7 +1497,7 @@ class RealGlassesBackend @Inject constructor(
             }
 
             activeSession =
-                session
+                session ?: sharedSession
         }
 
         if (activeSession == null) {
@@ -1742,6 +1911,11 @@ class RealGlassesBackend @Inject constructor(
         var activeSession =
             session
 
+        if (activeSession == null) {
+            activeSession = sharedSession
+            session = activeSession
+        }
+
         if (
             activeSession == null ||
             activeSession.state.value !=
@@ -1776,7 +1950,7 @@ class RealGlassesBackend @Inject constructor(
             }
 
             activeSession =
-                session
+                session ?: sharedSession
         }
 
         if (activeSession == null) {
@@ -1801,6 +1975,11 @@ class RealGlassesBackend @Inject constructor(
 
             return@flow
         }
+
+        Log.i(
+            TAG,
+            "CAMERA TEST: Reusing existing STARTED DeviceSession"
+        )
 
         val permission =
             cameraPermission()
@@ -1838,7 +2017,7 @@ class RealGlassesBackend @Inject constructor(
 
                 Log.i(
                     TAG,
-                    "CAMERA TEST: Adding camera"
+                    "CAMERA TEST: Adding camera to existing DeviceSession"
                 )
 
                 activeSession.addCamera(
@@ -1929,6 +2108,12 @@ class RealGlassesBackend @Inject constructor(
                 Log.e(
                     TAG,
                     "CAMERA TEST: stream never reached STREAMING"
+                )
+
+                Log.e(
+                    TAG,
+                    "CAMERA TEST final stream state = " +
+                        activeCamera.stream.state.value
                 )
 
                 return@flow
@@ -2407,7 +2592,7 @@ class RealGlassesBackend @Inject constructor(
             camera
 
         val activeSession =
-            session
+            session ?: sharedSession
 
         if (activeCamera == null) {
             return
@@ -2485,7 +2670,7 @@ class RealGlassesBackend @Inject constructor(
                 stopCameraIfNeeded()
 
                 val activeSession =
-                    session
+                    session ?: sharedSession
 
                 if (activeSession != null) {
 
@@ -2494,12 +2679,38 @@ class RealGlassesBackend @Inject constructor(
                         "Stopping DeviceSession"
                     )
 
-                    activeSession.stop()
+                    try {
 
-                    Log.i(
-                        TAG,
-                        "DeviceSession.stop() called"
-                    )
+                        activeSession.stop()
+
+                        Log.i(
+                            TAG,
+                            "DeviceSession.stop() called"
+                        )
+
+                    } catch (e: Exception) {
+
+                        Log.w(
+                            TAG,
+                            "DeviceSession.stop() failed",
+                            e
+                        )
+                    }
+
+                    /*
+                     * Give MWDAT a moment to transition the session to
+                     * STOPPED before another createSession() is attempted.
+                     */
+                    withTimeoutOrNull(
+                        SESSION_START_TIMEOUT_MS
+                    ) {
+
+                        activeSession.state.first { state ->
+
+                            state ==
+                                DeviceSessionState.STOPPED
+                        }
+                    }
                 }
 
             } catch (e: Exception) {
@@ -2512,6 +2723,10 @@ class RealGlassesBackend @Inject constructor(
 
             } finally {
 
+                if (sharedSession === activeSessionOrNull()) {
+                    sharedSession = null
+                }
+
                 session = null
 
                 _connectionState.value =
@@ -2520,5 +2735,9 @@ class RealGlassesBackend @Inject constructor(
                 scope.cancel()
             }
         }
+    }
+
+    private fun activeSessionOrNull(): DeviceSession? {
+        return session ?: sharedSession
     }
 }
