@@ -42,7 +42,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayOutputStream
@@ -62,6 +61,12 @@ class RealGlassesBackend @Inject constructor(
         private const val DEFAULT_NAME = "Ray-Ban Meta"
 
         private const val SESSION_START_TIMEOUT_MS = 20_000L
+
+        /*
+         * How long connect() will wait for the asynchronous
+         * MWDAT registration observer to resolve UNKNOWN.
+         */
+        private const val REGISTRATION_TIMEOUT_MS = 10_000L
 
         private const val CAMERA_STREAM_TIMEOUT_MS = 15_000L
 
@@ -264,6 +269,90 @@ class RealGlassesBackend @Inject constructor(
         }
     }
 
+    /**
+     * Waits for the asynchronous MWDAT registration observer to resolve.
+     *
+     * This fixes a startup race where:
+     *
+     *     _registrationState == UNKNOWN
+     *
+     * simply because observeRegistrationState() has not received its
+     * first value yet.
+     *
+     * We do NOT assume that UNKNOWN means "not registered".
+     */
+    private suspend fun waitForRegistration():
+        RegistrationState {
+
+        val current =
+            _registrationState.value
+
+        Log.i(
+            TAG,
+            "Registration check before wait = $current"
+        )
+
+        /*
+         * Already resolved.
+         */
+        if (
+            current == RegistrationState.REGISTERED ||
+            current == RegistrationState.NOT_REGISTERED ||
+            current == RegistrationState.REVOKED
+        ) {
+
+            return current
+        }
+
+        Log.i(
+            TAG,
+            "MWDAT registration is still unresolved; waiting up to " +
+                "${REGISTRATION_TIMEOUT_MS}ms"
+        )
+
+        val resolved =
+            withTimeoutOrNull(
+                REGISTRATION_TIMEOUT_MS
+            ) {
+
+                _registrationState.first { state ->
+
+                    Log.i(
+                        TAG,
+                        "Waiting for registration -> $state"
+                    )
+
+                    state == RegistrationState.REGISTERED ||
+                        state == RegistrationState.NOT_REGISTERED ||
+                        state == RegistrationState.REVOKED
+                }
+
+            }
+
+        if (resolved == null) {
+
+            Log.e(
+                TAG,
+                "Timed out waiting for MWDAT registration state"
+            )
+
+            Log.e(
+                TAG,
+                "Registration state after timeout = " +
+                    _registrationState.value
+            )
+
+            return RegistrationState.UNKNOWN
+        }
+
+        Log.i(
+            TAG,
+            "MWDAT registration resolved = $resolved"
+        )
+
+        return resolved
+    }
+
     // =========================================================================
     // CONNECTION
     // =========================================================================
@@ -280,12 +369,21 @@ class RealGlassesBackend @Inject constructor(
         // Registration
         // ---------------------------------------------------------------------
 
+        /*
+         * IMPORTANT:
+         *
+         * Do NOT immediately read _registrationState.value and abort when
+         * it is UNKNOWN.
+         *
+         * The registration observer is asynchronous and may simply not have
+         * delivered the current MWDAT registration state yet.
+         */
         val registration =
-            _registrationState.value
+            waitForRegistration()
 
         Log.i(
             TAG,
-            "Current registration state = $registration"
+            "Resolved registration state = $registration"
         )
 
         if (registration != RegistrationState.REGISTERED) {
@@ -295,8 +393,18 @@ class RealGlassesBackend @Inject constructor(
                 "ABORTING: MWDAT registration is not REGISTERED"
             )
 
+            Log.e(
+                TAG,
+                "Resolved registration state = $registration"
+            )
+
             return false
         }
+
+        Log.i(
+            TAG,
+            "MWDAT registration confirmed REGISTERED"
+        )
 
         // ---------------------------------------------------------------------
         // Log devices
@@ -1516,13 +1624,6 @@ class RealGlassesBackend @Inject constructor(
      * - send frames to Gemini
      *
      * It only opens the MWDAT camera and exposes VideoFrame objects.
-     *
-     * The MWDAT 0.9.0 AAR confirms that:
-     *
-     * Stream.videoStream
-     *     -> Flow<VideoFrame>
-     *
-     * and that when compressVideo = false the SDK emits decoded frames.
      */
     fun cameraTestFrames():
         Flow<VideoFrame> = flow {
@@ -1649,15 +1750,6 @@ class RealGlassesBackend @Inject constructor(
                     "CAMERA TEST: Adding camera"
                 )
 
-                /*
-                 * This is the important difference from the old diagnostic
-                 * flow.
-                 *
-                 * compressVideo = false
-                 *
-                 * The MWDAT 0.9.0 AAR exposes decoded VideoFrame objects
-                 * through videoStream in this mode.
-                 */
                 activeSession.addCamera(
                     StreamConfiguration(
                         videoQuality =
@@ -1763,7 +1855,7 @@ class RealGlassesBackend @Inject constructor(
             Log.i(TAG, "CAMERA TEST: STREAMING")
             Log.i(
                 TAG,
-                "compressVideo = false"
+                "compressVideo = true"
             )
             Log.i(TAG, "Waiting for VideoFrame objects...")
             Log.i(TAG, "================================================")
