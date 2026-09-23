@@ -68,8 +68,23 @@ class RealGlassesBackend @Inject constructor(
 
         private const val CAMERA_STREAM_TIMEOUT_MS = 15_000L
 
+        /*
+         * How long we wait for the camera pipeline after receiving
+         * the first real video frame before capturePhoto().
+         */
         private const val CAMERA_SETTLE_DELAY_MS = 1_500L
 
+        /*
+         * Maximum time allowed for a real video frame to arrive.
+         */
+        private const val CAMERA_FIRST_FRAME_TIMEOUT_MS = 10_000L
+
+        /*
+         * IMPORTANT:
+         *
+         * This is deliberately the same configuration that is already
+         * proven to work in Camera Test.
+         */
         private const val CAMERA_TEST_FRAME_RATE = 24
 
         private const val JPEG_QUALITY = 90
@@ -595,24 +610,23 @@ class RealGlassesBackend @Inject constructor(
                         "Existing session is STARTING; waiting for STARTED"
                     )
 
-                    val started =
-                        withTimeoutOrNull(
-                            SESSION_START_TIMEOUT_MS
-                        ) {
+                    withTimeoutOrNull(
+                        SESSION_START_TIMEOUT_MS
+                    ) {
 
-                            activeSession.state.first { state ->
+                        activeSession.state.first { state ->
 
-                                Log.i(
-                                    TAG,
-                                    "Existing session state -> $state"
-                                )
+                            Log.i(
+                                TAG,
+                                "Existing session state -> $state"
+                            )
 
+                            state ==
+                                DeviceSessionState.STARTED ||
                                 state ==
-                                    DeviceSessionState.STARTED ||
-                                    state ==
-                                    DeviceSessionState.STOPPED
-                            }
+                                DeviceSessionState.STOPPED
                         }
+                    }
 
                     if (
                         activeSession.state.value ==
@@ -1569,11 +1583,19 @@ class RealGlassesBackend @Inject constructor(
                     "Adding MWDAT camera"
                 )
 
+                /*
+                 * IMPORTANT:
+                 *
+                 * This now exactly matches the configuration proven
+                 * to work in Camera Test.
+                 */
                 activeSession.addCamera(
                     StreamConfiguration(
                         videoQuality =
                             VideoQuality.MEDIUM,
-                        frameRate = 7,
+                        frameRate =
+                            CAMERA_TEST_FRAME_RATE,
+                        compressVideo = true,
                     )
                 ).getOrElse { error ->
 
@@ -1612,11 +1634,35 @@ class RealGlassesBackend @Inject constructor(
 
         Log.i(
             TAG,
+            "Camera configuration:"
+        )
+
+        Log.i(
+            TAG,
+            "  videoQuality = MEDIUM"
+        )
+
+        Log.i(
+            TAG,
+            "  frameRate = $CAMERA_TEST_FRAME_RATE"
+        )
+
+        Log.i(
+            TAG,
+            "  compressVideo = true"
+        )
+
+        Log.i(
+            TAG,
             "Camera stream initial state = " +
                 activeCamera.stream.state.value
         )
 
         try {
+
+            // -----------------------------------------------------------------
+            // START STREAM
+            // -----------------------------------------------------------------
 
             Log.i(
                 TAG,
@@ -1658,6 +1704,10 @@ class RealGlassesBackend @Inject constructor(
                 TAG,
                 "camera.stream.start() returned successfully"
             )
+
+            // -----------------------------------------------------------------
+            // WAIT FOR STREAMING
+            // -----------------------------------------------------------------
 
             Log.i(
                 TAG,
@@ -1702,8 +1752,103 @@ class RealGlassesBackend @Inject constructor(
 
             Log.i(TAG, "================================================")
             Log.i(TAG, "CAMERA STREAMING")
-            Log.i(TAG, "Ready for capturePhoto()")
+            Log.i(TAG, "Stream state confirmed STREAMING")
             Log.i(TAG, "================================================")
+
+            // -----------------------------------------------------------------
+            // WAIT FOR REAL VIDEO FRAME
+            // -----------------------------------------------------------------
+
+            /*
+             * IMPORTANT:
+             *
+             * STREAMING means the stream has started, but we want to
+             * prove that actual camera data is flowing before calling
+             * capturePhoto().
+             *
+             * We intentionally ignore codec-config frames here.
+             */
+            Log.i(
+                TAG,
+                "Waiting for first REAL video frame before capturePhoto()..."
+            )
+
+            val firstRealFrame =
+                withTimeoutOrNull(
+                    CAMERA_FIRST_FRAME_TIMEOUT_MS
+                ) {
+
+                    activeCamera.stream.videoStream.first { frame ->
+
+                        val remainingBytes =
+                            frame.buffer.remaining()
+
+                        Log.i(
+                            TAG,
+                            "CAMERA FIRST-FRAME CHECK: " +
+                                "${frame.width}x${frame.height}, " +
+                                "bytes=$remainingBytes, " +
+                                "compressed=${frame.isCompressed}, " +
+                                "codecConfig=${frame.isCodecConfig}"
+                        )
+
+                        !frame.isCodecConfig &&
+                            remainingBytes > 0
+                    }
+
+                }
+
+            if (firstRealFrame == null) {
+
+                Log.e(TAG, "================================================")
+                Log.e(
+                    TAG,
+                    "CAMERA FAILED: NO REAL VIDEO FRAME"
+                )
+                Log.e(
+                    TAG,
+                    "The camera reached STREAMING but no actual"
+                )
+                Log.e(
+                    TAG,
+                    "video frame arrived before capturePhoto()."
+                )
+                Log.e(
+                    TAG,
+                    "Final stream state = " +
+                        activeCamera.stream.state.value
+                )
+                Log.e(TAG, "================================================")
+
+                return@flow
+            }
+
+            Log.i(TAG, "================================================")
+            Log.i(
+                TAG,
+                "FIRST REAL VIDEO FRAME RECEIVED"
+            )
+            Log.i(
+                TAG,
+                "Frame = ${firstRealFrame.width}x${firstRealFrame.height}"
+            )
+            Log.i(
+                TAG,
+                "Frame bytes = ${firstRealFrame.buffer.remaining()}"
+            )
+            Log.i(
+                TAG,
+                "Compressed = ${firstRealFrame.isCompressed}"
+            )
+            Log.i(
+                TAG,
+                "Codec config = ${firstRealFrame.isCodecConfig}"
+            )
+            Log.i(TAG, "================================================")
+
+            // -----------------------------------------------------------------
+            // CAMERA PIPELINE SETTLE
+            // -----------------------------------------------------------------
 
             Log.i(
                 TAG,
@@ -1719,10 +1864,60 @@ class RealGlassesBackend @Inject constructor(
                 "Camera settle delay complete"
             )
 
-            Log.i(TAG, "================================================")
-            Log.i(TAG, "SINGLE PHOTO CAPTURE TEST")
-            Log.i(TAG, "Calling capturePhoto() exactly ONCE")
-            Log.i(TAG, "================================================")
+            // -----------------------------------------------------------------
+            // FINAL STATE CHECK
+            // -----------------------------------------------------------------
+
+            val stateBeforeCapture =
+                activeCamera.stream.state.value
+
+            Log.i(
+                TAG,
+                "================================================"
+            )
+
+            Log.i(
+                TAG,
+                "STATE IMMEDIATELY BEFORE capturePhoto() = " +
+                    stateBeforeCapture
+            )
+
+            if (
+                stateBeforeCapture !=
+                    StreamState.STREAMING
+            ) {
+
+                Log.e(
+                    TAG,
+                    "CAMERA ABORTED: Stream is no longer STREAMING"
+                )
+
+                Log.e(
+                    TAG,
+                    "Current state = $stateBeforeCapture"
+                )
+
+                return@flow
+            }
+
+            // -----------------------------------------------------------------
+            // CAPTURE PHOTO
+            // -----------------------------------------------------------------
+
+            Log.i(
+                TAG,
+                "SINGLE PHOTO CAPTURE TEST"
+            )
+
+            Log.i(
+                TAG,
+                "Calling capturePhoto() exactly ONCE"
+            )
+
+            Log.i(
+                TAG,
+                "================================================"
+            )
 
             try {
 
