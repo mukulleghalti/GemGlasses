@@ -9,6 +9,7 @@ import com.lpecom.gemglasses.agent.AgentStatus
 import com.lpecom.gemglasses.glasses.GlassesDevice
 import com.lpecom.gemglasses.glasses.GlassesManager
 import com.lpecom.gemglasses.glasses.RegistrationState
+import com.lpecom.gemglasses.glasses.ConnectionState
 import com.lpecom.gemglasses.service.AgentForegroundService
 import com.lpecom.gemglasses.settings.AgentPreferences
 import com.lpecom.gemglasses.settings.SettingsRepository
@@ -44,6 +45,10 @@ class AgentViewModel @Inject constructor(
     val registration: StateFlow<RegistrationState> =
         glassesManager.registrationState
             .stateInDefault(RegistrationState.UNKNOWN)
+
+    val connectionState: StateFlow<ConnectionState> =
+        glassesManager.connectionState
+            .stateInDefault(ConnectionState.DISCONNECTED)
 
     val devices: StateFlow<List<GlassesDevice>> =
         glassesManager.devices
@@ -113,10 +118,6 @@ class AgentViewModel @Inject constructor(
 
     /**
      * Changes the assistant language.
-     *
-     * Example:
-     *     setLanguage("en")
-     *     setLanguage("hi")
      */
     fun setLanguage(code: String) {
         viewModelScope.launch {
