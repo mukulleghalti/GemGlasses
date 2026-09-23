@@ -751,8 +751,7 @@ class RealGlassesBackend @Inject constructor(
                             }
                         }
 
-                        DeviceSessionState.STOPPED,
-                        DeviceSessionState.CLOSED -> {
+                        DeviceSessionState.STOPPED-> {
 
                             if (
                                 session === activeSession
