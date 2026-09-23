@@ -2,6 +2,7 @@ package com.lpecom.gemglasses.settings
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -11,10 +12,48 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** User-tunable session preferences. */
+enum class CameraResolution(
+    val storageValue: String,
+    val label: String,
+    val width: Int,
+    val height: Int,
+) {
+    LOW(
+        storageValue = "low",
+        label = "Low — 360 × 640",
+        width = 360,
+        height = 640,
+    ),
+
+    MEDIUM(
+        storageValue = "medium",
+        label = "Medium — 504 × 896",
+        width = 504,
+        height = 896,
+    ),
+
+    HIGH(
+        storageValue = "high",
+        label = "High — 720 × 1280",
+        width = 720,
+        height = 1280,
+    );
+
+    companion object {
+        fun fromStorageValue(value: String?): CameraResolution {
+            return entries.firstOrNull {
+                it.storageValue == value
+            } ?: MEDIUM
+        }
+    }
+}
+
+/** User-tunable session and camera preferences. */
 data class AgentPreferences(
     val languageCode: String,
     val voiceName: String,
+    val cameraResolution: CameraResolution,
+    val cameraFrameRate: Int,
 ) {
     /** Built here so the persona text stays in one place. */
     val systemInstruction: String
@@ -22,14 +61,11 @@ data class AgentPreferences(
 
     companion object {
 
-        /**
-         * Default assistant language is English.
-         *
-         * Puck is kept as the default Gemini voice.
-         */
         val DEFAULT = AgentPreferences(
             languageCode = "en",
             voiceName = "Puck",
+            cameraResolution = CameraResolution.MEDIUM,
+            cameraFrameRate = 24,
         )
 
         val DEFAULT_SYSTEM_INSTRUCTION = """
@@ -63,6 +99,12 @@ class SettingsRepository @Inject constructor(
     private val voiceKey =
         stringPreferencesKey("voice_name")
 
+    private val cameraResolutionKey =
+        stringPreferencesKey("camera_resolution")
+
+    private val cameraFrameRateKey =
+        intPreferencesKey("camera_frame_rate")
+
     val preferences: Flow<AgentPreferences> =
         context.dataStore.data.map { prefs ->
 
@@ -74,6 +116,15 @@ class SettingsRepository @Inject constructor(
                 voiceName =
                     prefs[voiceKey]
                         ?: AgentPreferences.DEFAULT.voiceName,
+
+                cameraResolution =
+                    CameraResolution.fromStorageValue(
+                        prefs[cameraResolutionKey]
+                    ),
+
+                cameraFrameRate =
+                    prefs[cameraFrameRateKey]
+                        ?: AgentPreferences.DEFAULT.cameraFrameRate,
             )
         }
 
@@ -89,6 +140,24 @@ class SettingsRepository @Inject constructor(
     suspend fun setVoice(voice: String) {
         context.dataStore.edit {
             it[voiceKey] = voice
+        }
+    }
+
+    suspend fun setCameraResolution(
+        resolution: CameraResolution,
+    ) {
+        context.dataStore.edit {
+            it[cameraResolutionKey] =
+                resolution.storageValue
+        }
+    }
+
+    suspend fun setCameraFrameRate(
+        frameRate: Int,
+    ) {
+        context.dataStore.edit {
+            it[cameraFrameRateKey] =
+                frameRate
         }
     }
 }
