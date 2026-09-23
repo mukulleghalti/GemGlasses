@@ -77,51 +77,6 @@ jobs:
           set -e
           chmod +x gradlew
 
-      - name: Inspect MWDAT dependencies
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "MWDAT DEPENDENCY TREE"
-          echo "========================================"
-
-          ./gradlew :app:dependencies \
-            --configuration debugCompileClasspath \
-            | grep -i -A5 -B5 mwdat || true
-
-          echo
-          echo "========================================"
-          echo "MWDAT CACHE ARTIFACTS"
-          echo "========================================"
-
-          find "$HOME/.gradle/caches/modules-2/files-2.1" \
-            -type f \
-            \( -name "*.jar" -o -name "*.aar" \) \
-            | grep -i mwdat || true
-
-          echo
-          echo "========================================"
-          echo "CAMERA API CLASSES"
-          echo "========================================"
-
-          while IFS= read -r artifact; do
-            echo
-            echo "----- $artifact -----"
-
-            if [[ "$artifact" == *.jar ]]; then
-              unzip -l "$artifact" 2>/dev/null \
-                | grep -Ei \
-                  "PhotoData|Photo|Camera|StreamConfiguration|StreamState|VideoQuality" \
-                || true
-            fi
-          done < <(
-            find "$HOME/.gradle/caches/modules-2/files-2.1" \
-              -type f \
-              \( -name "*.jar" -o -name "*.aar" \) \
-              | grep -i mwdat || true
-          )
-
       - name: Build debug APK
         shell: bash
         run: |
