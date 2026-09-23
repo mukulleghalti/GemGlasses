@@ -20,23 +20,26 @@ data class CameraTestUiState(
     val status: String = "Ready",
     val streaming: Boolean = false,
     val capturing: Boolean = false,
+    val recording: Boolean = false,
+    val recordingDurationMs: Long = 0L,
     val capturedPhoto: android.graphics.Bitmap? = null,
+    val savedVideoUri: android.net.Uri? = null,
     val error: String? = null,
-    val photoSaved: Boolean = false,
 )
 
 @HiltViewModel
 class CameraTestViewModel @Inject constructor(
     private val backend: RealGlassesBackend,
-    private val mediaSaver: CameraMediaSaver,
+    private val videoRecorder: CameraVideoRecorder,
 ) : ViewModel() {
 
     private val _uiState =
         MutableStateFlow(
-            CameraTestUiState()
+            CameraTestUiState(),
         )
 
-    val uiState: StateFlow<CameraTestUiState> =
+    val uiState:
+        StateFlow<CameraTestUiState> =
         _uiState.asStateFlow()
 
     private val _frames =
@@ -45,16 +48,15 @@ class CameraTestViewModel @Inject constructor(
             extraBufferCapacity = 8,
         )
 
-    val frames: SharedFlow<VideoFrame> =
+    val frames:
+        SharedFlow<VideoFrame> =
         _frames.asSharedFlow()
 
     private var previewJob: Job? = null
 
-    /*
-     * ---------------------------------------------------------
-     * START CAMERA
-     * ---------------------------------------------------------
-     */
+    private var recordingStartTimeMs = 0L
+
+    private var recordingTimerJob: Job? = null
 
     fun startPreview() {
 
@@ -67,7 +69,6 @@ class CameraTestViewModel @Inject constructor(
                 status = "Starting camera…",
                 streaming = false,
                 error = null,
-                photoSaved = false,
             )
 
         previewJob =
@@ -75,8 +76,7 @@ class CameraTestViewModel @Inject constructor(
 
                 try {
 
-                    backend
-                        .cameraTestFrames()
+                    backend.cameraTestFrames()
                         .collect { frame ->
 
                             if (!frame.isCodecConfig) {
@@ -84,17 +84,36 @@ class CameraTestViewModel @Inject constructor(
                                 _uiState.value =
                                     _uiState.value.copy(
                                         status =
-                                            "Live — " +
-                                                "${frame.width} × " +
-                                                "${frame.height}",
-
+                                            if (
+                                                _uiState.value.recording
+                                            ) {
+                                                "Recording — ${
+                                                    formatDuration(
+                                                        _uiState.value.recordingDurationMs
+                                                    )
+                                                }"
+                                            } else {
+                                                "Live — ${frame.width} × ${frame.height}"
+                                            },
                                         streaming = true,
                                         error = null,
                                     )
                             }
 
+                            if (
+                                _uiState.value.recording
+                            ) {
+                                videoRecorder.writeFrame(frame)
+                            }
+
                             _frames.emit(frame)
                         }
+
+                    if (
+                        _uiState.value.recording
+                    ) {
+                        stopRecording()
+                    }
 
                     _uiState.value =
                         _uiState.value.copy(
@@ -110,10 +129,18 @@ class CameraTestViewModel @Inject constructor(
 
                 } catch (e: Exception) {
 
+                    if (
+                        _uiState.value.recording
+                    ) {
+                        videoRecorder.cancel()
+                        stopRecordingTimer()
+                    }
+
                     _uiState.value =
                         _uiState.value.copy(
                             status = "Camera error",
                             streaming = false,
+                            recording = false,
                             error =
                                 e.message
                                     ?: e::class.java.simpleName,
@@ -121,12 +148,6 @@ class CameraTestViewModel @Inject constructor(
                 }
             }
     }
-
-    /*
-     * ---------------------------------------------------------
-     * CAPTURE PHOTO
-     * ---------------------------------------------------------
-     */
 
     fun capturePhoto() {
 
@@ -138,13 +159,16 @@ class CameraTestViewModel @Inject constructor(
             return
         }
 
+        if (_uiState.value.recording) {
+            return
+        }
+
         viewModelScope.launch {
 
             _uiState.value =
                 _uiState.value.copy(
                     capturing = true,
                     error = null,
-                    photoSaved = false,
                 )
 
             try {
@@ -171,49 +195,16 @@ class CameraTestViewModel @Inject constructor(
                                         "Photo captured but could not decode JPEG",
                                 )
 
-                            return@onSuccess
+                        } else {
+
+                            _uiState.value =
+                                _uiState.value.copy(
+                                    capturing = false,
+                                    capturedPhoto = bitmap,
+                                    status = "Photo captured",
+                                    error = null,
+                                )
                         }
-
-                        /*
-                         * Save the exact JPEG returned by MWDAT.
-                         *
-                         * This means the Gallery copy is not a
-                         * recompressed version of the preview bitmap.
-                         */
-                        val saveResult =
-                            mediaSaver.savePhoto(jpeg)
-
-                        saveResult
-                            .onSuccess { fileName ->
-
-                                _uiState.value =
-                                    _uiState.value.copy(
-                                        capturing = false,
-                                        capturedPhoto = bitmap,
-                                        status =
-                                            "Photo saved to Gallery",
-                                        error = null,
-                                        photoSaved = true,
-                                    )
-                            }
-                            .onFailure { error ->
-
-                                _uiState.value =
-                                    _uiState.value.copy(
-                                        capturing = false,
-                                        capturedPhoto = bitmap,
-                                        status =
-                                            "Photo captured",
-                                        error =
-                                            "Photo captured, " +
-                                                "but Gallery save failed: " +
-                                                (
-                                                    error.message
-                                                        ?: error::class.java.simpleName
-                                                ),
-                                        photoSaved = false,
-                                    )
-                            }
                     }
                     .onFailure { error ->
 
@@ -241,19 +232,100 @@ class CameraTestViewModel @Inject constructor(
         }
     }
 
-    /*
-     * ---------------------------------------------------------
-     * STOP CAMERA
-     * ---------------------------------------------------------
-     */
+    fun startRecording() {
+
+        if (_uiState.value.recording) {
+            return
+        }
+
+        if (!_uiState.value.streaming) {
+            return
+        }
+
+        if (_uiState.value.capturing) {
+            return
+        }
+
+        videoRecorder.start()
+
+        recordingStartTimeMs =
+            System.currentTimeMillis()
+
+        _uiState.value =
+            _uiState.value.copy(
+                recording = true,
+                recordingDurationMs = 0L,
+                savedVideoUri = null,
+                error = null,
+                status = "Recording — 00:00",
+            )
+
+        recordingTimerJob =
+            viewModelScope.launch {
+
+                while (true) {
+
+                    kotlinx.coroutines.delay(250L)
+
+                    val elapsed =
+                        System.currentTimeMillis() -
+                            recordingStartTimeMs
+
+                    _uiState.value =
+                        _uiState.value.copy(
+                            recordingDurationMs = elapsed,
+                            status =
+                                "Recording — ${
+                                    formatDuration(elapsed)
+                                }",
+                        )
+                }
+            }
+    }
+
+    fun stopRecording() {
+
+        if (!_uiState.value.recording) {
+            return
+        }
+
+        stopRecordingTimer()
+
+        val uri =
+            videoRecorder.stop()
+
+        _uiState.value =
+            _uiState.value.copy(
+                recording = false,
+                recordingDurationMs = 0L,
+                savedVideoUri = uri,
+                status =
+                    if (uri != null) {
+                        "Video saved"
+                    } else {
+                        "Recording stopped"
+                    },
+                error =
+                    if (uri == null) {
+                        "No video file was created"
+                    } else {
+                        null
+                    },
+            )
+    }
 
     fun stopPreview() {
+
+        if (_uiState.value.recording) {
+            stopRecording()
+        }
 
         _uiState.value =
             _uiState.value.copy(
                 status = "Camera stopped",
                 streaming = false,
                 capturing = false,
+                recording = false,
             )
 
         previewJob?.cancel()
@@ -262,13 +334,38 @@ class CameraTestViewModel @Inject constructor(
         backend.stopCameraTest()
     }
 
-    /*
-     * ---------------------------------------------------------
-     * CLEANUP
-     * ---------------------------------------------------------
-     */
+    private fun stopRecordingTimer() {
+        recordingTimerJob?.cancel()
+        recordingTimerJob = null
+    }
+
+    private fun formatDuration(
+        durationMs: Long,
+    ): String {
+
+        val totalSeconds =
+            durationMs / 1_000L
+
+        val minutes =
+            totalSeconds / 60L
+
+        val seconds =
+            totalSeconds % 60L
+
+        return String.format(
+            "%02d:%02d",
+            minutes,
+            seconds,
+        )
+    }
 
     override fun onCleared() {
+
+        stopRecordingTimer()
+
+        if (videoRecorder.isRecording()) {
+            videoRecorder.cancel()
+        }
 
         previewJob?.cancel()
 
