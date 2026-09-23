@@ -46,6 +46,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun CameraTestScreen(
     onBack: () -> Unit,
+    onCameraSettingsClick: () -> Unit,
     viewModel: CameraTestViewModel = hiltViewModel(),
 ) {
     /*
@@ -390,7 +391,7 @@ fun CameraTestScreen(
                 .padding(
                     start = 16.dp,
                     end = 16.dp,
-                    bottom = 16.dp,
+                    bottom = 8.dp,
                 )
                 .height(56.dp),
         ) {
@@ -405,6 +406,28 @@ fun CameraTestScreen(
 
                 Text("Capture Photo")
             }
+        }
+
+        /*
+         * -----------------------------------------------------
+         * CAMERA SETTINGS
+         * -----------------------------------------------------
+         */
+
+        Button(
+            onClick = onCameraSettingsClick,
+
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    bottom = 16.dp,
+                )
+                .height(56.dp),
+        ) {
+
+            Text("Camera Settings")
         }
     }
 }
