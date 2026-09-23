@@ -482,19 +482,6 @@ class RealGlassesBackend @Inject constructor(
             Log.i(TAG, "  bluetooth connected = ${device.connected}")
         }
 
-        if (devices.isEmpty()) {
-
-            Log.e(
-                TAG,
-                "ABORTING: MWDAT reports zero devices"
-            )
-
-            _connectionState.value =
-                ConnectionState.ERROR
-
-            return false
-        }
-
         Log.i(
             TAG,
             "Using AutoDeviceSelector()"
