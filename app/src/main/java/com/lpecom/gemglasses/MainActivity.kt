@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -278,42 +279,22 @@ class MainActivity : ComponentActivity() {
 
         glassesManager.initialize()
 
-        lifecycleScope.launch {
-
-            Log.i(
-                TAG,
-                "Connecting to Meta glasses..."
-            )
-
-            try {
-
-                val connected =
-                    glassesManager.connect()
-
-                if (connected) {
-
-                    Log.i(TAG, "========================================")
-                    Log.i(TAG, "GLASSES CONNECTED")
-                    Log.i(TAG, "DeviceSession is ready")
-                    Log.i(TAG, "========================================")
-
-                } else {
-
-                    Log.e(
-                        TAG,
-                        "Glasses connection failed"
-                    )
-                }
-
-            } catch (e: Exception) {
-
-                Log.e(
-                    TAG,
-                    "Exception while connecting glasses",
-                    e
-                )
-            }
-        }
+        /*
+         * IMPORTANT:
+         *
+         * Do NOT automatically call glassesManager.connect() here.
+         *
+         * Bluetooth/device discovery and an active MWDAT
+         * DeviceSession are separate things.
+         *
+         * The user will explicitly press "Connect glasses"
+         * on HomeScreen, which calls AgentViewModel.connectGlasses()
+         * and ultimately GlassesManager.connect().
+         */
+        Log.i(
+            TAG,
+            "Glasses backend initialized; waiting for user to connect"
+        )
     }
 
     override fun onDestroy() {
