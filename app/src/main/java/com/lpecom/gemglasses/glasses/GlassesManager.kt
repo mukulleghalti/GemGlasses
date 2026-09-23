@@ -13,6 +13,9 @@ class GlassesManager @Inject constructor(
     val registrationState: Flow<RegistrationState> =
         backend.registrationState
 
+    val connectionState: Flow<ConnectionState> =
+        backend.connectionState
+
     val devices: Flow<List<GlassesDevice>> =
         backend.devices
 
@@ -43,10 +46,7 @@ class GlassesManager @Inject constructor(
 
     suspend fun ensureCameraPermission(): Boolean {
         return when (backend.cameraPermission()) {
-
-            CameraPermission.GRANTED -> {
-                true
-            }
+            CameraPermission.GRANTED -> true
 
             CameraPermission.DENIED,
             CameraPermission.NOT_DETERMINED -> {
