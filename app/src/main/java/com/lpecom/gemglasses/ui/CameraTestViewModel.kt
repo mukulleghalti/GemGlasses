@@ -5,7 +5,10 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lpecom.gemglasses.glasses.real.RealGlassesBackend
+import com.lpecom.gemglasses.settings.CameraResolution
+import com.lpecom.gemglasses.settings.SettingsRepository
 import com.meta.wearable.dat.camera.types.VideoFrame
+import com.meta.wearable.dat.camera.types.VideoQuality
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -31,6 +34,7 @@ data class CameraTestUiState(
 @HiltViewModel
 class CameraTestViewModel @Inject constructor(
     private val backend: RealGlassesBackend,
+    private val settings: SettingsRepository,
     private val videoRecorder: CameraVideoRecorder,
 ) : ViewModel() {
 
@@ -62,14 +66,24 @@ class CameraTestViewModel @Inject constructor(
     private var totalFrameCount = 0L
     private var recordingFrameCount = 0L
 
+    // =========================================================================
+    // CAMERA PREVIEW
+    // =========================================================================
+
     fun startPreview() {
 
         if (previewJob?.isActive == true) {
-            Log.d(TAG, "startPreview ignored - preview already active")
+            Log.d(
+                TAG,
+                "startPreview ignored - preview already active",
+            )
             return
         }
 
-        Log.i(TAG, "Starting camera preview")
+        Log.i(
+            TAG,
+            "Starting camera preview",
+        )
 
         totalFrameCount = 0L
         recordingFrameCount = 0L
@@ -85,6 +99,44 @@ class CameraTestViewModel @Inject constructor(
             viewModelScope.launch {
 
                 try {
+
+                    /*
+                     * Read the latest persisted Camera Test settings
+                     * immediately before creating the MWDAT camera stream.
+                     *
+                     * This means changes made in Camera Settings apply
+                     * the next time Start Camera is pressed.
+                     */
+                    val preferences =
+                        settings.snapshot()
+
+                    val videoQuality =
+                        preferences.cameraResolution.toVideoQuality()
+
+                    val frameRate =
+                        preferences.cameraFrameRate
+
+                    Log.i(
+                        TAG,
+                        "Applying Camera Test settings: " +
+                            "resolution=${preferences.cameraResolution.label}, " +
+                            "quality=$videoQuality, " +
+                            "fps=$frameRate",
+                    )
+
+                    /*
+                     * IMPORTANT:
+                     *
+                     * This only configures the Camera Test stream.
+                     *
+                     * RealGlassesBackend.cameraFrames() — the Gemini
+                     * vision path — remains independently fixed at
+                     * MEDIUM / 24 FPS.
+                     */
+                    backend.setCameraTestConfiguration(
+                        videoQuality = videoQuality,
+                        frameRate = frameRate,
+                    )
 
                     backend.cameraTestFrames()
                         .collect { frame ->
@@ -255,6 +307,10 @@ class CameraTestViewModel @Inject constructor(
             }
     }
 
+    // =========================================================================
+    // PHOTO
+    // =========================================================================
+
     fun capturePhoto() {
 
         if (_uiState.value.capturing) {
@@ -269,7 +325,10 @@ class CameraTestViewModel @Inject constructor(
             return
         }
 
-        Log.i(TAG, "Capture photo requested")
+        Log.i(
+            TAG,
+            "Capture photo requested",
+        )
 
         viewModelScope.launch {
 
@@ -363,10 +422,17 @@ class CameraTestViewModel @Inject constructor(
         }
     }
 
+    // =========================================================================
+    // VIDEO RECORDING
+    // =========================================================================
+
     fun startRecording() {
 
         if (_uiState.value.recording) {
-            Log.d(TAG, "startRecording ignored - already recording")
+            Log.d(
+                TAG,
+                "startRecording ignored - already recording",
+            )
             return
         }
 
@@ -460,7 +526,10 @@ class CameraTestViewModel @Inject constructor(
     fun stopRecording() {
 
         if (!_uiState.value.recording) {
-            Log.d(TAG, "stopRecording ignored - not recording")
+            Log.d(
+                TAG,
+                "stopRecording ignored - not recording",
+            )
             return
         }
 
@@ -518,6 +587,10 @@ class CameraTestViewModel @Inject constructor(
             )
     }
 
+    // =========================================================================
+    // STOP PREVIEW
+    // =========================================================================
+
     fun stopPreview() {
 
         Log.i(
@@ -545,6 +618,10 @@ class CameraTestViewModel @Inject constructor(
         backend.stopCameraTest()
     }
 
+    // =========================================================================
+    // HELPERS
+    // =========================================================================
+
     private fun stopRecordingTimer() {
         recordingTimerJob?.cancel()
         recordingTimerJob = null
@@ -569,6 +646,36 @@ class CameraTestViewModel @Inject constructor(
             seconds,
         )
     }
+
+    /**
+     * Convert the app's persisted camera resolution setting to
+     * the corresponding MWDAT VideoQuality.
+     *
+     * MWDAT's stream dimensions are portrait:
+     *
+     * LOW    = 360 × 640
+     * MEDIUM = 504 × 896
+     * HIGH   = 720 × 1280
+     */
+    private fun CameraResolution.toVideoQuality():
+        VideoQuality {
+
+        return when (this) {
+
+            CameraResolution.LOW ->
+                VideoQuality.LOW
+
+            CameraResolution.MEDIUM ->
+                VideoQuality.MEDIUM
+
+            CameraResolution.HIGH ->
+                VideoQuality.HIGH
+        }
+    }
+
+    // =========================================================================
+    // LIFECYCLE
+    // =========================================================================
 
     override fun onCleared() {
 
