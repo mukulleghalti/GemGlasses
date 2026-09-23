@@ -17,6 +17,13 @@ enum class RegistrationState {
     REVOKED,
 }
 
+enum class ConnectionState {
+    DISCONNECTED,
+    CONNECTING,
+    CONNECTED,
+    ERROR,
+}
+
 enum class CameraPermission {
     GRANTED,
     DENIED,
@@ -26,6 +33,8 @@ enum class CameraPermission {
 interface GlassesBackend {
 
     val registrationState: Flow<RegistrationState>
+
+    val connectionState: Flow<ConnectionState>
 
     val devices: Flow<List<GlassesDevice>>
 
@@ -37,16 +46,9 @@ interface GlassesBackend {
 
     suspend fun requestCameraPermission(): CameraPermission
 
-    /**
-     * Registers the Activity-owned Meta Wearables permission launcher.
-     *
-     * The actual Wearables.RequestPermissionContract() must live in
-     * MainActivity because it is an Activity Result API contract.
-     */
     fun setCameraPermissionRequester(
         requester: suspend () -> CameraPermission,
-    ) {
-    }
+    ) {}
 
     fun cameraFrames(): Flow<ByteArray>
 
