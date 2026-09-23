@@ -19,7 +19,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,12 +30,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.lifecycle.lifecycleScope
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.lpecom.gemglasses.glasses.CameraPermission
 import com.lpecom.gemglasses.glasses.GlassesManager
+import com.lpecom.gemglasses.ui.CameraSettingsScreen
 import com.lpecom.gemglasses.ui.CameraTestScreen
 import com.lpecom.gemglasses.ui.HomeScreen
 import com.lpecom.gemglasses.ui.SettingsScreen
@@ -45,7 +44,6 @@ import com.lpecom.gemglasses.ui.theme.GemGlassesTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CancellableContinuation
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -365,11 +363,14 @@ private fun GemGlassesRoot() {
     val isCameraTest =
         currentRoute == "camera_test"
 
+    val isCameraSettings =
+        currentRoute == "camera_settings"
+
     Scaffold(
 
         bottomBar = {
 
-            if (!isCameraTest) {
+            if (!isCameraTest && !isCameraSettings) {
 
                 NavigationBar {
 
@@ -442,6 +443,18 @@ private fun GemGlassesRoot() {
             composable("camera_test") {
 
                 CameraTestScreen(
+                    onBack = {
+                        navController.popBackStack()
+                    },
+                    onCameraSettingsClick = {
+                        navController.navigate("camera_settings")
+                    },
+                )
+            }
+
+            composable("camera_settings") {
+
+                CameraSettingsScreen(
                     onBack = {
                         navController.popBackStack()
                     },
