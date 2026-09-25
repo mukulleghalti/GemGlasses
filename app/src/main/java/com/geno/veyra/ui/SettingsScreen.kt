@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -64,6 +65,8 @@ fun SettingsScreen(
         Manifest.permission.RECORD_AUDIO,
     ) == PackageManager.PERMISSION_GRANTED
 
+    var advancedExpanded by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -73,404 +76,416 @@ fun SettingsScreen(
     ) {
         Text("Settings", style = MaterialTheme.typography.titleLarge)
 
-        Setting(title = "Gemini API key") {
-            val apiKeyState by viewModel.apiKeyState.collectAsStateWithLifecycle()
-            var keyInput by remember {
-                mutableStateOf(viewModel.savedApiKey.orEmpty())
-            }
-            var passwordVisible by remember { mutableStateOf(false) }
+        Section(title = "Assistant") {
+            Setting(title = "Assistant Voice") {
+                var voiceMenuOpen by remember { mutableStateOf(false) }
 
-            OutlinedTextField(
-                value = keyInput,
-                onValueChange = { keyInput = it },
-                label = { Text("API key") },
-                singleLine = true,
-                visualTransformation =
-                    if (passwordVisible) {
-                        VisualTransformation.None
-                    } else {
-                        PasswordVisualTransformation()
-                    },
-                trailingIcon = {
-                    IconButton(
-                        onClick = { passwordVisible = !passwordVisible },
-                    ) {
-                        Icon(
-                            imageVector =
-                                if (passwordVisible) {
-                                    Icons.Filled.VisibilityOff
-                                } else {
-                                    Icons.Filled.Visibility
-                                },
-                            contentDescription =
-                                if (passwordVisible) {
-                                    "Hide key"
-                                } else {
-                                    "Show key"
-                                },
-                        )
-                    }
-                },
-                keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        if (keyInput.isNotBlank()) {
-                            viewModel.saveApiKey(keyInput)
-                        }
-                    },
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
+                val selectedVoice =
+                    VOICES.firstOrNull { it.name == prefs.voiceName }
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Button(
-                    onClick = { viewModel.saveApiKey(keyInput) },
-                    enabled = keyInput.isNotBlank() &&
-                        apiKeyState != AgentViewModel.ApiKeyState.Checking,
-                ) {
-                    Text("Save & test")
-                }
-                if (viewModel.savedApiKey != null) {
-                    TextButton(
-                        onClick = {
-                            viewModel.clearApiKey()
-                            keyInput = ""
+                Box {
+                    OutlinedTextField(
+                        value = selectedVoice?.let {
+                            "${it.name} · ${it.gender.label}"
+                        } ?: prefs.voiceName,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Voice") },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.ArrowDropDown,
+                                contentDescription = null,
+                            )
                         },
-                    ) {
-                        Text("Remove")
-                    }
-                }
-            }
-
-            val statusText = when (val state = apiKeyState) {
-                AgentViewModel.ApiKeyState.Unchecked ->
-                    "Key saved — tap Save & test to verify it."
-                AgentViewModel.ApiKeyState.Checking ->
-                    "Verifying key with Google…"
-                AgentViewModel.ApiKeyState.Valid ->
-                    "Key verified — the assistant is ready."
-                is AgentViewModel.ApiKeyState.Invalid ->
-                    "Key problem: ${state.message}"
-                AgentViewModel.ApiKeyState.Missing ->
-                    "No key saved yet."
-            }
-            val statusColor =
-                if (apiKeyState is AgentViewModel.ApiKeyState.Invalid) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
-            Text(
-                statusText,
-                style = MaterialTheme.typography.bodySmall,
-                color = statusColor,
-            )
-            Text(
-                "Get a free key from Google AI Studio. It's stored " +
-                    "encrypted on this phone and sent only to Google — " +
-                    "the app mints its own short-lived tokens, no " +
-                    "server in the middle.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Setting(title = "Assistant Voice") {
-            var voiceMenuOpen by remember { mutableStateOf(false) }
-
-            val selectedVoice =
-                VOICES.firstOrNull { it.name == prefs.voiceName }
-
-            Box {
-                OutlinedTextField(
-                    value = selectedVoice?.let {
-                        "${it.name} · ${it.gender.label}"
-                    } ?: prefs.voiceName,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Voice") },
-                    trailingIcon = {
-                        Icon(
-                            imageVector = Icons.Filled.ArrowDropDown,
-                            contentDescription = null,
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                DropdownMenu(
-                    expanded = voiceMenuOpen,
-                    onDismissRequest = { voiceMenuOpen = false },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    VoiceGender.entries.forEach { gender ->
-                        Text(
-                            gender.label + " voices",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(
-                                horizontal = 16.dp,
-                                vertical = 6.dp,
-                            ),
-                        )
-                        VOICES
-                            .filter { it.gender == gender }
-                            .forEach { voice ->
-                                DropdownMenuItem(
-                                    text = { Text(voice.name) },
-                                    onClick = {
-                                        viewModel.setVoice(voice.name)
-                                        voiceMenuOpen = false
-                                    },
-                                )
-                            }
-                    }
-                }
-                // A read-only field doesn't emit clicks itself; this overlay
-                // turns the whole row into the menu toggle.
-                Spacer(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable { voiceMenuOpen = true },
-                )
-            }
-            Text(
-                "Voice names are just identifiers — every voice speaks " +
-                    "any language.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Setting(title = "Assistant audio output") {
-            ChipRow {
-                AudioOutput.entries.forEach { output ->
-                    FilterChip(
-                        selected = prefs.audioOutput == output,
-                        onClick = { viewModel.setAudioOutput(output) },
-                        label = { Text(output.label) },
-                    )
-                }
-            }
-            Text(
-                "Glasses: voice plays through the glasses in high quality " +
-                    "and the phone's mic listens. Phone speaker: voice " +
-                    "plays on the phone and the glasses' mic listens " +
-                    "while they're connected.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Setting(title = "Barge-in") {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Talking over the assistant cuts it off",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Switch(
-                    checked = prefs.bargeInEnabled,
-                    onCheckedChange = { viewModel.setBargeInEnabled(it) },
-                )
-            }
-            Text(
-                "When on, talking over the assistant cuts it off so you " +
-                    "can interrupt. Turn off if it cuts out too easily.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Setting(title = "Voice wake-up") {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Listen for wake word",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Switch(
-                    checked = prefs.wakeWordEnabled,
-                    onCheckedChange = { viewModel.setWakeWordEnabled(it) },
-                    enabled = micGranted,
-                )
-            }
-
-            if (!micGranted) {
-                Text(
-                    "Microphone permission is required. Grant it on the Home tab " +
-                        "by tapping \"Start Assistant\" once.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            ChipRow {
-                WAKE_PHRASES.forEach { (phrase, label) ->
-                    FilterChip(
-                        selected = prefs.wakePhrase == phrase,
-                        onClick = { viewModel.setWakePhrase(phrase) },
-                        label = { Text(label) },
-                    )
-                }
-            }
-
-            var wakeInput by remember(prefs.wakePhrase) {
-                mutableStateOf(prefs.wakePhrase)
-            }
-            OutlinedTextField(
-                value = wakeInput,
-                onValueChange = { wakeInput = it },
-                label = { Text("Custom wake phrase") },
-                supportingText = {
-                    Text(
-                        "Type your own and press Done. Only words the " +
-                            "offline voice model knows will trigger — " +
-                            "common English words are safest.",
-                    )
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        val phrase = wakeInput.trim().lowercase()
-                        if (phrase.isNotEmpty()) {
-                            viewModel.setWakePhrase(phrase)
-                        }
-                    },
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            val modelState by viewModel.wakeWordModelState.collectAsStateWithLifecycle()
-            val modelStatusText = when (val state = modelState) {
-                WakeWordModelState.NotDownloaded ->
-                    "Voice model downloads on first use (~40 MB, Wi-Fi recommended)."
-                is WakeWordModelState.Downloading ->
-                    if (state.progress < 0f) {
-                        "Downloading voice model…"
-                    } else {
-                        "Downloading voice model… " +
-                            "${(state.progress * 100).toInt()}%"
-                    }
-                WakeWordModelState.Ready ->
-                    "Voice model ready."
-                is WakeWordModelState.Error ->
-                    "Voice model error: ${state.message}"
-            }
-            Text(
-                modelStatusText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            val downloadProgress =
-                (modelState as? WakeWordModelState.Downloading)
-                    ?.progress
-                    ?.takeIf { it >= 0f }
-            if (downloadProgress != null) {
-                LinearProgressIndicator(
-                    progress = { downloadProgress },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        Setting(title = "Stop phrase") {
-            Text(
-                "Saying this while the assistant is listening ends the " +
-                    "session.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            ChipRow {
-                STOP_PHRASES.forEach { (phrase, label) ->
-                    FilterChip(
-                        selected = prefs.stopPhrase == phrase,
-                        onClick = { viewModel.setStopPhrase(phrase) },
-                        label = { Text(label) },
-                    )
-                }
-            }
-
-            var stopInput by remember(prefs.stopPhrase) {
-                mutableStateOf(prefs.stopPhrase)
-            }
-            OutlinedTextField(
-                value = stopInput,
-                onValueChange = { stopInput = it },
-                label = { Text("Custom stop phrase") },
-                supportingText = {
-                    Text(
-                        "Type your own and press Done. Any wording works — " +
-                            "it's matched against the assistant's transcript.",
-                    )
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        val phrase = stopInput.trim()
-                        if (phrase.isNotEmpty()) {
-                            viewModel.setStopPhrase(phrase)
-                        }
-                    },
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-        Setting(title = "Memories") {
-            Text(
-                "Things you've asked the assistant to remember. Say " +
-                    "\"remember this ...\" in a session to add one, or ask " +
-                    "it what it remembers.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            val memories by viewModel.memories.collectAsStateWithLifecycle()
-
-            if (memories.isEmpty()) {
-                Text(
-                    "Nothing saved yet.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                memories.forEach { memory ->
-                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
+                    )
+                    DropdownMenu(
+                        expanded = voiceMenuOpen,
+                        onDismissRequest = { voiceMenuOpen = false },
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(
-                            memory.text,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
+                        VoiceGender.entries.forEach { gender ->
+                            Text(
+                                gender.label + " voices",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(
+                                    horizontal = 16.dp,
+                                    vertical = 6.dp,
+                                ),
+                            )
+                            VOICES
+                                .filter { it.gender == gender }
+                                .forEach { voice ->
+                                    DropdownMenuItem(
+                                        text = { Text(voice.name) },
+                                        onClick = {
+                                            viewModel.setVoice(voice.name)
+                                            voiceMenuOpen = false
+                                        },
+                                    )
+                                }
+                        }
+                    }
+                    // A read-only field doesn't emit clicks itself; this overlay
+                    // turns the whole row into the menu toggle.
+                    Spacer(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { voiceMenuOpen = true },
+                    )
+                }
+                Text(
+                    "Voice names are just identifiers — every voice speaks " +
+                        "any language.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Setting(title = "Assistant audio output") {
+                ChipRow {
+                    AudioOutput.entries.forEach { output ->
+                        FilterChip(
+                            selected = prefs.audioOutput == output,
+                            onClick = { viewModel.setAudioOutput(output) },
+                            label = { Text(output.label) },
                         )
-                        TextButton(
-                            onClick = { viewModel.deleteMemory(memory.id) },
+                    }
+                }
+                Text(
+                    "Glasses: voice plays through the glasses in high quality " +
+                        "and the phone's mic listens. Phone speaker: voice " +
+                        "plays on the phone and the glasses' mic listens " +
+                        "while they're connected.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Setting(title = "Barge-in") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Talking over the assistant cuts it off",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Switch(
+                        checked = prefs.bargeInEnabled,
+                        onCheckedChange = { viewModel.setBargeInEnabled(it) },
+                    )
+                }
+                Text(
+                    "When on, talking over the assistant cuts it off so you " +
+                        "can interrupt. Turn off if it cuts out too easily.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Setting(title = "Stop phrase") {
+                Text(
+                    "Saying this while the assistant is listening ends the " +
+                        "session.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                ChipRow {
+                    STOP_PHRASES.forEach { (phrase, label) ->
+                        FilterChip(
+                            selected = prefs.stopPhrase == phrase,
+                            onClick = { viewModel.setStopPhrase(phrase) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+
+                var stopInput by remember(prefs.stopPhrase) {
+                    mutableStateOf(prefs.stopPhrase)
+                }
+                OutlinedTextField(
+                    value = stopInput,
+                    onValueChange = { stopInput = it },
+                    label = { Text("Custom stop phrase") },
+                    supportingText = {
+                        Text(
+                            "Type your own and press Done. Any wording works — " +
+                                "it's matched against the assistant's transcript.",
+                        )
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            val phrase = stopInput.trim()
+                            if (phrase.isNotEmpty()) {
+                                viewModel.setStopPhrase(phrase)
+                            }
+                        },
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+
+        Section(title = "Wake-up") {
+            Setting(title = "Voice wake-up") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Listen for wake word",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Switch(
+                        checked = prefs.wakeWordEnabled,
+                        onCheckedChange = { viewModel.setWakeWordEnabled(it) },
+                        enabled = micGranted,
+                    )
+                }
+
+                if (!micGranted) {
+                    Text(
+                        "Microphone permission is required. Grant it on the Home tab " +
+                            "by tapping \"Start Assistant\" once.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                ChipRow {
+                    WAKE_PHRASES.forEach { (phrase, label) ->
+                        FilterChip(
+                            selected = prefs.wakePhrase == phrase,
+                            onClick = { viewModel.setWakePhrase(phrase) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+
+                var wakeInput by remember(prefs.wakePhrase) {
+                    mutableStateOf(prefs.wakePhrase)
+                }
+                OutlinedTextField(
+                    value = wakeInput,
+                    onValueChange = { wakeInput = it },
+                    label = { Text("Custom wake phrase") },
+                    supportingText = {
+                        Text(
+                            "Type your own and press Done. Only words the " +
+                                "offline voice model knows will trigger — " +
+                                "common English words are safest.",
+                        )
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            val phrase = wakeInput.trim().lowercase()
+                            if (phrase.isNotEmpty()) {
+                                viewModel.setWakePhrase(phrase)
+                            }
+                        },
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                val modelState by viewModel.wakeWordModelState.collectAsStateWithLifecycle()
+                val modelStatusText = when (val state = modelState) {
+                    WakeWordModelState.NotDownloaded ->
+                        "Voice model downloads on first use (~40 MB, Wi-Fi recommended)."
+                    is WakeWordModelState.Downloading ->
+                        if (state.progress < 0f) {
+                            "Downloading voice model…"
+                        } else {
+                            "Downloading voice model… " +
+                                "${(state.progress * 100).toInt()}%"
+                        }
+                    WakeWordModelState.Ready ->
+                        "Voice model ready."
+                    is WakeWordModelState.Error ->
+                        "Voice model error: ${state.message}"
+                }
+                Text(
+                    modelStatusText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                val downloadProgress =
+                    (modelState as? WakeWordModelState.Downloading)
+                        ?.progress
+                        ?.takeIf { it >= 0f }
+                if (downloadProgress != null) {
+                    LinearProgressIndicator(
+                        progress = { downloadProgress },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+
+        Section(title = "Memory") {
+            Setting(title = "Memories") {
+                Text(
+                    "Things you've asked the assistant to remember. Say " +
+                        "\"remember this ...\" in a session to add one, or ask " +
+                        "it what it remembers.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                val memories by viewModel.memories.collectAsStateWithLifecycle()
+
+                if (memories.isEmpty()) {
+                    Text(
+                        "Nothing saved yet.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    memories.forEach { memory ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("Delete")
+                            Text(
+                                memory.text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(
+                                onClick = { viewModel.deleteMemory(memory.id) },
+                            ) {
+                                Text("Delete")
+                            }
                         }
                     }
                 }
+            }
+        }
+
+        Section(
+            title = "Advanced",
+            collapsed = !advancedExpanded,
+            onToggleCollapse = { advancedExpanded = !advancedExpanded },
+        ) {
+            Setting(title = "Gemini API key") {
+                val apiKeyState by viewModel.apiKeyState.collectAsStateWithLifecycle()
+                var keyInput by remember {
+                    mutableStateOf(viewModel.savedApiKey.orEmpty())
+                }
+                var passwordVisible by remember { mutableStateOf(false) }
+
+                OutlinedTextField(
+                    value = keyInput,
+                    onValueChange = { keyInput = it },
+                    label = { Text("API key") },
+                    singleLine = true,
+                    visualTransformation =
+                        if (passwordVisible) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = { passwordVisible = !passwordVisible },
+                        ) {
+                            Icon(
+                                imageVector =
+                                    if (passwordVisible) {
+                                        Icons.Filled.VisibilityOff
+                                    } else {
+                                        Icons.Filled.Visibility
+                                    },
+                                contentDescription =
+                                    if (passwordVisible) {
+                                        "Hide key"
+                                    } else {
+                                        "Show key"
+                                    },
+                            )
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (keyInput.isNotBlank()) {
+                                viewModel.saveApiKey(keyInput)
+                            }
+                        },
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Button(
+                        onClick = { viewModel.saveApiKey(keyInput) },
+                        enabled = keyInput.isNotBlank() &&
+                            apiKeyState != AgentViewModel.ApiKeyState.Checking,
+                    ) {
+                        Text("Save & test")
+                    }
+                    if (viewModel.savedApiKey != null) {
+                        TextButton(
+                            onClick = {
+                                viewModel.clearApiKey()
+                                keyInput = ""
+                            },
+                        ) {
+                            Text("Remove")
+                        }
+                    }
+                }
+
+                val statusText = when (val state = apiKeyState) {
+                    AgentViewModel.ApiKeyState.Unchecked ->
+                        "Key saved — tap Save & test to verify it."
+                    AgentViewModel.ApiKeyState.Checking ->
+                        "Verifying key with Google…"
+                    AgentViewModel.ApiKeyState.Valid ->
+                        "Key verified — the assistant is ready."
+                    is AgentViewModel.ApiKeyState.Invalid ->
+                        "Key problem: ${state.message}"
+                    AgentViewModel.ApiKeyState.Missing ->
+                        "No key saved yet."
+                }
+                val statusColor =
+                    if (apiKeyState is AgentViewModel.ApiKeyState.Invalid) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                Text(
+                    statusText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = statusColor,
+                )
+                Text(
+                    "Get a free key from Google AI Studio. It's stored " +
+                        "encrypted on this phone and sent only to Google — " +
+                        "the app mints its own short-lived tokens, no " +
+                        "server in the middle.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
@@ -490,6 +505,54 @@ private fun Setting(title: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, style = MaterialTheme.typography.titleMedium)
         content()
+    }
+}
+
+/**
+ * A labeled group of settings. The Advanced group starts collapsed and
+ * toggles open on tap, since its contents are touched once and rarely
+ * revisited.
+ */
+@Composable
+private fun Section(
+    title: String,
+    collapsed: Boolean = false,
+    onToggleCollapse: (() -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (onToggleCollapse != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggleCollapse),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    if (collapsed) "▸" else "▾",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        } else {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+
+        if (!collapsed) {
+            content()
+        }
     }
 }
 
