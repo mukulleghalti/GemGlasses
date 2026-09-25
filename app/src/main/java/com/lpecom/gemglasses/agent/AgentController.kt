@@ -71,12 +71,21 @@ class AgentController @Inject constructor(
     private var stopPhrase: String =
         AgentPreferences.DEFAULT_STOP_PHRASE
 
+    /**
+     * First user message to send once the session is ready (the wake
+     * phrase on the wake-word path). Cleared after it's sent.
+     */
+    @Volatile
+    private var pendingInitialText: String? = null
+
     val running: Boolean
         get() = eventJob?.isActive == true
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    fun start() {
+    fun start(initialText: String? = null) {
         if (running) return
+
+        pendingInitialText = initialText
 
         _status.value = AgentStatus.CONNECTING
         visionBridge.delegate = this
@@ -149,6 +158,7 @@ class AgentController @Inject constructor(
 
         eventJob = null
         micJob = null
+        pendingInitialText = null
 
         speaker.close()
         router.restore()
@@ -194,6 +204,25 @@ class AgentController @Inject constructor(
 
                 is SessionEvent.Ready -> {
                     _status.value = AgentStatus.LISTENING
+
+                    /*
+                     * Wake-word path: feed the wake phrase to the assistant
+                     * as the first user message so it responds instead of
+                     * sitting silent. Only the first Ready of a session
+                     * sends it; reconnects don't repeat it.
+                     */
+                    pendingInitialText?.let { text ->
+                        pendingInitialText = null
+                        conversation.appendTranscript(
+                            text,
+                            TranscriptEntry.Speaker.USER,
+                        )
+                        sessionKeeper.sendText(text)
+                        Log.i(
+                            TAG,
+                            "Sent initial user text: \"$text\"",
+                        )
+                    }
                 }
 
                 is SessionEvent.AudioChunk -> {

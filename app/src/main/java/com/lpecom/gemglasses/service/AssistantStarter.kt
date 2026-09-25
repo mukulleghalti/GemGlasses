@@ -22,11 +22,17 @@ class AssistantStarter @Inject constructor(
     private val conversation: ConversationStore,
 ) {
 
-    /** Caller must hold [Manifest.permission.RECORD_AUDIO]. */
+    /**
+     * Caller must hold [Manifest.permission.RECORD_AUDIO].
+     *
+     * @param initialText optional first user message, sent to the assistant
+     *   as soon as the session is ready (used by the wake-word path so the
+     *   assistant actually responds to the wake phrase).
+     */
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    fun start() {
+    fun start(initialText: String? = null) {
         conversation.clear()
         AgentForegroundService.start(context)
-        controller.start()
+        controller.start(initialText)
     }
 }

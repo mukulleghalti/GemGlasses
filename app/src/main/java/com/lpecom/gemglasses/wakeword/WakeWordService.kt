@@ -101,7 +101,7 @@ class WakeWordService : Service() {
     @SuppressLint("MissingPermission")
     private fun onDetected(phrase: String) {
         Log.i(TAG, "wake word detected (\"$phrase\") — starting assistant")
-        starter.start()
+        starter.start(initialText = phrase)
         stopSelf()
     }
 

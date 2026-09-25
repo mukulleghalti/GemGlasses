@@ -13,12 +13,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -31,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -204,6 +208,35 @@ fun SettingsScreen(
                 )
             }
 
+            var wakeInput by remember(prefs.wakePhrase) {
+                mutableStateOf(prefs.wakePhrase)
+            }
+            OutlinedTextField(
+                value = wakeInput,
+                onValueChange = { wakeInput = it },
+                label = { Text("Custom wake phrase") },
+                supportingText = {
+                    Text(
+                        "Type your own and press Done. Only words the " +
+                            "offline voice model knows will trigger — " +
+                            "common English words are safest.",
+                    )
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        val phrase = wakeInput.trim().lowercase()
+                        if (phrase.isNotEmpty()) {
+                            viewModel.setWakePhrase(phrase)
+                        }
+                    },
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             val modelState by viewModel.wakeWordModelState.collectAsStateWithLifecycle()
             val modelStatusText = when (val state = modelState) {
                 WakeWordModelState.NotDownloaded ->
@@ -225,6 +258,17 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            val downloadProgress =
+                (modelState as? WakeWordModelState.Downloading)
+                    ?.progress
+                    ?.takeIf { it >= 0f }
+            if (downloadProgress != null) {
+                LinearProgressIndicator(
+                    progress = { downloadProgress },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
 
         Setting(title = "Stop phrase") {
@@ -242,6 +286,34 @@ fun SettingsScreen(
                     label = { Text(label) },
                 )
             }
+
+            var stopInput by remember(prefs.stopPhrase) {
+                mutableStateOf(prefs.stopPhrase)
+            }
+            OutlinedTextField(
+                value = stopInput,
+                onValueChange = { stopInput = it },
+                label = { Text("Custom stop phrase") },
+                supportingText = {
+                    Text(
+                        "Type your own and press Done. Any wording works — " +
+                            "it's matched against the assistant's transcript.",
+                    )
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        val phrase = stopInput.trim()
+                        if (phrase.isNotEmpty()) {
+                            viewModel.setStopPhrase(phrase)
+                        }
+                    },
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
 
         Text(
