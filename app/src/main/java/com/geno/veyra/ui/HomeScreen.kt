@@ -183,6 +183,38 @@ fun HomeScreen(
         }
 
         /*
+         * Mic mute — drops what Gemini hears without ending the session.
+         * Shown only while the assistant runs; unmuting is done here since
+         * a muted mic can't hear a voice "unmute" command.
+         */
+        if (running) {
+            val micMuted by viewModel.micMuted.collectAsStateWithLifecycle()
+
+            Button(
+                onClick = { viewModel.setMicMuted(!micMuted) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor =
+                        if (micMuted) {
+                            MaterialTheme.colorScheme.tertiary
+                        } else {
+                            MaterialTheme.colorScheme.secondary
+                        },
+                ),
+            ) {
+                Text(
+                    if (micMuted) {
+                        "🔊 Unmute Mic"
+                    } else {
+                        "🔇 Mute Mic"
+                    }
+                )
+            }
+        }
+
+        /*
          * ---------------------------------------------------------
          * Camera Test
          * ---------------------------------------------------------

@@ -8,8 +8,8 @@ import kotlinx.serialization.json.JsonObject
  * [declaration] and knows how to [execute] a call, returning the JSON object
  * that goes back to the model as the function response.
  *
- * MVP has exactly four tools; do not add one without also updating the project
- * spec (see CLAUDE.md / docs).
+ * Tools are registered in [com.geno.veyra.di.ToolsModule]; adding one means
+ * adding a binding there and updating the project spec (see docs/).
  */
 interface AgentTool {
     /** Function name as the model sees it (e.g. "search_places"). */

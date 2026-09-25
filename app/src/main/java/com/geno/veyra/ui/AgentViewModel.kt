@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geno.veyra.agent.AgentController
 import com.geno.veyra.agent.AgentStatus
+import com.geno.veyra.audio.MicMuteController
 import com.geno.veyra.gemini.TokenProvider
 import com.geno.veyra.glasses.GlassesDevice
 import com.geno.veyra.glasses.GlassesManager
@@ -16,6 +17,8 @@ import com.geno.veyra.service.AssistantStarter
 import com.geno.veyra.settings.AgentPreferences
 import com.geno.veyra.settings.AudioOutput
 import com.geno.veyra.settings.GeminiKeyRepository
+import com.geno.veyra.settings.Memory
+import com.geno.veyra.settings.MemoryRepository
 import com.geno.veyra.settings.SettingsRepository
 import com.geno.veyra.state.CitedPlace
 import com.geno.veyra.state.ConversationStore
@@ -48,10 +51,21 @@ class AgentViewModel @Inject constructor(
     private val wakeWordEngine: WakeWordEngine,
     private val keyRepository: GeminiKeyRepository,
     private val tokenProvider: TokenProvider,
+    private val micMute: MicMuteController,
+    private val memoryRepository: MemoryRepository,
 ) : AndroidViewModel(application) {
 
     val status: StateFlow<AgentStatus> =
         controller.status
+
+    /** True while the assistant's mic is muted (session still alive). */
+    val micMuted: StateFlow<Boolean> =
+        micMute.muted
+
+    /** Saved "remember this" memories, newest first. */
+    val memories: StateFlow<List<Memory>> =
+        memoryRepository.memories
+            .stateInDefault(emptyList())
 
     val registration: StateFlow<RegistrationState> =
         glassesManager.registrationState
@@ -96,6 +110,22 @@ class AgentViewModel @Inject constructor(
     fun stopSession() {
         controller.stop()
         AgentForegroundService.stop(getApplication())
+    }
+
+    /**
+     * Mutes/unmutes the mic without ending the session.
+     */
+    fun setMicMuted(muted: Boolean) {
+        micMute.setMuted(muted)
+    }
+
+    /**
+     * Deletes one saved memory.
+     */
+    fun deleteMemory(id: String) {
+        viewModelScope.launch {
+            memoryRepository.delete(id)
+        }
     }
 
     /**

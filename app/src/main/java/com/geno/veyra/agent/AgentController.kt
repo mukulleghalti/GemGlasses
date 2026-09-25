@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.annotation.RequiresPermission
 import com.geno.veyra.audio.BluetoothAudioRouter
 import com.geno.veyra.audio.MicStreamer
+import com.geno.veyra.audio.MicMuteController
 import com.geno.veyra.audio.SpeakerSink
 import com.geno.veyra.gemini.SessionConfig
 import com.geno.veyra.gemini.SessionEvent
@@ -58,6 +59,7 @@ class AgentController @Inject constructor(
     private val settings: SettingsRepository,
     private val visionBridge: VisionBridge,
     private val translator: Provider<TranslateController>,
+    private val micMute: MicMuteController,
 ) : VisionController {
 
     private val scope = CoroutineScope(SupervisorJob())
@@ -105,6 +107,7 @@ class AgentController @Inject constructor(
 
         _status.value = AgentStatus.CONNECTING
         visionBridge.delegate = this
+        micMute.reset()
 
         eventJob = scope.launch {
             val prefs = settings.snapshot()
@@ -172,6 +175,7 @@ class AgentController @Inject constructor(
 
         visionBridge.delegate = null
         _status.value = AgentStatus.IDLE
+        micMute.reset()
     }
 
     // VisionController: called by the capture_vision tool.
@@ -344,6 +348,8 @@ class AgentController @Inject constructor(
              * disabled the user can't interrupt anyway.
              */
             if (!bargeInEnabled && speaker.isPlaying()) return@collect
+            // Mic mute: drop outgoing audio without tearing the session down.
+            if (micMute.muted.value) return@collect
             sessionKeeper.sendAudio(chunk)
         }
     }

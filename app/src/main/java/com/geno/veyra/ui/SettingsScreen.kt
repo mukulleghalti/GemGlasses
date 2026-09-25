@@ -435,6 +435,45 @@ fun SettingsScreen(
             )
         }
 
+        Setting(title = "Memories") {
+            Text(
+                "Things you've asked the assistant to remember. Say " +
+                    "\"remember this ...\" in a session to add one, or ask " +
+                    "it what it remembers.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            val memories by viewModel.memories.collectAsStateWithLifecycle()
+
+            if (memories.isEmpty()) {
+                Text(
+                    "Nothing saved yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                memories.forEach { memory ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            memory.text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            onClick = { viewModel.deleteMemory(memory.id) },
+                        ) {
+                            Text("Delete")
+                        }
+                    }
+                }
+            }
+        }
+
         Text(
             "Privacy: transcripts stay on this device and are never synced. " +
                 "Your Gemini API key is stored encrypted on this phone and " +

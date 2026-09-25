@@ -1,9 +1,12 @@
 package com.geno.veyra.di
 
 import com.geno.veyra.tools.AgentTool
+import com.geno.veyra.tools.ListMemoriesTool
 import com.geno.veyra.tools.MessageTool
+import com.geno.veyra.tools.MicMuteTool
 import com.geno.veyra.tools.NavigationTool
 import com.geno.veyra.tools.PlacesTool
+import com.geno.veyra.tools.SaveMemoryTool
 import com.geno.veyra.tools.VisionTool
 import dagger.Binds
 import dagger.Module
@@ -12,7 +15,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 
 /**
- * Registers the four MVP tools into the [Set] that [ToolRegistry] consumes.
+ * Registers the function tools into the [Set] that [ToolRegistry] consumes.
  * Adding a tool means adding a binding here — and updating the project spec.
  */
 @Module
@@ -34,4 +37,16 @@ abstract class ToolsModule {
     @Binds
     @IntoSet
     abstract fun messageTool(tool: MessageTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun saveMemoryTool(tool: SaveMemoryTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun listMemoriesTool(tool: ListMemoriesTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun micMuteTool(tool: MicMuteTool): AgentTool
 }
