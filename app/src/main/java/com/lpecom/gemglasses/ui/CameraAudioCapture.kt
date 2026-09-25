@@ -114,7 +114,7 @@ class CameraAudioCapture {
             } catch (_: Exception) {
             }
             audioRecord = null
-            listener = null
+            this.listener = null
             throw e
         }
     }
