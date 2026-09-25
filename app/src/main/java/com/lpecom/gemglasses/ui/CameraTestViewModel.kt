@@ -574,7 +574,11 @@ class CameraTestViewModel @Inject constructor(
                 savedVideoUri = uri,
                 status =
                     if (uri != null) {
-                        "Video saved"
+                        if (videoRecorder.lastRecordingHadAudio()) {
+                            "Video saved"
+                        } else {
+                            "Video saved (no audio)"
+                        }
                     } else {
                         "Recording stopped"
                     },
@@ -590,6 +594,13 @@ class CameraTestViewModel @Inject constructor(
     // =========================================================================
     // STOP PREVIEW
     // =========================================================================
+
+    fun dismissPhoto() {
+        _uiState.value =
+            _uiState.value.copy(
+                capturedPhoto = null,
+            )
+    }
 
     fun stopPreview() {
 

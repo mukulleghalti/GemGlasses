@@ -22,8 +22,10 @@ class CameraVideoRecorder @Inject constructor(
 
     private var trackIndex = -1
 
+    @Volatile
     private var recording = false
 
+    @Volatile
     private var started = false
 
     private var width = 0
@@ -46,7 +48,39 @@ class CameraVideoRecorder @Inject constructor(
 
     private var loggedNalFormat = false
 
+    // -----------------------------------------------------------------
+    // Audio (AAC) state.
+    //
+    // Audio is captured on its own thread while video frames arrive on
+    // the camera thread. Everything touching the muxer or the pending
+    // audio queue is guarded by muxerLock.
+    // -----------------------------------------------------------------
+
+    private val muxerLock = Any()
+
+    private var audioCapture: CameraAudioCapture? = null
+
+    private var audioFormat: MediaFormat? = null
+
+    private var audioTrackIndex = -1
+
+    /**
+     * True once audio has either produced its encoder format or has
+     * definitively failed. The MP4 muxer waits for this before starting
+     * so the audio track (when available) is added before muxer.start().
+     */
+    private var audioSettled = false
+
+    private val pendingAudio = ArrayDeque<PendingAudioSample>()
+
+    private var audioSampleCount = 0L
+
+    private var lastRecordingHadAudio = false
+
     fun isRecording(): Boolean = recording
+
+    /** True if the most recently finished recording contained an audio track. */
+    fun lastRecordingHadAudio(): Boolean = lastRecordingHadAudio
 
     fun start() {
 
@@ -77,10 +111,101 @@ class CameraVideoRecorder @Inject constructor(
 
         muxer = null
 
+        synchronized(muxerLock) {
+            audioCapture = null
+            audioFormat = null
+            audioTrackIndex = -1
+            audioSettled = false
+            pendingAudio.clear()
+            audioSampleCount = 0L
+        }
+
+        startAudioCapture()
+
         Log.i(
             TAG,
             "Video recording armed",
         )
+    }
+
+    /**
+     * Starts microphone capture for the recording's audio track.
+     *
+     * If the microphone is unavailable (no permission, in use, …) this logs
+     * a warning and the recording simply continues video-only instead of
+     * failing.
+     */
+    private fun startAudioCapture() {
+        val capture = CameraAudioCapture()
+        try {
+            capture.start(object : CameraAudioCapture.Listener {
+
+                override fun onAudioFormat(format: MediaFormat) {
+                    synchronized(muxerLock) {
+                        audioFormat = format
+                        audioSettled = true
+                    }
+                    Log.i(TAG, "Audio encoder format ready")
+                }
+
+                override fun onAudioSample(
+                    data: ByteBuffer,
+                    info: MediaCodec.BufferInfo,
+                ) {
+                    synchronized(muxerLock) {
+                        val activeMuxer = muxer
+                        if (started && audioTrackIndex >= 0 && activeMuxer != null) {
+                            writeAudioSampleLocked(activeMuxer, data, info)
+                        } else if (pendingAudio.size < MAX_PENDING_AUDIO_SAMPLES) {
+                            pendingAudio.addLast(PendingAudioSample(data, info))
+                        }
+                    }
+                }
+
+                override fun onAudioError(e: Exception) {
+                    synchronized(muxerLock) {
+                        audioSettled = true
+                    }
+                    Log.w(TAG, "Audio capture failed — continuing video-only", e)
+                }
+            })
+            synchronized(muxerLock) {
+                audioCapture = capture
+            }
+        } catch (e: Exception) {
+            synchronized(muxerLock) {
+                audioSettled = true
+            }
+            Log.w(TAG, "Audio capture unavailable — recording video-only", e)
+        }
+    }
+
+    private fun writeAudioSampleLocked(
+        activeMuxer: MediaMuxerCompat,
+        data: ByteBuffer,
+        info: MediaCodec.BufferInfo,
+    ) {
+        try {
+            activeMuxer.writeSampleData(audioTrackIndex, data, info)
+            audioSampleCount++
+        } catch (e: Exception) {
+            Log.e(TAG, "MediaMuxer.writeSampleData (audio) failed", e)
+        }
+    }
+
+    /** Writes queued audio samples once the muxer (with audio track) is up. */
+    private fun flushPendingAudio() {
+        synchronized(muxerLock) {
+            val activeMuxer = muxer
+            if (audioTrackIndex < 0 || activeMuxer == null) {
+                pendingAudio.clear()
+                return
+            }
+            while (pendingAudio.isNotEmpty()) {
+                val sample = pendingAudio.removeFirst()
+                writeAudioSampleLocked(activeMuxer, sample.data, sample.info)
+            }
+        }
     }
 
     fun writeFrame(
@@ -380,6 +505,20 @@ class CameraVideoRecorder @Inject constructor(
                 return
             }
 
+            if (!audioSettled) {
+
+                if (receivedFrameCount <= 10L) {
+
+                    Log.d(
+                        TAG,
+                        "HEVC ready but waiting for audio format " +
+                            "frame=$receivedFrameCount",
+                    )
+                }
+
+                return
+            }
+
             startMuxer(
                 codecConfig = codecConfig,
                 frame = frame,
@@ -437,11 +576,14 @@ class CameraVideoRecorder @Inject constructor(
 
         try {
 
-            muxer?.writeSampleData(
-                trackIndex,
-                buffer,
-                info,
-            )
+            synchronized(muxerLock) {
+
+                muxer?.writeSampleData(
+                    trackIndex,
+                    buffer,
+                    info,
+                )
+            }
 
             writtenFrameCount++
 
@@ -528,6 +670,31 @@ class CameraVideoRecorder @Inject constructor(
                     format,
                 )
 
+            /*
+             * The audio track must be added before muxer.start() — tracks
+             * cannot be added afterwards. If the microphone was unavailable,
+             * audioFormat is null and the file stays video-only.
+             */
+
+            val readyAudioFormat =
+                synchronized(muxerLock) {
+                    audioFormat
+                }
+
+            if (readyAudioFormat != null) {
+
+                audioTrackIndex =
+                    muxer!!.addTrack(
+                        readyAudioFormat,
+                    )
+
+                Log.i(
+                    TAG,
+                    "Audio track added " +
+                        "trackIndex=$audioTrackIndex",
+                )
+            }
+
             muxer!!.start()
 
             started = true
@@ -539,8 +706,11 @@ class CameraVideoRecorder @Inject constructor(
                 TAG,
                 "MP4 muxer started " +
                     "trackIndex=$trackIndex " +
+                    "audioTrackIndex=$audioTrackIndex " +
                     "uri=$outputUri",
             )
+
+            flushPendingAudio()
 
         } catch (e: Exception) {
 
@@ -567,6 +737,7 @@ class CameraVideoRecorder @Inject constructor(
             muxer = null
             outputUri = null
             trackIndex = -1
+            audioTrackIndex = -1
 
             throw e
         }
@@ -579,6 +750,19 @@ class CameraVideoRecorder @Inject constructor(
         }
 
         recording = false
+
+        /*
+         * Stop audio capture BEFORE finalizing the muxer so the encoder
+         * drains its last AAC samples into the file.
+         */
+
+        try {
+            synchronized(muxerLock) {
+                audioCapture?.stop()
+                audioCapture = null
+            }
+        } catch (_: Exception) {
+        }
 
         val currentMuxer =
             muxer
@@ -737,6 +921,16 @@ class CameraVideoRecorder @Inject constructor(
         started = false
         trackIndex = -1
 
+        lastRecordingHadAudio = audioTrackIndex >= 0
+
+        synchronized(muxerLock) {
+            audioFormat = null
+            audioTrackIndex = -1
+            audioSettled = false
+            pendingAudio.clear()
+            audioSampleCount = 0L
+        }
+
         pendingCodecConfig = null
 
         firstTimestampUs = -1L
@@ -797,6 +991,19 @@ class CameraVideoRecorder @Inject constructor(
 
         started = false
         trackIndex = -1
+
+        try {
+            synchronized(muxerLock) {
+                audioCapture?.stop()
+                audioCapture = null
+                audioFormat = null
+                audioTrackIndex = -1
+                audioSettled = false
+                pendingAudio.clear()
+                audioSampleCount = 0L
+            }
+        } catch (_: Exception) {
+        }
 
         pendingCodecConfig = null
 
@@ -1372,7 +1579,21 @@ class CameraVideoRecorder @Inject constructor(
     private companion object {
         const val TAG =
             "CameraVideoRecorder"
+
+        /**
+         * Cap on AAC samples queued before the muxer starts. At ~43 AAC
+         * frames/second this is roughly 14 seconds — plenty for the
+         * encoder-format handshake, and bounded so a stuck video stream
+         * cannot grow memory without limit.
+         */
+        const val MAX_PENDING_AUDIO_SAMPLES = 600
     }
+
+    /** One encoded AAC sample waiting for the muxer to gain its audio track. */
+    private class PendingAudioSample(
+        val data: ByteBuffer,
+        val info: MediaCodec.BufferInfo,
+    )
 }
 
 /*
