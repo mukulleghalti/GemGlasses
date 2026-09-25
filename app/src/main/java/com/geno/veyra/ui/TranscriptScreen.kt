@@ -8,8 +8,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
@@ -71,24 +74,29 @@ fun TranscriptScreen(
                 )
 
                 if (assistantRunning) {
-                    Button(
+                    /*
+                     * Mic mute as an icon: filled mic normally, crossed
+                     * mic in the error color when muted so the state is
+                     * obvious at a glance.
+                     */
+                    IconButton(
                         onClick = {
                             viewModel.setMicMuted(!micMuted)
                         },
-                        colors = if (micMuted) {
-                            ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme
-                                    .colorScheme.errorContainer,
-                                contentColor = MaterialTheme
-                                    .colorScheme.onErrorContainer,
-                            )
-                        } else {
-                            ButtonDefaults.buttonColors()
-                        },
                     ) {
-                        Text(
-                            if (micMuted) "Unmute mic"
-                            else "Mute mic"
+                        Icon(
+                            imageVector =
+                                if (micMuted) Icons.Default.MicOff
+                                else Icons.Default.Mic,
+                            contentDescription =
+                                if (micMuted) "Unmute mic"
+                                else "Mute mic",
+                            tint =
+                                if (micMuted) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
                         )
                     }
                 }
