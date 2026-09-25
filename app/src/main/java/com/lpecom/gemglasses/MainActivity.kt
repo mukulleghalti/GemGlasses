@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
@@ -422,12 +423,23 @@ private fun GemGlassesRoot() {
             }
         },
 
-    ) { _ ->
+    ) { innerPadding ->
+
+        // The camera screens hide the bottom bar and draw edge-to-edge, so
+        // only the tabbed screens need the Scaffold's content padding.
+        val contentModifier =
+            if (isCameraTest || isCameraSettings) {
+                Modifier.fillMaxSize()
+            } else {
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            }
 
         NavHost(
             navController = navController,
             startDestination = "home",
-            modifier = Modifier.fillMaxSize(),
+            modifier = contentModifier,
         ) {
 
             composable("home") {
