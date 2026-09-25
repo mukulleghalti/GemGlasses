@@ -13,8 +13,6 @@ import com.lpecom.gemglasses.glasses.ConnectionState
 import com.lpecom.gemglasses.service.AgentForegroundService
 import com.lpecom.gemglasses.service.AssistantStarter
 import com.lpecom.gemglasses.settings.AgentPreferences
-import com.lpecom.gemglasses.settings.AudioOutput
-import com.lpecom.gemglasses.settings.PlaybackQuality
 import com.lpecom.gemglasses.settings.SettingsRepository
 import com.lpecom.gemglasses.state.CitedPlace
 import com.lpecom.gemglasses.state.ConversationStore
@@ -165,26 +163,6 @@ class AgentViewModel @Inject constructor(
     fun setStopPhrase(phrase: String) {
         viewModelScope.launch {
             settings.setStopPhrase(phrase)
-        }
-    }
-
-    /**
-     * Changes where the assistant's voice plays: the glasses or the phone
-     * speaker (diagnostic for choppy Bluetooth audio).
-     */
-    fun setAudioOutput(output: AudioOutput) {
-        viewModelScope.launch {
-            settings.setAudioOutput(output)
-        }
-    }
-
-    /**
-     * Changes playback quality: the voice-call channel (SCO) or the
-     * high-quality music channel (A2DP).
-     */
-    fun setPlaybackQuality(quality: PlaybackQuality) {
-        viewModelScope.launch {
-            settings.setPlaybackQuality(quality)
         }
     }
 

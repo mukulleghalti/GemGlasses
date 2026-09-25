@@ -12,11 +12,10 @@ import com.lpecom.gemglasses.gemini.SessionConfig
 import com.lpecom.gemglasses.gemini.SessionEvent
 import com.lpecom.gemglasses.gemini.SessionKeeper
 import com.lpecom.gemglasses.gemini.ToolRegistry
+import com.lpecom.gemglasses.glasses.ConnectionState
 import com.lpecom.gemglasses.glasses.GlassesCameraSource
 import com.lpecom.gemglasses.glasses.GlassesManager
 import com.lpecom.gemglasses.settings.AgentPreferences
-import com.lpecom.gemglasses.settings.AudioOutput
-import com.lpecom.gemglasses.settings.PlaybackQuality
 import com.lpecom.gemglasses.settings.SettingsRepository
 import com.lpecom.gemglasses.state.ConversationStore
 import com.lpecom.gemglasses.state.TranscriptEntry
@@ -29,6 +28,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Provider
@@ -112,47 +112,20 @@ class AgentController @Inject constructor(
             bargeInEnabled = prefs.bargeInEnabled
 
             /*
-             * Diagnostic routing: "Phone speaker" forces the assistant's
-             * voice (and the mic) onto the phone so choppy audio can be
-             * blamed on (or cleared of) the Bluetooth link.
+             * Playback is always the high-quality music channel (A2DP):
+             * the assistant's voice goes to the glasses while they're
+             * connected, and falls back to the phone speaker when they
+             * aren't. No voice-call (SCO) path: bringing SCO up would
+             * suspend A2DP, which defeats media playback.
              */
-            val preferPhone = prefs.audioOutput == AudioOutput.PHONE
-            if (preferPhone) {
-                router.routeToPhoneSpeaker()
-            } else if (prefs.playbackQuality == PlaybackQuality.CALL) {
-                /*
-                 * Claim the voice path explicitly instead of squatting on
-                 * whatever SCO link happens to be up (e.g. held open by
-                 * the Meta AI app). Selecting the glasses as the
-                 * communication device gives deterministic routing and,
-                 * crucially, puts the platform's echo cancellation into
-                 * our mic chain so the assistant stops hearing itself.
-                 *
-                 * MEDIA quality intentionally skips this: bringing SCO up
-                 * suspends A2DP, which is the whole point of Media mode.
-                 */
-                router.routeToGlasses()
-            }
-
-            /*
-             * Playback quality: "Call" keeps the voice-call channel (SCO);
-             * "Media" uses the high-quality music channel (A2DP).
-             */
-            val usage =
-                if (prefs.playbackQuality == PlaybackQuality.MEDIA) {
-                    AudioAttributes.USAGE_MEDIA
-                } else {
-                    AudioAttributes.USAGE_VOICE_COMMUNICATION
-                }
+            val glassesConnected =
+                glassesManager.connectionState.first() ==
+                    ConnectionState.CONNECTED
 
             speaker.open(
-                usage = usage,
+                usage = AudioAttributes.USAGE_MEDIA,
                 preferredOutput =
-                    if (preferPhone) {
-                        router.phoneSpeakerOutputDevice()
-                    } else {
-                        null
-                    },
+                    router.preferredMediaOutput(glassesConnected),
             )
 
             launch { collectEvents() }

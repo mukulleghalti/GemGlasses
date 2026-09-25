@@ -41,8 +41,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.lpecom.gemglasses.settings.AudioOutput
-import com.lpecom.gemglasses.settings.PlaybackQuality
 import com.lpecom.gemglasses.wakeword.WakeWordModelState
 
 @Composable
@@ -133,44 +131,6 @@ fun SettingsScreen(
             )
         }
 
-        Setting(title = "Assistant audio output") {
-            ChipRow {
-                AudioOutput.entries.forEach { output ->
-                    FilterChip(
-                        selected = prefs.audioOutput == output,
-                        onClick = { viewModel.setAudioOutput(output) },
-                        label = { Text(output.label) },
-                    )
-                }
-            }
-            Text(
-                "Diagnostic: play the assistant through the phone speaker " +
-                    "instead of the glasses to check whether choppy audio " +
-                    "comes from the Bluetooth link.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Setting(title = "Playback quality") {
-            ChipRow {
-                PlaybackQuality.entries.forEach { quality ->
-                    FilterChip(
-                        selected = prefs.playbackQuality == quality,
-                        onClick = { viewModel.setPlaybackQuality(quality) },
-                        label = { Text(quality.label) },
-                    )
-                }
-            }
-            Text(
-                "Call uses the voice-call Bluetooth channel; Media uses " +
-                    "the high-quality music channel. Applies to the next " +
-                    "session.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
         Setting(title = "Barge-in") {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -187,8 +147,8 @@ fun SettingsScreen(
                 )
             }
             Text(
-                "Diagnostic: turn off to check whether false interruptions " +
-                    "are what make the audio sound choppy.",
+                "When on, talking over the assistant cuts it off so you " +
+                    "can interrupt. Turn off if it cuts out too easily.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

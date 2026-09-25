@@ -12,8 +12,8 @@ import com.lpecom.gemglasses.gemini.LiveSession
 import com.lpecom.gemglasses.gemini.SessionEvent
 import com.lpecom.gemglasses.gemini.TokenProvider
 import com.lpecom.gemglasses.gemini.protocol.Tool
-import com.lpecom.gemglasses.settings.AudioOutput
-import com.lpecom.gemglasses.settings.PlaybackQuality
+import com.lpecom.gemglasses.glasses.ConnectionState
+import com.lpecom.gemglasses.glasses.GlassesManager
 import com.lpecom.gemglasses.settings.SettingsRepository
 import javax.inject.Inject
 import javax.inject.Provider
@@ -25,6 +25,7 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -59,6 +60,7 @@ class TranslateController @Inject constructor(
     private val speaker: SpeakerSink,
     private val router: BluetoothAudioRouter,
     private val settings: SettingsRepository,
+    private val glassesManager: GlassesManager,
     private val agentController: Provider<AgentController>,
 ) {
 
@@ -106,34 +108,19 @@ class TranslateController @Inject constructor(
             val prefs = settings.snapshot()
 
             /*
-             * Same audio routing as the assistant: glasses SCO for the
-             * voice path, phone speaker for the diagnostic output.
+             * Same audio routing as the assistant: always the high-quality
+             * music channel (A2DP) — the translated voice goes to the
+             * glasses while they're connected, and falls back to the phone
+             * speaker when they aren't.
              */
-            val preferPhone =
-                prefs.audioOutput == AudioOutput.PHONE
-            if (preferPhone) {
-                router.routeToPhoneSpeaker()
-            } else if (
-                prefs.playbackQuality == PlaybackQuality.CALL
-            ) {
-                router.routeToGlasses()
-            }
-
-            val usage =
-                if (prefs.playbackQuality == PlaybackQuality.MEDIA) {
-                    AudioAttributes.USAGE_MEDIA
-                } else {
-                    AudioAttributes.USAGE_VOICE_COMMUNICATION
-                }
+            val glassesConnected =
+                glassesManager.connectionState.first() ==
+                    ConnectionState.CONNECTED
 
             speaker.open(
-                usage = usage,
+                usage = AudioAttributes.USAGE_MEDIA,
                 preferredOutput =
-                    if (preferPhone) {
-                        router.phoneSpeakerOutputDevice()
-                    } else {
-                        null
-                    },
+                    router.preferredMediaOutput(glassesConnected),
             )
 
             val token =

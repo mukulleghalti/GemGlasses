@@ -49,59 +49,6 @@ enum class CameraResolution(
     }
 }
 
-/** Where the assistant's voice (and the mic) is routed. */
-enum class AudioOutput(
-    val storageValue: String,
-    val label: String,
-) {
-    GLASSES(
-        storageValue = "glasses",
-        label = "Glasses",
-    ),
-
-    PHONE(
-        storageValue = "phone",
-        label = "Phone speaker",
-    );
-
-    companion object {
-        fun fromStorageValue(value: String?): AudioOutput {
-            return entries.firstOrNull {
-                it.storageValue == value
-            } ?: GLASSES
-        }
-    }
-}
-
-/**
- * Which Bluetooth channel carries the assistant's voice.
- *
- * CALL keeps the current voice-call channel (SCO, narrow-band);
- * MEDIA uses the high-quality music channel (A2DP).
- */
-enum class PlaybackQuality(
-    val storageValue: String,
-    val label: String,
-) {
-    CALL(
-        storageValue = "call",
-        label = "Call",
-    ),
-
-    MEDIA(
-        storageValue = "media",
-        label = "Media",
-    );
-
-    companion object {
-        fun fromStorageValue(value: String?): PlaybackQuality {
-            return entries.firstOrNull {
-                it.storageValue == value
-            } ?: CALL
-        }
-    }
-}
-
 /** User-tunable session and camera preferences. */
 data class AgentPreferences(
     val languageCode: String,
@@ -111,8 +58,6 @@ data class AgentPreferences(
     val wakeWordEnabled: Boolean,
     val wakePhrase: String,
     val stopPhrase: String,
-    val audioOutput: AudioOutput,
-    val playbackQuality: PlaybackQuality,
     val bargeInEnabled: Boolean,
 ) {
     /** Built here so the persona text stays in one place. */
@@ -129,8 +74,6 @@ data class AgentPreferences(
             wakeWordEnabled = false,
             wakePhrase = DEFAULT_WAKE_PHRASE,
             stopPhrase = DEFAULT_STOP_PHRASE,
-            audioOutput = AudioOutput.GLASSES,
-            playbackQuality = PlaybackQuality.CALL,
             bargeInEnabled = true,
         )
 
@@ -190,12 +133,6 @@ class SettingsRepository @Inject constructor(
 
     private val stopPhraseKey =
         stringPreferencesKey("stop_phrase")
-
-    private val audioOutputKey =
-        stringPreferencesKey("audio_output")
-
-    private val playbackQualityKey =
-        stringPreferencesKey("playback_quality")
 
     private val bargeInEnabledKey =
         booleanPreferencesKey("barge_in_enabled")
@@ -263,16 +200,6 @@ class SettingsRepository @Inject constructor(
                     prefs[stopPhraseKey]
                         ?: AgentPreferences.DEFAULT.stopPhrase,
 
-                audioOutput =
-                    AudioOutput.fromStorageValue(
-                        prefs[audioOutputKey]
-                    ),
-
-                playbackQuality =
-                    PlaybackQuality.fromStorageValue(
-                        prefs[playbackQualityKey]
-                    ),
-
                 bargeInEnabled =
                     prefs[bargeInEnabledKey]
                         ?: AgentPreferences.DEFAULT.bargeInEnabled,
@@ -333,22 +260,6 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[stopPhraseKey] = phrase
-        }
-    }
-
-    suspend fun setAudioOutput(
-        output: AudioOutput,
-    ) {
-        context.dataStore.edit {
-            it[audioOutputKey] = output.storageValue
-        }
-    }
-
-    suspend fun setPlaybackQuality(
-        quality: PlaybackQuality,
-    ) {
-        context.dataStore.edit {
-            it[playbackQualityKey] = quality.storageValue
         }
     }
 
