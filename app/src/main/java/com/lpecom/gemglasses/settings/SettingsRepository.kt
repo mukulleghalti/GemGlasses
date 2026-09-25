@@ -200,6 +200,36 @@ class SettingsRepository @Inject constructor(
     private val bargeInEnabledKey =
         booleanPreferencesKey("barge_in_enabled")
 
+    private val translateSourceLangKey =
+        stringPreferencesKey("translate_source_lang")
+
+    private val translateTargetLangKey =
+        stringPreferencesKey("translate_target_lang")
+
+    /** Persisted source language code for the translator ("auto" = detect). */
+    val translateSourceLang: Flow<String> =
+        context.dataStore.data.map { prefs ->
+            prefs[translateSourceLangKey] ?: "auto"
+        }
+
+    /** Persisted target language code for the translator. */
+    val translateTargetLang: Flow<String> =
+        context.dataStore.data.map { prefs ->
+            prefs[translateTargetLangKey] ?: "hi"
+        }
+
+    suspend fun setTranslateSourceLang(code: String) {
+        context.dataStore.edit {
+            it[translateSourceLangKey] = code
+        }
+    }
+
+    suspend fun setTranslateTargetLang(code: String) {
+        context.dataStore.edit {
+            it[translateTargetLangKey] = code
+        }
+    }
+
     val preferences: Flow<AgentPreferences> =
         context.dataStore.data.map { prefs ->
 

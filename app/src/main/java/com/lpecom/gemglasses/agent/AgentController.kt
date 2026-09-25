@@ -22,6 +22,7 @@ import com.lpecom.gemglasses.state.ConversationStore
 import com.lpecom.gemglasses.state.TranscriptEntry
 import com.lpecom.gemglasses.tools.VisionBridge
 import com.lpecom.gemglasses.tools.VisionController
+import com.lpecom.gemglasses.translate.TranslateController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -30,6 +31,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 /** Coarse lifecycle of the assistant, surfaced to the UI. */
@@ -54,6 +56,7 @@ class AgentController @Inject constructor(
     private val conversation: ConversationStore,
     private val settings: SettingsRepository,
     private val visionBridge: VisionBridge,
+    private val translator: Provider<TranslateController>,
 ) : VisionController {
 
     private val scope = CoroutineScope(SupervisorJob())
@@ -92,6 +95,10 @@ class AgentController @Inject constructor(
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     fun start(initialText: String? = null) {
         if (running) return
+
+        // Only one voice session may own the mic and speaker at a time.
+        val translation = translator.get()
+        if (translation.running) translation.stop()
 
         pendingInitialText = initialText
 

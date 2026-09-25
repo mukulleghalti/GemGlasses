@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -40,6 +41,7 @@ import com.lpecom.gemglasses.ui.CameraSettingsScreen
 import com.lpecom.gemglasses.ui.CameraTestScreen
 import com.lpecom.gemglasses.ui.HomeScreen
 import com.lpecom.gemglasses.ui.SettingsScreen
+import com.lpecom.gemglasses.ui.TranslateScreen
 import com.lpecom.gemglasses.ui.TranscriptScreen
 import com.lpecom.gemglasses.ui.theme.GemGlassesTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -340,6 +342,12 @@ private fun GemGlassesRoot() {
             ),
 
             BottomNavItem(
+                "translate",
+                "Translate",
+                Icons.Default.Translate
+            ),
+
+            BottomNavItem(
                 "transcript",
                 "Transcript",
                 Icons.AutoMirrored.Filled.List
@@ -476,6 +484,13 @@ private fun GemGlassesRoot() {
             composable("transcript") {
 
                 TranscriptScreen(
+                    modifier = Modifier
+                )
+            }
+
+            composable("translate") {
+
+                TranslateScreen(
                     modifier = Modifier
                 )
             }
