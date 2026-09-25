@@ -122,15 +122,6 @@ class AgentController @Inject constructor(
                 glassesManager.connectionState.first() ==
                     ConnectionState.CONNECTED
 
-            if (glassesConnected) {
-                /*
-                 * Prefer the glasses' mic over BLE when the platform
-                 * exposes it: unlike SCO this leaves A2DP output alone.
-                 * Falls back to the phone mic when unavailable.
-                 */
-                router.trySelectBleHeadsetMic()
-            }
-
             speaker.open(
                 usage = AudioAttributes.USAGE_MEDIA,
                 preferredOutput =

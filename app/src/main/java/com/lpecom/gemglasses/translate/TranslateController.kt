@@ -117,10 +117,6 @@ class TranslateController @Inject constructor(
                 glassesManager.connectionState.first() ==
                     ConnectionState.CONNECTED
 
-            if (glassesConnected) {
-                router.trySelectBleHeadsetMic()
-            }
-
             speaker.open(
                 usage = AudioAttributes.USAGE_MEDIA,
                 preferredOutput =
