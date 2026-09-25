@@ -69,7 +69,9 @@ thing well:
                                              ├─ tools: 4 function tools
                                              └─ ui: Compose (Home/Transcript/Settings)
                                                             │
-                                            Cloudflare Worker (/token, /places) ── holds the Google API key
+                                            Google AI Studio ── your own API key,
+                                            stored encrypted on the phone; the app
+                                            mints its own short-lived tokens
 ```
 
 The full write-up is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The
@@ -77,8 +79,9 @@ design principles I held myself to:
 
 1. **Audio-persistent, vision-on-demand** — the socket is audio-only by default
    and reconnects transparently via session resumption.
-2. **The API key never ships in the APK** — the app only ever holds short-lived
-   ephemeral tokens minted by a tiny backend.
+2. **The API key never leaves your phone** — it's stored encrypted on-device
+   and sent only to Google; the app mints its own short-lived ephemeral
+   tokens directly.
 3. **One place for the model ID** — Live model IDs churn; they live in
    `gemini/Models.kt` and nowhere else.
 4. **Glasses are swappable** — everything sits behind a `GlassesBackend`
@@ -88,7 +91,7 @@ design principles I held myself to:
 
 Kotlin · Coroutines + Flow · Jetpack Compose · Hilt · OkHttp (raw Live
 WebSocket) · kotlinx.serialization · DataStore · Meta Wearables Device Access
-Toolkit · Cloudflare Workers (TypeScript) for the token/grounding backend.
+Toolkit.
 
 ## Getting started
 
@@ -102,7 +105,7 @@ is exercisable on an emulator.
 ```bash
 git clone https://github.com/lpecom/GemGlasses.git
 cd GemGlasses
-cp local.properties.example local.properties   # set sdk.dir, backend URL, app secret
+cp local.properties.example local.properties   # set sdk.dir
 
 # Mock glasses backend is the default — no github_token or hardware needed
 ./gradlew assembleDebug
@@ -111,16 +114,10 @@ cp local.properties.example local.properties   # set sdk.dir, backend URL, app s
 
 ### Run it for real (with glasses)
 
-1. **Gemini** — get an API key from Google AI Studio.
-2. **Backend** — deploy the Worker (see [`backend/`](backend/README.md)):
-   ```bash
-   cd backend && npm install
-   npx wrangler secret put GEMINI_API_KEY
-   npx wrangler secret put TOKEN_APP_SECRET
-   npx wrangler deploy
-   ```
-   Put the deployed URL and the same app secret in `local.properties`.
-3. **Meta Wearables** — create an app at
+1. **Gemini** — get an API key from Google AI Studio and paste it into the
+   app's Settings → Gemini API key (it's verified on save). The key is stored
+   encrypted on the phone and sent only to Google.
+2. **Meta Wearables** — create an app at
    [wearables.developer.meta.com](https://wearables.developer.meta.com), grab
    the `APPLICATION_ID` / `CLIENT_TOKEN`, and add a classic GitHub PAT with
    `read:packages` as `github_token` in `local.properties` (this unlocks the DAT
@@ -128,9 +125,9 @@ cp local.properties.example local.properties   # set sdk.dir, backend URL, app s
    ```bash
    ./gradlew installDebug -Pgemglasses.useRealGlasses=true
    ```
-4. **Developer Mode** — in the Meta AI app: *Settings → App Info → tap the
+3. **Developer Mode** — in the Meta AI app: *Settings → App Info → tap the
    version 5×* to enable it, then pair your glasses.
-5. Build and install onto your phone (`-Pgemglasses.useRealGlasses=true` links
+4. Build and install onto your phone (`-Pgemglasses.useRealGlasses=true` links
    the DAT SDK):
    ```bash
    ./gradlew installDebug -Pgemglasses.useRealGlasses=true

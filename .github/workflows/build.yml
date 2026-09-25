@@ -8,13 +8,14 @@ on:
       - CameraTest
       - AddVideoPhotosave
       - Muse_voice-wake
+      - Muse_ondevice-tokens
 
   workflow_dispatch:
     inputs:
       ref:
         description: "Branch or commit SHA to build"
         required: false
-        default: "Muse_voice-wake"
+        default: "Muse_ondevice-tokens"
         type: string
 
 jobs:
@@ -37,39 +38,27 @@ jobs:
       - name: Verify required secrets
         shell: bash
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          TOKEN_APP_SECRET: ${{ secrets.TOKEN_APP_SECRET }}
           META_APP_ID: ${{ secrets.META_APP_ID }}
           META_CLIENT_TOKEN: ${{ secrets.META_CLIENT_TOKEN }}
-          GEMGLASSES_BACKEND_URL: ${{ secrets.GEMGLASSES_BACKEND_URL }}
         run: |
           set -e
 
-          test -n "$GEMINI_API_KEY"
-          test -n "$TOKEN_APP_SECRET"
           test -n "$META_APP_ID"
           test -n "$META_CLIENT_TOKEN"
-          test -n "$GEMGLASSES_BACKEND_URL"
 
           echo "Required secrets are configured."
 
       - name: Write local.properties
         shell: bash
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          TOKEN_APP_SECRET: ${{ secrets.TOKEN_APP_SECRET }}
           META_APP_ID: ${{ secrets.META_APP_ID }}
           META_CLIENT_TOKEN: ${{ secrets.META_CLIENT_TOKEN }}
-          GEMGLASSES_BACKEND_URL: ${{ secrets.GEMGLASSES_BACKEND_URL }}
         run: |
           set -e
 
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          echo "GEMINI_API_KEY=$GEMINI_API_KEY" >> local.properties
-          echo "TOKEN_APP_SECRET=$TOKEN_APP_SECRET" >> local.properties
           echo "META_APPLICATION_ID=$META_APP_ID" >> local.properties
           echo "META_CLIENT_TOKEN=$META_CLIENT_TOKEN" >> local.properties
-          echo "GEMGLASSES_BACKEND_URL=$GEMGLASSES_BACKEND_URL" >> local.properties
 
           echo "local.properties created."
 

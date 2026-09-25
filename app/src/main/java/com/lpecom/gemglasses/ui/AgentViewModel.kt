@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lpecom.gemglasses.agent.AgentController
 import com.lpecom.gemglasses.agent.AgentStatus
+import com.lpecom.gemglasses.gemini.TokenProvider
 import com.lpecom.gemglasses.glasses.GlassesDevice
 import com.lpecom.gemglasses.glasses.GlassesManager
 import com.lpecom.gemglasses.glasses.RegistrationState
@@ -14,6 +15,7 @@ import com.lpecom.gemglasses.service.AgentForegroundService
 import com.lpecom.gemglasses.service.AssistantStarter
 import com.lpecom.gemglasses.settings.AgentPreferences
 import com.lpecom.gemglasses.settings.AudioOutput
+import com.lpecom.gemglasses.settings.GeminiKeyRepository
 import com.lpecom.gemglasses.settings.PlaybackQuality
 import com.lpecom.gemglasses.settings.SettingsRepository
 import com.lpecom.gemglasses.state.CitedPlace
@@ -23,6 +25,7 @@ import com.lpecom.gemglasses.wakeword.WakeWordEngine
 import com.lpecom.gemglasses.wakeword.WakeWordModelState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -44,6 +47,8 @@ class AgentViewModel @Inject constructor(
     private val settings: SettingsRepository,
     private val assistantStarter: AssistantStarter,
     private val wakeWordEngine: WakeWordEngine,
+    private val keyRepository: GeminiKeyRepository,
+    private val tokenProvider: TokenProvider,
 ) : AndroidViewModel(application) {
 
     val status: StateFlow<AgentStatus> =
@@ -195,6 +200,58 @@ class AgentViewModel @Inject constructor(
         viewModelScope.launch {
             settings.setBargeInEnabled(enabled)
         }
+    }
+
+    // --- Gemini API key --------------------------------------------------
+
+    /** Status of the saved API key, as last verified against Google. */
+    sealed interface ApiKeyState {
+        /** A key is saved but hasn't been verified yet in this session. */
+        data object Unchecked : ApiKeyState
+
+        /** A verification call is in flight. */
+        data object Checking : ApiKeyState
+
+        /** Google accepted the key (a token was minted). */
+        data object Valid : ApiKeyState
+
+        /** Google rejected the key, or no key is saved. */
+        data class Invalid(val message: String) : ApiKeyState
+
+        /** No key saved at all. */
+        data object Missing : ApiKeyState
+    }
+
+    private val _apiKeyState = MutableStateFlow<ApiKeyState>(
+        if (keyRepository.hasKey()) ApiKeyState.Unchecked else ApiKeyState.Missing,
+    )
+    val apiKeyState: StateFlow<ApiKeyState> = _apiKeyState
+
+    /** The saved key, for prefilling the Settings field. */
+    val savedApiKey: String?
+        get() = keyRepository.getKey()
+
+    /**
+     * Saves the key verbatim (no format checks) and immediately verifies
+     * it by minting a real ephemeral token, so a typo surfaces right away
+     * instead of at the next session start.
+     */
+    fun saveApiKey(key: String) {
+        viewModelScope.launch {
+            keyRepository.saveKey(key)
+            _apiKeyState.value = ApiKeyState.Checking
+            _apiKeyState.value = try {
+                tokenProvider.fetchEphemeralToken()
+                ApiKeyState.Valid
+            } catch (e: Exception) {
+                ApiKeyState.Invalid(e.message ?: "Couldn't verify the key.")
+            }
+        }
+    }
+
+    fun clearApiKey() {
+        keyRepository.clearKey()
+        _apiKeyState.value = ApiKeyState.Missing
     }
 
     /**

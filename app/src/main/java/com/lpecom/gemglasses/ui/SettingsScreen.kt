@@ -19,15 +19,20 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +42,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -66,6 +73,113 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         Text("Settings", style = MaterialTheme.typography.titleLarge)
+
+        Setting(title = "Gemini API key") {
+            val apiKeyState by viewModel.apiKeyState.collectAsStateWithLifecycle()
+            var keyInput by remember {
+                mutableStateOf(viewModel.savedApiKey.orEmpty())
+            }
+            var passwordVisible by remember { mutableStateOf(false) }
+
+            OutlinedTextField(
+                value = keyInput,
+                onValueChange = { keyInput = it },
+                label = { Text("API key") },
+                singleLine = true,
+                visualTransformation =
+                    if (passwordVisible) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                trailingIcon = {
+                    IconButton(
+                        onClick = { passwordVisible = !passwordVisible },
+                    ) {
+                        Icon(
+                            imageVector =
+                                if (passwordVisible) {
+                                    Icons.Filled.VisibilityOff
+                                } else {
+                                    Icons.Filled.Visibility
+                                },
+                            contentDescription =
+                                if (passwordVisible) {
+                                    "Hide key"
+                                } else {
+                                    "Show key"
+                                },
+                        )
+                    }
+                },
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        if (keyInput.isNotBlank()) {
+                            viewModel.saveApiKey(keyInput)
+                        }
+                    },
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(
+                    onClick = { viewModel.saveApiKey(keyInput) },
+                    enabled = keyInput.isNotBlank() &&
+                        apiKeyState != AgentViewModel.ApiKeyState.Checking,
+                ) {
+                    Text("Save & test")
+                }
+                if (viewModel.savedApiKey != null) {
+                    TextButton(
+                        onClick = {
+                            viewModel.clearApiKey()
+                            keyInput = ""
+                        },
+                    ) {
+                        Text("Remove")
+                    }
+                }
+            }
+
+            val statusText = when (val state = apiKeyState) {
+                AgentViewModel.ApiKeyState.Unchecked ->
+                    "Key saved — tap Save & test to verify it."
+                AgentViewModel.ApiKeyState.Checking ->
+                    "Verifying key with Google…"
+                AgentViewModel.ApiKeyState.Valid ->
+                    "Key verified — the assistant is ready."
+                is AgentViewModel.ApiKeyState.Invalid ->
+                    "Key problem: ${state.message}"
+                AgentViewModel.ApiKeyState.Missing ->
+                    "No key saved yet."
+            }
+            val statusColor =
+                if (apiKeyState is AgentViewModel.ApiKeyState.Invalid) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            Text(
+                statusText,
+                style = MaterialTheme.typography.bodySmall,
+                color = statusColor,
+            )
+            Text(
+                "Get a free key from Google AI Studio. It's stored " +
+                    "encrypted on this phone and sent only to Google — " +
+                    "the app mints its own short-lived tokens, no " +
+                    "server in the middle.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         Setting(title = "Assistant Voice") {
             var voiceMenuOpen by remember { mutableStateOf(false) }
@@ -342,7 +456,9 @@ fun SettingsScreen(
 
         Text(
             "Privacy: transcripts stay on this device and are never synced. " +
-                "The API key lives only on the backend; the app uses ephemeral tokens.",
+                "Your Gemini API key is stored encrypted on this phone and " +
+                "sent only to Google — the app mints its own short-lived " +
+                "tokens, no server in the middle.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

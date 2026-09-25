@@ -13,11 +13,3 @@ github_token=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 # Meta Wearables Developer Center credentials (baked into the manifest at build time).
 META_APPLICATION_ID=0000000000000000
 META_CLIENT_TOKEN=your_meta_client_token
-
-# Base URL of the deployed Cloudflare Worker that mints ephemeral Gemini tokens.
-# For local dev with `wrangler dev`, point this at http://10.0.2.2:8787 (emulator).
-GEMGLASSES_BACKEND_URL=https://gemglasses-backend.your-subdomain.workers.dev
-
-# Shared app secret sent to the backend to authorize /token and /places calls.
-# Must match TOKEN_APP_SECRET configured on the Worker.
-GEMGLASSES_APP_SECRET=change-me-to-a-long-random-string

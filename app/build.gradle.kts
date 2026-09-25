@@ -30,12 +30,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // === Existing fields ===
-        buildConfigField("String", "BACKEND_URL", "\"${secret("GEMGLASSES_BACKEND_URL", "")}\"")
-        buildConfigField("String", "APP_SECRET", "\"${secret("TOKEN_APP_SECRET", "")}\"")
         buildConfigField("boolean", "USE_REAL_GLASSES", "true")
-
-        // === NEW: Add this line ===
-        buildConfigField("String", "GEMINI_API_KEY", "\"${secret("GEMINI_API_KEY", "")}\"")
 
         manifestPlaceholders["metaApplicationId"] = secret("META_APPLICATION_ID", "0")
         manifestPlaceholders["metaClientToken"] = secret("META_CLIENT_TOKEN", "")
@@ -87,6 +82,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons)
+    implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.navigation.compose)
 
     implementation(libs.hilt.android)
