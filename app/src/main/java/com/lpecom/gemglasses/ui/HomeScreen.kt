@@ -5,8 +5,11 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -40,6 +44,7 @@ import com.lpecom.gemglasses.glasses.RegistrationState
 fun HomeScreen(
     modifier: Modifier = Modifier,
     onCameraTestClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = {},
     viewModel: AgentViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -55,6 +60,11 @@ fun HomeScreen(
 
     val connectionState by
         viewModel.connectionState.collectAsStateWithLifecycle()
+
+    // Fires on every successful token mint; the dot below re-reads the
+    // clock on each recomposition so it reflects token expiry too.
+    val tokenTick by
+        viewModel.hasLiveToken.collectAsStateWithLifecycle()
 
     /*
      * IMPORTANT:
@@ -101,6 +111,11 @@ fun HomeScreen(
             text = "Gemini on your Ray-Ban",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        ApiKeyStatusRow(
+            connected = tokenTick && viewModel.hasLiveTokenNow(),
+            onClick = onSettingsClick,
         )
 
         GlassesCard(
@@ -382,3 +397,62 @@ private fun RegistrationState.label(): String =
         RegistrationState.UNKNOWN ->
             "Status unknown"
     }
+
+
+/**
+ * Lightweight Gemini connectivity light: a green dot while we hold a
+ * live ephemeral token, red otherwise. Tapping it opens Settings so a
+ * missing key is one tap away.
+ */
+@Composable
+private fun ApiKeyStatusRow(
+    connected: Boolean,
+    onClick: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .background(
+                if (connected) {
+                    colors.primaryContainer
+                } else {
+                    colors.errorContainer
+                },
+            )
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .clip(CircleShape)
+                .background(
+                    if (connected) {
+                        Color(0xFF2E7D32)
+                    } else {
+                        Color(0xFFC62828)
+                    },
+                ),
+        )
+        Text(
+            text =
+                if (connected) {
+                    "Gemini connected"
+                } else {
+                    "Gemini not connected — tap to add API key"
+                },
+            style = MaterialTheme.typography.bodyMedium,
+            color =
+                if (connected) {
+                    colors.onPrimaryContainer
+                } else {
+                    colors.onErrorContainer
+                },
+            modifier = Modifier.weight(1f),
+        )
+    }
+}

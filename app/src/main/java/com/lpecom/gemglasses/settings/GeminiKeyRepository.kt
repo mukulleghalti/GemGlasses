@@ -42,7 +42,10 @@ class GeminiKeyRepository @Inject constructor(
     fun hasKey(): Boolean = getKey() != null
 
     fun saveKey(key: String) {
-        prefs.edit().putString(KEY, key.trim()).apply()
+        // Stored exactly as entered — no trimming or format checks.
+        // Whatever the user types goes through to Google's token call,
+        // and the response is surfaced back in Settings.
+        prefs.edit().putString(KEY, key).apply()
     }
 
     fun clearKey() {

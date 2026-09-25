@@ -457,6 +457,19 @@ private fun GemGlassesRoot() {
                     onCameraTestClick = {
                         navController.navigate("camera_test")
                     },
+                    onSettingsClick = {
+                        navController.navigate("settings") {
+                            popUpTo(
+                                navController.graph
+                                    .findStartDestination()
+                                    .id
+                            ) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                 )
             }
 

@@ -255,6 +255,15 @@ class AgentViewModel @Inject constructor(
     }
 
     /**
+     * Reactive "do we hold a live token" signal for the home screen's
+     * green/red dot. Fires on every successful mint.
+     */
+    val hasLiveToken: StateFlow<Boolean> = tokenProvider.hasLiveToken
+
+    /** Clock-accurate check; see [TokenProvider.hasLiveTokenNow]. */
+    fun hasLiveTokenNow(): Boolean = tokenProvider.hasLiveTokenNow()
+
+    /**
      * Converts a Flow into a StateFlow with a default value.
      */
     private fun <T> Flow<T>.stateInDefault(

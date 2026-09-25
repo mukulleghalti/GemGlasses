@@ -3,6 +3,9 @@ package com.lpecom.gemglasses.gemini
 import android.util.Log
 import com.lpecom.gemglasses.settings.GeminiKeyRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -47,6 +50,27 @@ class TokenProvider @Inject constructor(
     class MissingApiKeyException :
         IllegalStateException("No Gemini API key saved — add one in Settings.")
 
+    /**
+     * Whether we currently hold a live (unexpired) ephemeral token.
+     * True after any successful mint — a session start or a Settings
+     * "Save & test" — and stays true until the token's ~30 min window
+     * passes without a fresh mint. The home screen's green/red dot
+     * reads this: green means Gemini is actually reachable right now.
+     */
+    private val _hasLiveToken = MutableStateFlow(false)
+    val hasLiveToken: StateFlow<Boolean> = _hasLiveToken.asStateFlow()
+
+    @Volatile
+    private var lastMintAtMs: Long = 0L
+
+    /**
+     * Clock-accurate version of [hasLiveToken]: the flow is the reactive
+     * signal (it fires on every mint), this guards against a token that
+     * expired while the app sat idle.
+     */
+    fun hasLiveTokenNow(): Boolean =
+        System.currentTimeMillis() - lastMintAtMs < TOKEN_TTL_MS
+
     suspend fun fetchEphemeralToken(): String = withContext(Dispatchers.IO) {
         val apiKey = keyRepository.getKey() ?: throw MissingApiKeyException()
 
@@ -81,6 +105,8 @@ class TokenProvider @Inject constructor(
                 check(!token.isNullOrBlank()) {
                     "Google returned 200 but no token in the response"
                 }
+                _hasLiveToken.value = true
+                lastMintAtMs = System.currentTimeMillis()
                 return@withContext token
             }
         } catch (e: Exception) {
@@ -108,5 +134,11 @@ class TokenProvider @Inject constructor(
     private companion object {
         const val GEMINI_API = "https://generativelanguage.googleapis.com/v1beta"
         val JSON_MEDIA = "application/json".toMediaType()
+
+        /**
+         * How long a minted token counts as "live" for the status dot.
+         * Google's expireTime is ~30 min; we stay conservative.
+         */
+        const val TOKEN_TTL_MS = 25 * 60_000L
     }
 }
