@@ -10,8 +10,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenu
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +32,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lpecom.gemglasses.wakeword.WakeWordModelState
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
@@ -57,13 +65,47 @@ fun SettingsScreen(
         }
 
         Setting(title = "Assistant Voice") {
-            VOICES.forEach { voice ->
-                FilterChip(
-                    selected = prefs.voiceName == voice,
-                    onClick = { viewModel.setVoice(voice) },
-                    label = { Text(voice) },
+            var voiceMenuOpen by remember { mutableStateOf(false) }
+
+            ExposedDropdownMenuBox(
+                expanded = voiceMenuOpen,
+                onExpandedChange = { voiceMenuOpen = it },
+            ) {
+                OutlinedTextField(
+                    value = prefs.voiceName,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Voice") },
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(
+                            expanded = voiceMenuOpen,
+                        )
+                    },
+                    modifier = Modifier
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        .fillMaxWidth(),
                 )
+                ExposedDropdownMenu(
+                    expanded = voiceMenuOpen,
+                    onDismissRequest = { voiceMenuOpen = false },
+                ) {
+                    VOICES.forEach { voice ->
+                        DropdownMenuItem(
+                            text = { Text(voice) },
+                            onClick = {
+                                viewModel.setVoice(voice)
+                                voiceMenuOpen = false
+                            },
+                        )
+                    }
+                }
             }
+            Text(
+                "Voice names are just identifiers — every voice speaks " +
+                    "any language.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         Setting(title = "Voice wake-up") {
