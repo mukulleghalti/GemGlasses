@@ -57,6 +57,7 @@ data class AgentPreferences(
     val cameraFrameRate: Int,
     val wakeWordEnabled: Boolean,
     val wakePhrase: String,
+    val stopPhrase: String,
 ) {
     /** Built here so the persona text stays in one place. */
     val systemInstruction: String
@@ -71,10 +72,19 @@ data class AgentPreferences(
             cameraFrameRate = 24,
             wakeWordEnabled = false,
             wakePhrase = DEFAULT_WAKE_PHRASE,
+            stopPhrase = DEFAULT_STOP_PHRASE,
         )
 
         /** Default wake phrase ("Hey Glasses"). Lowercase: Vosk decodes lowercase. */
         const val DEFAULT_WAKE_PHRASE = "hey glasses"
+
+        /**
+         * Default stop phrase ("Goodbye Glasses"). Saying it while the
+         * assistant is running ends the session. Matched against Gemini's
+         * transcript, so unlike the wake phrase it is not limited to the
+         * Vosk vocabulary.
+         */
+        const val DEFAULT_STOP_PHRASE = "goodbye glasses"
 
         val DEFAULT_SYSTEM_INSTRUCTION = """
             You are a personal voice assistant that speaks through the user's glasses.
@@ -119,6 +129,9 @@ class SettingsRepository @Inject constructor(
     private val wakePhraseKey =
         stringPreferencesKey("wake_phrase")
 
+    private val stopPhraseKey =
+        stringPreferencesKey("stop_phrase")
+
     val preferences: Flow<AgentPreferences> =
         context.dataStore.data.map { prefs ->
 
@@ -147,6 +160,10 @@ class SettingsRepository @Inject constructor(
                 wakePhrase =
                     prefs[wakePhraseKey]
                         ?: AgentPreferences.DEFAULT.wakePhrase,
+
+                stopPhrase =
+                    prefs[stopPhraseKey]
+                        ?: AgentPreferences.DEFAULT.stopPhrase,
             )
         }
 
@@ -196,6 +213,14 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[wakePhraseKey] = phrase
+        }
+    }
+
+    suspend fun setStopPhrase(
+        phrase: String,
+    ) {
+        context.dataStore.edit {
+            it[stopPhraseKey] = phrase
         }
     }
 }

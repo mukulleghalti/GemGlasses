@@ -13,6 +13,7 @@ import com.lpecom.gemglasses.gemini.SessionKeeper
 import com.lpecom.gemglasses.gemini.ToolRegistry
 import com.lpecom.gemglasses.glasses.GlassesCameraSource
 import com.lpecom.gemglasses.glasses.GlassesManager
+import com.lpecom.gemglasses.settings.AgentPreferences
 import com.lpecom.gemglasses.settings.SettingsRepository
 import com.lpecom.gemglasses.state.ConversationStore
 import com.lpecom.gemglasses.state.TranscriptEntry
@@ -59,6 +60,14 @@ class AgentController @Inject constructor(
     private val _status = MutableStateFlow(AgentStatus.IDLE)
     val status: StateFlow<AgentStatus> = _status
 
+    /**
+     * Phrase that ends the session when heard in the user's transcript.
+     * Refreshed from settings every time the assistant starts.
+     */
+    @Volatile
+    private var stopPhrase: String =
+        AgentPreferences.DEFAULT_STOP_PHRASE
+
     val running: Boolean
         get() = eventJob?.isActive == true
 
@@ -89,6 +98,8 @@ class AgentController @Inject constructor(
 
         scope.launch {
             val prefs = settings.snapshot()
+
+            stopPhrase = prefs.stopPhrase
 
             sessionKeeper.start(
                 scope,
@@ -172,6 +183,17 @@ class AgentController @Inject constructor(
                             TranscriptEntry.Speaker.ASSISTANT
                         },
                     )
+
+                    if (
+                        event.fromUser &&
+                        containsStopPhrase(event.text, stopPhrase)
+                    ) {
+                        Log.i(
+                            TAG,
+                            "Stop phrase heard — ending session",
+                        )
+                        stop()
+                    }
                 }
 
                 is SessionEvent.ToolInvocation -> {
@@ -200,6 +222,29 @@ class AgentController @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * True when the user's transcript contains the stop phrase as whole
+     * words (case-insensitive): "goodbye glasses" matches "okay, goodbye
+     * glasses, thanks" but not "goodbye glassen".
+     */
+    private fun containsStopPhrase(
+        text: String,
+        phrase: String,
+    ): Boolean {
+        val trimmed =
+            phrase.trim().lowercase()
+
+        if (trimmed.isEmpty()) {
+            return false
+        }
+
+        return Regex(
+            "\\b${Regex.escape(trimmed)}\\b",
+        ).containsMatchIn(
+            text.lowercase(),
+        )
     }
 
     private fun dispatchTools(

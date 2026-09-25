@@ -123,6 +123,23 @@ fun SettingsScreen(
             )
         }
 
+        Setting(title = "Stop phrase") {
+            Text(
+                "Saying this while the assistant is listening ends the " +
+                    "session.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            STOP_PHRASES.forEach { (phrase, label) ->
+                FilterChip(
+                    selected = prefs.stopPhrase == phrase,
+                    onClick = { viewModel.setStopPhrase(phrase) },
+                    label = { Text(label) },
+                )
+            }
+        }
+
         Text(
             "Privacy: transcripts stay on this device and are never synced. " +
                 "The API key lives only on the backend; the app uses ephemeral tokens.",
@@ -158,4 +175,12 @@ private val WAKE_PHRASES = listOf(
     "hey glasses" to "Hey Glasses",
     "okay glasses" to "Okay Glasses",
     "hello glasses" to "Hello Glasses",
+)
+
+// Stop phrases the user can pick from. These are matched against Gemini's
+// transcript (not Vosk), so any wording works.
+private val STOP_PHRASES = listOf(
+    "goodbye glasses" to "Goodbye Glasses",
+    "bye glasses" to "Bye Glasses",
+    "that's all" to "That's All",
 )

@@ -157,6 +157,16 @@ class AgentViewModel @Inject constructor(
     }
 
     /**
+     * Changes the stop phrase (e.g. "goodbye glasses"). Saying it while
+     * the assistant is running ends the session.
+     */
+    fun setStopPhrase(phrase: String) {
+        viewModelScope.launch {
+            settings.setStopPhrase(phrase)
+        }
+    }
+
+    /**
      * Converts a Flow into a StateFlow with a default value.
      */
     private fun <T> Flow<T>.stateInDefault(
