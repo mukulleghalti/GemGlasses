@@ -166,8 +166,40 @@ private val LANGUAGES = listOf(
     "es-ES" to "Spanish",
 )
 
-// Prebuilt Gemini Live voices (subset).
-private val VOICES = listOf("Puck", "Charon", "Kore", "Fenrir", "Aoede")
+// Prebuilt Gemini Live voices (full set of 30). A wrong name makes the
+// server close the session, so these must match the API exactly.
+private val VOICES = listOf(
+    "Zephyr",
+    "Puck",
+    "Charon",
+    "Kore",
+    "Fenrir",
+    "Leda",
+    "Orus",
+    "Aoede",
+    "Callirrhoe",
+    "Autonoe",
+    "Enceladus",
+    "Iapetus",
+    "Umbriel",
+    "Algieba",
+    "Despina",
+    "Erinome",
+    "Algenib",
+    "Rasalgethi",
+    "Laomedeia",
+    "Achernar",
+    "Alnilam",
+    "Schedar",
+    "Gacrux",
+    "Pulcherrima",
+    "Achird",
+    "Zubenelgenubi",
+    "Vindemiatrix",
+    "Sadachbia",
+    "Sadaltager",
+    "Sulafat",
+)
 
 // Wake phrases the user can pick from. Every word must be in the Vosk model
 // vocabulary — these all are.
