@@ -39,13 +39,13 @@
         tools:targetApi="s" />
 
     <application
-        android:name=".GemGlassesApp"
+        android:name=".VeyraApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.GemGlasses"
+        android:theme="@style/Theme.Veyra"
         tools:targetApi="35">
 
         <!-- Meta Wearables DAT SDK credentials (populated from build.gradle placeholders) -->
@@ -71,7 +71,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.GemGlasses">
+            android:theme="@style/Theme.Veyra">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

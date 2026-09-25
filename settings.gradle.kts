@@ -14,5 +14,5 @@ dependencyResolutionManagement {
             }
 }
 
-rootProject.name = "GemGlasses"
+rootProject.name = "Veyra"
 include(":app")

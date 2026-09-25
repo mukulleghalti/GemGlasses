@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">GemGlasses</string>
+    <string name="app_name">Veyra</string>
         <string name="notification_channel">Assistant Session</string>
-            <string name="notification_title">GemGlasses Active</string>
+            <string name="notification_title">Veyra Active</string>
                 <string name="notification_text">Gemini Assistant listening through glasses</string>
         <string name="wakeword_channel">Voice Wake-Up</string>
             <string name="wakeword_title">Listening for wake word</string>

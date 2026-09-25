@@ -2,7 +2,7 @@
 <resources>
     <!-- Base theme; the app draws with Material 3 Compose, so this only needs
          to hand off cleanly at launch (edge-to-edge, no action bar). -->
-    <style name="Theme.GemGlasses" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.Veyra" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>

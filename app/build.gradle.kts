@@ -18,11 +18,11 @@ fun secret(key: String, default: String = ""): String =
     localProps.getProperty(key) ?: System.getenv(key) ?: default
 
 android {
-    namespace = "com.lpecom.gemglasses"
+    namespace = "com.geno.veyra"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.lpecom.gemglasses"
+        applicationId = "com.geno.veyra"
         minSdk = 29
         targetSdk = 35
         versionCode = 1

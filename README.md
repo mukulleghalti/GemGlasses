@@ -1,4 +1,4 @@
-<h1 align="center">GemGlasses</h1>
+<h1 align="center">Veyra</h1>
 
 <p align="center">
   <strong>Gemini as the assistant on your Meta Ray-Ban glasses.</strong><br>
@@ -26,13 +26,13 @@ garden. Meanwhile, the Gemini Live API can do speech-to-speech, voice-activity
 detection, barge-in, tool calling and visual grounding over a **single
 WebSocket**.
 
-So the whole bet of GemGlasses is: treat the glasses as a dumb I/O peripheral,
+So the whole bet of Veyra is: treat the glasses as a dumb I/O peripheral,
 put *all* the logic on the phone, and let one Gemini Live connection be the
 brain. No wake-word engine, no Whisper, no ElevenLabs, no on-device model.
 Just the glasses, your phone, and Gemini.
 
 > **Note:** this runs *alongside* the native "Hey Meta" assistant — Meta's
-> toolkit doesn't let you replace it. GemGlasses is a parallel assistant you
+> toolkit doesn't let you replace it. Veyra is a parallel assistant you
 > activate yourself from the app.
 
 ## What it does
@@ -123,14 +123,14 @@ cp local.properties.example local.properties   # set sdk.dir
    `read:packages` as `github_token` in `local.properties` (this unlocks the DAT
    SDK from GitHub Packages), then build with the real backend enabled:
    ```bash
-   ./gradlew installDebug -Pgemglasses.useRealGlasses=true
+   ./gradlew installDebug -Pveyra.useRealGlasses=true
    ```
 3. **Developer Mode** — in the Meta AI app: *Settings → App Info → tap the
    version 5×* to enable it, then pair your glasses.
-4. Build and install onto your phone (`-Pgemglasses.useRealGlasses=true` links
+4. Build and install onto your phone (`-Pveyra.useRealGlasses=true` links
    the DAT SDK):
    ```bash
-   ./gradlew installDebug -Pgemglasses.useRealGlasses=true
+   ./gradlew installDebug -Pveyra.useRealGlasses=true
    ```
 
 `local.properties.example` documents every field.
