@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +21,8 @@ import kotlin.concurrent.thread
 /**
  * Captures microphone audio as PCM 16-bit / 16 kHz / mono and emits it in
  * ~20 ms chunks. Capture uses [MediaRecorder.AudioSource.VOICE_COMMUNICATION]
- * so the platform applies echo cancellation against the assistant's playback.
+ * and explicitly attaches an [AcousticEchoCanceler] so the assistant's
+ * playback through the glasses does not get transcribed as user speech.
  */
 @Singleton
 class MicStreamer @Inject constructor() {
@@ -47,6 +49,33 @@ class MicStreamer @Inject constructor() {
         )
         check(record.state == AudioRecord.STATE_INITIALIZED) { "AudioRecord init failed" }
 
+        /*
+         * Belt and suspenders on top of the VOICE_COMMUNICATION source:
+         * explicitly attach the platform echo canceller to our capture
+         * session. If create() returns null, the device offers no AEC on
+         * this path — that alone tells us the echo can't be fixed in
+         * software here, so it is logged, not silently ignored.
+         */
+        val echoCanceler =
+            runCatching {
+                AcousticEchoCanceler.create(record.audioSessionId)
+            }.getOrNull()
+
+        if (echoCanceler != null) {
+            runCatching { echoCanceler.enabled = true }
+            Log.i(
+                TAG,
+                "AcousticEchoCanceler attached, " +
+                    "enabled=${echoCanceler.enabled}",
+            )
+        } else {
+            Log.w(
+                TAG,
+                "AcousticEchoCanceler unavailable — " +
+                    "no platform AEC on this capture path",
+            )
+        }
+
         val running = AtomicBoolean(true)
         record.startRecording()
 
@@ -64,6 +93,7 @@ class MicStreamer @Inject constructor() {
             running.set(false)
             worker.join(500)
             runCatching { record.stop() }
+            runCatching { echoCanceler?.release() }
             record.release()
             Log.i(TAG, "mic stream stopped")
         }

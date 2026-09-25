@@ -98,14 +98,6 @@ class AgentController @Inject constructor(
         _status.value = AgentStatus.CONNECTING
         visionBridge.delegate = this
 
-        /*
-         * Temporarily disabled for the camera/HFP/SCO A/B test.
-         *
-         * Bluetooth can remain connected to the glasses without explicitly
-         * forcing Android's communication device onto Bluetooth SCO/HFP.
-         */
-//        router.routeToGlasses()
-
         eventJob = scope.launch {
             val prefs = settings.snapshot()
 
@@ -120,6 +112,19 @@ class AgentController @Inject constructor(
             val preferPhone = prefs.audioOutput == AudioOutput.PHONE
             if (preferPhone) {
                 router.routeToPhoneSpeaker()
+            } else if (prefs.playbackQuality == PlaybackQuality.CALL) {
+                /*
+                 * Claim the voice path explicitly instead of squatting on
+                 * whatever SCO link happens to be up (e.g. held open by
+                 * the Meta AI app). Selecting the glasses as the
+                 * communication device gives deterministic routing and,
+                 * crucially, puts the platform's echo cancellation into
+                 * our mic chain so the assistant stops hearing itself.
+                 *
+                 * MEDIA quality intentionally skips this: bringing SCO up
+                 * suspends A2DP, which is the whole point of Media mode.
+                 */
+                router.routeToGlasses()
             }
 
             /*

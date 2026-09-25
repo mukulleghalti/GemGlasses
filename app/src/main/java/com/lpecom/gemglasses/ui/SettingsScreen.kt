@@ -67,18 +67,6 @@ fun SettingsScreen(
     ) {
         Text("Settings", style = MaterialTheme.typography.titleLarge)
 
-        Setting(title = "Response Language") {
-            ChipRow {
-                LANGUAGES.forEach { (code, label) ->
-                    FilterChip(
-                        selected = prefs.languageCode == code,
-                        onClick = { viewModel.setLanguage(code) },
-                        label = { Text(label) },
-                    )
-                }
-            }
-        }
-
         Setting(title = "Assistant Voice") {
             var voiceMenuOpen by remember { mutableStateOf(false) }
 
@@ -380,12 +368,6 @@ private fun ChipRow(content: @Composable () -> Unit) {
         content()
     }
 }
-
-private val LANGUAGES = listOf(
-    "pt-BR" to "Portuguese",
-    "en-US" to "English",
-    "es-ES" to "Spanish",
-)
 
 // Prebuilt Gemini Live voices (full set of 30). A wrong name makes the
 // server close the session, so these must match the API exactly.
