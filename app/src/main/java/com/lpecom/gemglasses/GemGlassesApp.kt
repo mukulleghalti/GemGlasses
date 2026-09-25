@@ -2,14 +2,27 @@ package com.lpecom.gemglasses
 
 import android.app.Application
 import android.util.Log
+import com.lpecom.gemglasses.wakeword.WakeWordCoordinator
 import com.meta.wearable.dat.core.Wearables
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
 @HiltAndroidApp
 class GemGlassesApp : Application() {
 
+    @Inject
+    lateinit var wakeWordCoordinator: WakeWordCoordinator
+
     companion object {
         private const val TAG = "GemGlassesApp"
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+
+        // Starts observing wake-word prefs; the listener service itself only
+        // runs when enabled, glasses are connected, and no session is active.
+        wakeWordCoordinator.start()
     }
 
     @Volatile

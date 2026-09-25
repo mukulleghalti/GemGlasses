@@ -7,6 +7,8 @@ import com.lpecom.gemglasses.glasses.GlassesBackend
 import com.lpecom.gemglasses.glasses.mock.MockGlassesBackend
 import com.lpecom.gemglasses.tools.VisionBridge
 import com.lpecom.gemglasses.tools.VisionController
+import com.lpecom.gemglasses.wakeword.VoskWakeWordEngine
+import com.lpecom.gemglasses.wakeword.WakeWordEngine
 import dagger.Module
 import dagger.Provides
 import dagger.Binds
@@ -63,4 +65,7 @@ object AppModule {
 abstract class BindsModule {
     @Binds
     abstract fun visionController(bridge: VisionBridge): VisionController
+
+    @Binds
+    abstract fun wakeWordEngine(impl: VoskWakeWordEngine): WakeWordEngine
 }

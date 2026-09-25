@@ -4,4 +4,7 @@
         <string name="notification_channel">Assistant Session</string>
             <string name="notification_title">GemGlasses Active</string>
                 <string name="notification_text">Gemini Assistant listening through glasses</string>
+        <string name="wakeword_channel">Voice Wake-Up</string>
+            <string name="wakeword_title">Listening for wake word</string>
+                <string name="wakeword_text">Say \"%1$s\" to start the assistant</string>
                 </resources>

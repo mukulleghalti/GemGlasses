@@ -1,6 +1,7 @@
 package com.lpecom.gemglasses.settings
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -54,6 +55,8 @@ data class AgentPreferences(
     val voiceName: String,
     val cameraResolution: CameraResolution,
     val cameraFrameRate: Int,
+    val wakeWordEnabled: Boolean,
+    val wakePhrase: String,
 ) {
     /** Built here so the persona text stays in one place. */
     val systemInstruction: String
@@ -66,7 +69,12 @@ data class AgentPreferences(
             voiceName = "Puck",
             cameraResolution = CameraResolution.MEDIUM,
             cameraFrameRate = 24,
+            wakeWordEnabled = false,
+            wakePhrase = DEFAULT_WAKE_PHRASE,
         )
+
+        /** Default wake phrase ("Hey Glasses"). Lowercase: Vosk decodes lowercase. */
+        const val DEFAULT_WAKE_PHRASE = "hey glasses"
 
         val DEFAULT_SYSTEM_INSTRUCTION = """
             You are a personal voice assistant that speaks through the user's glasses.
@@ -105,6 +113,12 @@ class SettingsRepository @Inject constructor(
     private val cameraFrameRateKey =
         intPreferencesKey("camera_frame_rate")
 
+    private val wakeWordEnabledKey =
+        booleanPreferencesKey("wake_word_enabled")
+
+    private val wakePhraseKey =
+        stringPreferencesKey("wake_phrase")
+
     val preferences: Flow<AgentPreferences> =
         context.dataStore.data.map { prefs ->
 
@@ -125,6 +139,14 @@ class SettingsRepository @Inject constructor(
                 cameraFrameRate =
                     prefs[cameraFrameRateKey]
                         ?: AgentPreferences.DEFAULT.cameraFrameRate,
+
+                wakeWordEnabled =
+                    prefs[wakeWordEnabledKey]
+                        ?: AgentPreferences.DEFAULT.wakeWordEnabled,
+
+                wakePhrase =
+                    prefs[wakePhraseKey]
+                        ?: AgentPreferences.DEFAULT.wakePhrase,
             )
         }
 
@@ -158,6 +180,22 @@ class SettingsRepository @Inject constructor(
         context.dataStore.edit {
             it[cameraFrameRateKey] =
                 frameRate
+        }
+    }
+
+    suspend fun setWakeWordEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[wakeWordEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setWakePhrase(
+        phrase: String,
+    ) {
+        context.dataStore.edit {
+            it[wakePhraseKey] = phrase
         }
     }
 }

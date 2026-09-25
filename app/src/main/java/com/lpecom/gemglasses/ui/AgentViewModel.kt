@@ -11,11 +11,14 @@ import com.lpecom.gemglasses.glasses.GlassesManager
 import com.lpecom.gemglasses.glasses.RegistrationState
 import com.lpecom.gemglasses.glasses.ConnectionState
 import com.lpecom.gemglasses.service.AgentForegroundService
+import com.lpecom.gemglasses.service.AssistantStarter
 import com.lpecom.gemglasses.settings.AgentPreferences
 import com.lpecom.gemglasses.settings.SettingsRepository
 import com.lpecom.gemglasses.state.CitedPlace
 import com.lpecom.gemglasses.state.ConversationStore
 import com.lpecom.gemglasses.state.TranscriptEntry
+import com.lpecom.gemglasses.wakeword.WakeWordEngine
+import com.lpecom.gemglasses.wakeword.WakeWordModelState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -37,6 +40,8 @@ class AgentViewModel @Inject constructor(
     private val glassesManager: GlassesManager,
     private val conversation: ConversationStore,
     private val settings: SettingsRepository,
+    private val assistantStarter: AssistantStarter,
+    private val wakeWordEngine: WakeWordEngine,
 ) : AndroidViewModel(application) {
 
     val status: StateFlow<AgentStatus> =
@@ -66,18 +71,17 @@ class AgentViewModel @Inject constructor(
         settings.preferences
             .stateInDefault(AgentPreferences.DEFAULT)
 
+    val wakeWordModelState: StateFlow<WakeWordModelState> =
+        wakeWordEngine.modelState
+
     /**
      * Starts the assistant.
      *
      * Caller must have RECORD_AUDIO permission.
      */
     fun startSession() {
-        val app = getApplication<Application>()
-
-        conversation.clear()
-
-        AgentForegroundService.start(app)
-        controller.start()
+        // Same path the wake-word service uses; keep both identical.
+        assistantStarter.start()
     }
 
     /**
@@ -131,6 +135,24 @@ class AgentViewModel @Inject constructor(
     fun setVoice(voice: String) {
         viewModelScope.launch {
             settings.setVoice(voice)
+        }
+    }
+
+    /**
+     * Toggles always-on wake-word listening ("Hey Glasses").
+     */
+    fun setWakeWordEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setWakeWordEnabled(enabled)
+        }
+    }
+
+    /**
+     * Changes the wake phrase (e.g. "hey glasses").
+     */
+    fun setWakePhrase(phrase: String) {
+        viewModelScope.launch {
+            settings.setWakePhrase(phrase)
         }
     }
 

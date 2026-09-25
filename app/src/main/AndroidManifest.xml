@@ -62,6 +62,12 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice|microphone" />
 
+        <!-- WakeWordService: always-on "Hey Glasses" listener -->
+        <service
+            android:name=".wakeword.WakeWordService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

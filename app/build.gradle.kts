@@ -108,6 +108,12 @@ dependencies {
     implementation(libs.mwdat.camera)
     implementation(libs.mwdat.display)
     implementation(libs.mwdat.mockdevice)
+
+    // Vosk on-device wake-word engine. The AAR bundles its native ABIs, so no
+    // NDK config is needed. The acoustic model (~40 MB) is downloaded at
+    // runtime on first use, never committed to git.
+    implementation("com.alphacephei:vosk-android:0.3.47@aar")
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
