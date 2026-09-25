@@ -12,7 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Translate
@@ -37,13 +37,12 @@ import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.geno.veyra.glasses.CameraPermission
 import com.geno.veyra.glasses.GlassesManager
+import com.geno.veyra.ui.AssistantScreen
 import com.geno.veyra.ui.CameraSettingsScreen
 import com.geno.veyra.ui.CameraTestScreen
-import com.geno.veyra.ui.ConversationHistoryScreen
 import com.geno.veyra.ui.HomeScreen
 import com.geno.veyra.ui.SettingsScreen
 import com.geno.veyra.ui.TranslateScreen
-import com.geno.veyra.ui.TranscriptScreen
 import com.geno.veyra.ui.theme.VeyraTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.coroutines.resume
@@ -350,8 +349,8 @@ private fun VeyraRoot() {
 
             BottomNavItem(
                 "transcript",
-                "Transcript",
-                Icons.AutoMirrored.Filled.List
+                "Assistant",
+                Icons.AutoMirrored.Filled.Chat
             ),
 
             BottomNavItem(
@@ -497,7 +496,7 @@ private fun VeyraRoot() {
 
             composable("transcript") {
 
-                TranscriptScreen(
+                AssistantScreen(
                     modifier = Modifier
                 )
             }
@@ -513,18 +512,6 @@ private fun VeyraRoot() {
 
                 SettingsScreen(
                     modifier = Modifier,
-                    onHistoryClick = {
-                        navController.navigate("conversation_history")
-                    },
-                )
-            }
-
-            composable("conversation_history") {
-
-                ConversationHistoryScreen(
-                    onBack = {
-                        navController.popBackStack()
-                    },
                 )
             }
         }

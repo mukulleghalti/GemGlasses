@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -54,6 +55,7 @@ private fun speakerLabel(speaker: String): String =
 @Composable
 fun ConversationHistoryScreen(
     onBack: () -> Unit,
+    compact: Boolean = false,
     viewModel: ConversationHistoryViewModel = hiltViewModel(),
 ) {
     val sessions by viewModel.sessions.collectAsStateWithLifecycle()
@@ -63,12 +65,8 @@ fun ConversationHistoryScreen(
 
     var showClearAllConfirm by remember { mutableStateOf(false) }
 
-    BackHandler {
-        if (selected != null) {
-            viewModel.closeSession()
-        } else {
-            onBack()
-        }
+    BackHandler(enabled = selected != null) {
+        viewModel.closeSession()
     }
 
     if (showClearAllConfirm) {
@@ -104,7 +102,13 @@ fun ConversationHistoryScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(
+                if (compact) {
+                    PaddingValues(vertical = 8.dp)
+                } else {
+                    PaddingValues(16.dp)
+                },
+            ),
     ) {
         if (selected != null) {
             SessionDetail(
@@ -116,16 +120,39 @@ fun ConversationHistoryScreen(
             return@Column
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        if (!compact) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Conversation history",
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                if (sessions.isNotEmpty()) {
+                    TextButton(
+                        onClick = { showClearAllConfirm = true },
+                    ) {
+                        Text("Clear all")
+                    }
+                }
+            }
+
             Text(
-                "Conversation history",
-                style = MaterialTheme.typography.titleLarge,
+                "Past assistant sessions, stored only on this device. " +
+                    "Tap one to read it, or search across all of them.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp),
             )
-            if (sessions.isNotEmpty()) {
+        }
+
+        if (compact && sessions.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
                 TextButton(
                     onClick = { showClearAllConfirm = true },
                 ) {
@@ -133,14 +160,6 @@ fun ConversationHistoryScreen(
                 }
             }
         }
-
-        Text(
-            "Past assistant sessions, stored only on this device. " +
-                "Tap one to read it, or search across all of them.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(vertical = 8.dp),
-        )
 
         OutlinedTextField(
             value = query,

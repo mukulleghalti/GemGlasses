@@ -54,7 +54,6 @@ import com.geno.veyra.wakeword.WakeWordModelState
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
-    onHistoryClick: () -> Unit = {},
     viewModel: AgentViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -434,21 +433,6 @@ fun SettingsScreen(
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
-        }
-
-        Setting(title = "Conversation history") {
-            Text(
-                "Past assistant sessions are archived on this device. " +
-                    "Browse, search, or delete them.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(
-                onClick = onHistoryClick,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Open conversation history")
-            }
         }
 
         Setting(title = "Memories") {
