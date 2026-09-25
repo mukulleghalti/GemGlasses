@@ -45,6 +45,17 @@ class SpeakerSink @Inject constructor() {
     @Volatile
     private var bytesWritten: Long = 0L
 
+    /**
+     * Diagnostic: time between consecutive audio chunks arriving from the
+     * network. Gaps far larger than the jitter buffer explain underruns;
+     * steady arrivals with choppy sound point at the source or Bluetooth.
+     */
+    @Volatile
+    private var lastEnqueueNanos: Long = 0L
+
+    @Volatile
+    private var maxGapMs: Long = 0L
+
     private val minBuffer = AudioTrack.getMinBufferSize(
         AudioSpec.OUTPUT_SAMPLE_RATE,
         AudioFormat.CHANNEL_OUT_MONO,
@@ -88,6 +99,8 @@ class SpeakerSink @Inject constructor() {
         // leak into this one (including the writer thread's STOP sentinel).
         queue.clear()
         gatheringPreRoll = true
+        lastEnqueueNanos = 0L
+        maxGapMs = 0L
         startWriter()
         Log.i(
             TAG,
@@ -104,6 +117,21 @@ class SpeakerSink @Inject constructor() {
      */
     fun write(pcm: ByteArray) {
         if (track == null) return
+        val now = System.nanoTime()
+        val last = lastEnqueueNanos
+        lastEnqueueNanos = now
+        if (last != 0L) {
+            val gapMs = (now - last) / 1_000_000
+            if (gapMs > maxGapMs) maxGapMs = gapMs
+            if (gapMs > GAP_LOG_THRESHOLD_MS) {
+                Log.i(
+                    TAG,
+                    "audio chunk gap ${gapMs}ms " +
+                        "(chunkBytes=${pcm.size}, " +
+                        "queueDepth=${queue.size})"
+                )
+            }
+        }
         bytesEnqueued += pcm.size
         queue.offer(pcm)
     }
@@ -130,7 +158,8 @@ class SpeakerSink @Inject constructor() {
                 "speaker closed " +
                     "(bytesEnqueued=$bytesEnqueued, " +
                     "bytesWritten=$bytesWritten, " +
-                    "underruns=${it.underrunCount})"
+                    "underruns=${it.underrunCount}, " +
+                    "maxChunkGapMs=$maxGapMs)"
             )
             runCatching { it.pause(); it.flush(); it.stop() }
             it.release()
@@ -177,6 +206,9 @@ class SpeakerSink @Inject constructor() {
 
     private companion object {
         const val TAG = "SpeakerSink"
+
+        /** Only gaps worth investigating get their own log line. */
+        const val GAP_LOG_THRESHOLD_MS = 500L
 
         /** Sentinel telling the writer thread to exit. */
         val STOP = Any()
