@@ -42,11 +42,17 @@ class AgentForegroundService : Service() {
     private fun startForegroundSession() {
         ensureChannel()
         val notification = buildNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // The wake word can trigger a session while the app is backgrounded,
+        // and Android 14+ forbids starting a *microphone*-type foreground
+        // service from the background (SecurityException). connectedDevice is
+        // not a foreground-only type, so it works from either state — and it
+        // describes this service's real job: keeping the session alive with
+        // the connected glasses. (Both types are declared in the manifest.)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
             )
         } else {
             startForeground(NOTIFICATION_ID, notification)

@@ -63,7 +63,17 @@ class WakeWordService : Service() {
         startForeground(
             NOTIFICATION_ID,
             buildNotification(phrase),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+            // connectedDevice, not microphone: the coordinator restarts this
+            // service fresh after a session ends, which can happen while the
+            // app is backgrounded — and Android 14+ throws SecurityException
+            // when a *microphone*-type FGS is started from the background.
+            // connectedDevice isn't a foreground-only type, and it describes
+            // the work honestly (listening on the glasses' microphone).
+            // (Both types stay declared in the manifest.)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            else
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
         )
 
         // Restart the engine only when the phrase actually changed; repeat
