@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.DropdownMenu
@@ -59,18 +61,21 @@ fun SettingsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         Text("Settings", style = MaterialTheme.typography.titleLarge)
 
         Setting(title = "Response Language") {
-            LANGUAGES.forEach { (code, label) ->
-                FilterChip(
-                    selected = prefs.languageCode == code,
-                    onClick = { viewModel.setLanguage(code) },
-                    label = { Text(label) },
-                )
+            ChipRow {
+                LANGUAGES.forEach { (code, label) ->
+                    FilterChip(
+                        selected = prefs.languageCode == code,
+                        onClick = { viewModel.setLanguage(code) },
+                        label = { Text(label) },
+                    )
+                }
             }
         }
 
@@ -141,12 +146,14 @@ fun SettingsScreen(
         }
 
         Setting(title = "Assistant audio output") {
-            AudioOutput.entries.forEach { output ->
-                FilterChip(
-                    selected = prefs.audioOutput == output,
-                    onClick = { viewModel.setAudioOutput(output) },
-                    label = { Text(output.label) },
-                )
+            ChipRow {
+                AudioOutput.entries.forEach { output ->
+                    FilterChip(
+                        selected = prefs.audioOutput == output,
+                        onClick = { viewModel.setAudioOutput(output) },
+                        label = { Text(output.label) },
+                    )
+                }
             }
             Text(
                 "Diagnostic: play the assistant through the phone speaker " +
@@ -158,17 +165,42 @@ fun SettingsScreen(
         }
 
         Setting(title = "Playback quality") {
-            PlaybackQuality.entries.forEach { quality ->
-                FilterChip(
-                    selected = prefs.playbackQuality == quality,
-                    onClick = { viewModel.setPlaybackQuality(quality) },
-                    label = { Text(quality.label) },
-                )
+            ChipRow {
+                PlaybackQuality.entries.forEach { quality ->
+                    FilterChip(
+                        selected = prefs.playbackQuality == quality,
+                        onClick = { viewModel.setPlaybackQuality(quality) },
+                        label = { Text(quality.label) },
+                    )
+                }
             }
             Text(
                 "Call uses the voice-call Bluetooth channel; Media uses " +
                     "the high-quality music channel. Applies to the next " +
                     "session.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Setting(title = "Barge-in") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Talking over the assistant cuts it off",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Switch(
+                    checked = prefs.bargeInEnabled,
+                    onCheckedChange = { viewModel.setBargeInEnabled(it) },
+                )
+            }
+            Text(
+                "Diagnostic: turn off to check whether false interruptions " +
+                    "are what make the audio sound choppy.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -200,12 +232,14 @@ fun SettingsScreen(
                 )
             }
 
-            WAKE_PHRASES.forEach { (phrase, label) ->
-                FilterChip(
-                    selected = prefs.wakePhrase == phrase,
-                    onClick = { viewModel.setWakePhrase(phrase) },
-                    label = { Text(label) },
-                )
+            ChipRow {
+                WAKE_PHRASES.forEach { (phrase, label) ->
+                    FilterChip(
+                        selected = prefs.wakePhrase == phrase,
+                        onClick = { viewModel.setWakePhrase(phrase) },
+                        label = { Text(label) },
+                    )
+                }
             }
 
             var wakeInput by remember(prefs.wakePhrase) {
@@ -279,12 +313,14 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            STOP_PHRASES.forEach { (phrase, label) ->
-                FilterChip(
-                    selected = prefs.stopPhrase == phrase,
-                    onClick = { viewModel.setStopPhrase(phrase) },
-                    label = { Text(label) },
-                )
+            ChipRow {
+                STOP_PHRASES.forEach { (phrase, label) ->
+                    FilterChip(
+                        selected = prefs.stopPhrase == phrase,
+                        onClick = { viewModel.setStopPhrase(phrase) },
+                        label = { Text(label) },
+                    )
+                }
             }
 
             var stopInput by remember(prefs.stopPhrase) {
@@ -325,14 +361,23 @@ fun SettingsScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Setting(title: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, style = MaterialTheme.typography.titleMedium)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            content()
-        }
+        content()
+    }
+}
+
+/**
+ * Wraps selectable chips. Kept separate because full-width children
+ * (text fields, rows) misbehave as direct children of a [FlowRow].
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChipRow(content: @Composable () -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        content()
     }
 }
 

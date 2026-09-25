@@ -113,6 +113,7 @@ data class AgentPreferences(
     val stopPhrase: String,
     val audioOutput: AudioOutput,
     val playbackQuality: PlaybackQuality,
+    val bargeInEnabled: Boolean,
 ) {
     /** Built here so the persona text stays in one place. */
     val systemInstruction: String
@@ -130,6 +131,7 @@ data class AgentPreferences(
             stopPhrase = DEFAULT_STOP_PHRASE,
             audioOutput = AudioOutput.GLASSES,
             playbackQuality = PlaybackQuality.CALL,
+            bargeInEnabled = true,
         )
 
         /** Default wake phrase ("Hey Glasses"). Lowercase: Vosk decodes lowercase. */
@@ -195,6 +197,9 @@ class SettingsRepository @Inject constructor(
     private val playbackQualityKey =
         stringPreferencesKey("playback_quality")
 
+    private val bargeInEnabledKey =
+        booleanPreferencesKey("barge_in_enabled")
+
     val preferences: Flow<AgentPreferences> =
         context.dataStore.data.map { prefs ->
 
@@ -237,6 +242,10 @@ class SettingsRepository @Inject constructor(
                     PlaybackQuality.fromStorageValue(
                         prefs[playbackQualityKey]
                     ),
+
+                bargeInEnabled =
+                    prefs[bargeInEnabledKey]
+                        ?: AgentPreferences.DEFAULT.bargeInEnabled,
             )
         }
 
@@ -310,6 +319,14 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[playbackQualityKey] = quality.storageValue
+        }
+    }
+
+    suspend fun setBargeInEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[bargeInEnabledKey] = enabled
         }
     }
 }

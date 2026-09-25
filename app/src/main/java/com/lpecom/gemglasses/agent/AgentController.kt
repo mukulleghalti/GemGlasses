@@ -72,6 +72,14 @@ class AgentController @Inject constructor(
         AgentPreferences.DEFAULT_STOP_PHRASE
 
     /**
+     * Whether talking over the assistant cuts it off. Refreshed from
+     * settings every time the assistant starts. Disable to test whether
+     * false interruption events are what make the audio sound choppy.
+     */
+    @Volatile
+    private var bargeInEnabled: Boolean = true
+
+    /**
      * First user message to send once the session is ready (the wake
      * phrase on the wake-word path). Cleared after it's sent.
      */
@@ -102,6 +110,7 @@ class AgentController @Inject constructor(
             val prefs = settings.snapshot()
 
             stopPhrase = prefs.stopPhrase
+            bargeInEnabled = prefs.bargeInEnabled
 
             /*
              * Diagnostic routing: "Phone speaker" forces the assistant's
@@ -230,7 +239,14 @@ class AgentController @Inject constructor(
                 }
 
                 is SessionEvent.Interrupted -> {
-                    speaker.flush()
+                    if (bargeInEnabled) {
+                        speaker.flush()
+                    } else {
+                        Log.i(
+                            TAG,
+                            "Interruption ignored (barge-in disabled)",
+                        )
+                    }
                 }
 
                 is SessionEvent.Transcript -> {

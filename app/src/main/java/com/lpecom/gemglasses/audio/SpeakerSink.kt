@@ -26,6 +26,8 @@ class SpeakerSink @Inject constructor() {
 
     private var track: AudioTrack? = null
 
+    private var bytesWritten: Long = 0L
+
     private val minBuffer = AudioTrack.getMinBufferSize(
         AudioSpec.OUTPUT_SAMPLE_RATE,
         AudioFormat.CHANNEL_OUT_MONO,
@@ -71,11 +73,13 @@ class SpeakerSink @Inject constructor() {
     fun write(pcm: ByteArray) {
         val t = track ?: return
         t.write(pcm, 0, pcm.size, AudioTrack.WRITE_BLOCKING)
+        bytesWritten += pcm.size
     }
 
     /** Barge-in: drop everything queued so the assistant goes silent at once. */
     fun flush() {
         val t = track ?: return
+        Log.i(TAG, "flush (underruns so far: ${t.underrunCount})")
         t.pause()
         t.flush()
         t.play()
@@ -83,10 +87,17 @@ class SpeakerSink @Inject constructor() {
 
     fun close() {
         track?.let {
+            Log.i(
+                TAG,
+                "speaker closed " +
+                    "(bytesWritten=$bytesWritten, " +
+                    "underruns=${it.underrunCount})"
+            )
             runCatching { it.pause(); it.flush(); it.stop() }
             it.release()
         }
         track = null
+        bytesWritten = 0L
     }
 
     private companion object {

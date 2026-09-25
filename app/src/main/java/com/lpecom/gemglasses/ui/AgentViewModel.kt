@@ -189,6 +189,15 @@ class AgentViewModel @Inject constructor(
     }
 
     /**
+     * Toggles barge-in: whether talking over the assistant cuts it off.
+     */
+    fun setBargeInEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setBargeInEnabled(enabled)
+        }
+    }
+
+    /**
      * Converts a Flow into a StateFlow with a default value.
      */
     private fun <T> Flow<T>.stateInDefault(
