@@ -2,27 +2,34 @@ package com.lpecom.gemglasses.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenu
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -32,7 +39,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lpecom.gemglasses.wakeword.WakeWordModelState
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
@@ -67,27 +73,26 @@ fun SettingsScreen(
         Setting(title = "Assistant Voice") {
             var voiceMenuOpen by remember { mutableStateOf(false) }
 
-            ExposedDropdownMenuBox(
-                expanded = voiceMenuOpen,
-                onExpandedChange = { voiceMenuOpen = it },
-            ) {
+            Box {
                 OutlinedTextField(
                     value = prefs.voiceName,
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Voice") },
                     trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(
-                            expanded = voiceMenuOpen,
+                        Icon(
+                            imageVector =
+                                if (voiceMenuOpen) Icons.Filled.ArrowDropUp
+                                else Icons.Filled.ArrowDropDown,
+                            contentDescription = null,
                         )
                     },
-                    modifier = Modifier
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                        .fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(),
                 )
-                ExposedDropdownMenu(
+                DropdownMenu(
                     expanded = voiceMenuOpen,
                     onDismissRequest = { voiceMenuOpen = false },
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     VOICES.forEach { voice ->
                         DropdownMenuItem(
@@ -99,6 +104,13 @@ fun SettingsScreen(
                         )
                     }
                 }
+                // A read-only field doesn't emit clicks itself; this overlay
+                // turns the whole row into the menu toggle.
+                Spacer(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { voiceMenuOpen = true },
+                )
             }
             Text(
                 "Voice names are just identifiers — every voice speaks " +
