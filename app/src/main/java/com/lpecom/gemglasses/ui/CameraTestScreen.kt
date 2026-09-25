@@ -1,9 +1,5 @@
 package com.lpecom.gemglasses.ui
 
-import android.graphics.Bitmap
-import android.media.MediaCodec
-import android.media.MediaFormat
-import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.activity.compose.BackHandler
@@ -11,18 +7,19 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -32,48 +29,33 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.ui.unit.dp
 import com.meta.wearable.dat.camera.types.VideoFrame
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/**
+ * Minimal camera test screen: full-bleed preview, a slim status bar on top,
+ * and a single row of controls at the bottom.
+ */
 @Composable
 fun CameraTestScreen(
     onBack: () -> Unit,
     onCameraSettingsClick: () -> Unit,
     viewModel: CameraTestViewModel = hiltViewModel(),
 ) {
-    /*
-     * IMPORTANT:
-     *
-     * Use the actual StateFlow directly.
-     *
-     * Do NOT use the old custom
-     * collectAsStateWithLifecycleCompat() helper.
-     */
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-
     val context = LocalContext.current
-
-    val decoder = remember {
-        H265SurfaceDecoder()
-    }
-
-    var surfaceReady by remember {
-        mutableStateOf(false)
-    }
-
-    /*
-     * ---------------------------------------------------------
-     * BACK
-     * ---------------------------------------------------------
-     */
+    val decoder = remember { H265SurfaceDecoder() }
+    var surfaceReady by remember { mutableStateOf(false) }
 
     BackHandler {
         viewModel.stopPreview()
@@ -82,37 +64,16 @@ fun CameraTestScreen(
     }
 
     /*
-     * ---------------------------------------------------------
-     * VIDEO FRAME PIPELINE
-     * ---------------------------------------------------------
-     *
-     * The camera is NO LONGER started automatically when the
-     * SurfaceView becomes ready.
-     *
-     * The user must press "Start Camera".
-     *
-     * The same VideoFrame stream is used for:
-     *
-     * 1. Live H.265 preview
-     * 2. Video recording
-     *
-     * Recording itself is handled by CameraTestViewModel.
+     * The same VideoFrame stream feeds the live H.265 preview and the
+     * video recording. Recording itself is handled by CameraTestViewModel.
      */
-
     LaunchedEffect(Unit) {
         viewModel.frames.collect { frame ->
-
             withContext(Dispatchers.Default) {
                 decoder.queue(frame)
             }
         }
     }
-
-    /*
-     * ---------------------------------------------------------
-     * CLEANUP
-     * ---------------------------------------------------------
-     */
 
     DisposableEffect(Unit) {
         onDispose {
@@ -121,38 +82,63 @@ fun CameraTestScreen(
         }
     }
 
-    /*
-     * ---------------------------------------------------------
-     * SCREEN
-     * ---------------------------------------------------------
-     */
+    val cameraOn =
+        uiState.streaming || uiState.status == "Starting camera…"
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black),
     ) {
+        // Full-bleed preview.
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = {
+                SurfaceView(context).also { surfaceView ->
+                    surfaceView.holder.addCallback(
+                        object : SurfaceHolder.Callback {
+                            override fun surfaceCreated(holder: SurfaceHolder) {
+                                if (holder.surface.isValid) {
+                                    decoder.setSurface(holder.surface)
+                                    surfaceReady = true
+                                }
+                            }
 
-        /*
-         * -----------------------------------------------------
-         * HEADER
-         * -----------------------------------------------------
-         */
+                            override fun surfaceChanged(
+                                holder: SurfaceHolder,
+                                format: Int,
+                                width: Int,
+                                height: Int,
+                            ) {
+                                if (holder.surface.isValid) {
+                                    decoder.setSurface(holder.surface)
+                                    surfaceReady = true
+                                }
+                            }
 
+                            override fun surfaceDestroyed(holder: SurfaceHolder) {
+                                surfaceReady = false
+                                decoder.clearSurface()
+                            }
+                        },
+                    )
+                }
+            },
+        )
+
+        if (!surfaceReady) {
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+        }
+
+        // Slim top bar: back + status.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    MaterialTheme.colorScheme.surface
-                )
-                .padding(
-                    horizontal = 16.dp,
-                    vertical = 12.dp,
-                ),
+                .background(Color.Black.copy(alpha = 0.55f))
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-
-            Button(
+            TextButton(
                 onClick = {
                     viewModel.stopPreview()
                     decoder.resetDecoder()
@@ -160,505 +146,190 @@ fun CameraTestScreen(
                 },
                 enabled = !uiState.recording,
             ) {
-                Text("Back")
+                Text("Back", color = Color.White)
             }
-
-            Spacer(
-                modifier = Modifier.size(12.dp)
+            Text(
+                text = uiState.status,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (uiState.error == null) {
+                    Color.White.copy(alpha = 0.8f)
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
             )
-
-            Column {
-
-                Text(
-                    text = "Camera Test",
-                    style = MaterialTheme.typography.titleLarge,
-                )
-
-                Text(
-                    text = uiState.status,
-                    style = MaterialTheme.typography.bodySmall,
-                    color =
-                        if (uiState.error == null) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.error
-                        },
-                )
-            }
         }
 
-        /*
-         * -----------------------------------------------------
-         * LIVE PREVIEW
-         * -----------------------------------------------------
-         */
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .background(Color.Black),
-            contentAlignment = Alignment.Center,
-        ) {
-
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-
-                factory = {
-
-                    SurfaceView(context).also { surfaceView ->
-
-                        surfaceView.holder.addCallback(
-                            object : SurfaceHolder.Callback {
-
-                                override fun surfaceCreated(
-                                    holder: SurfaceHolder,
-                                ) {
-
-                                    if (
-                                        holder.surface.isValid
-                                    ) {
-
-                                        decoder.setSurface(
-                                            holder.surface
-                                        )
-
-                                        surfaceReady = true
-                                    }
-                                }
-
-                                override fun surfaceChanged(
-                                    holder: SurfaceHolder,
-                                    format: Int,
-                                    width: Int,
-                                    height: Int,
-                                ) {
-
-                                    if (
-                                        holder.surface.isValid
-                                    ) {
-
-                                        decoder.setSurface(
-                                            holder.surface
-                                        )
-
-                                        surfaceReady = true
-                                    }
-                                }
-
-                                override fun surfaceDestroyed(
-                                    holder: SurfaceHolder,
-                                ) {
-
-                                    surfaceReady = false
-
-                                    decoder.clearSurface()
-                                }
-                            }
-                        )
-                    }
-                },
+        // Recording badge.
+        if (uiState.recording) {
+            Text(
+                text = "● REC ${formatRecordingDuration(uiState.recordingDurationMs)}",
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 60.dp)
+                    .background(
+                        Color(0xFFC62828),
+                        RoundedCornerShape(16.dp),
+                    )
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
             )
+        }
 
-            /*
-             * Only show the loading indicator while the
-             * SurfaceView itself is not ready.
-             *
-             * Camera startup is controlled by the button below.
-             */
+        // Error banner.
+        uiState.error?.let { error ->
+            Text(
+                text = error,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 60.dp)
+                    .background(
+                        MaterialTheme.colorScheme.errorContainer,
+                        RoundedCornerShape(10.dp),
+                    )
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        }
 
-            if (
-                !surfaceReady &&
-                uiState.capturedPhoto == null
+        // Saved confirmation.
+        if (uiState.savedVideoUri != null) {
+            Text(
+                text = "Video saved to Gallery",
+                color = Color.White,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 92.dp)
+                    .background(
+                        Color.Black.copy(alpha = 0.65f),
+                        RoundedCornerShape(12.dp),
+                    )
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
+
+        // Captured photo thumbnail (tap ✕ to dismiss).
+        uiState.capturedPhoto?.let { bitmap ->
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 12.dp, bottom = 92.dp),
             ) {
-
-                CircularProgressIndicator()
-            }
-
-            /*
-             * Recording indicator.
-             */
-
-            if (uiState.recording) {
-
-                Column(
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "Captured photo",
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 16.dp)
-                        .background(
-                            MaterialTheme.colorScheme.errorContainer
-                        )
-                        .padding(
-                            horizontal = 16.dp,
-                            vertical = 8.dp,
-                        ),
-                    horizontalAlignment =
-                        Alignment.CenterHorizontally,
+                        .size(104.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                )
+                TextButton(
+                    onClick = viewModel::dismissPhoto,
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(36.dp),
                 ) {
-
-                    Text(
-                        text = "● RECORDING",
-                        color =
-                            MaterialTheme.colorScheme.onErrorContainer,
-                        style =
-                            MaterialTheme.typography.labelLarge,
-                    )
-
-                    Text(
-                        text = formatRecordingDuration(
-                            uiState.recordingDurationMs
-                        ),
-                        color =
-                            MaterialTheme.colorScheme.onErrorContainer,
-                        style =
-                            MaterialTheme.typography.titleMedium,
-                    )
+                    Text("✕", color = Color.White)
                 }
             }
         }
 
-        /*
-         * -----------------------------------------------------
-         * CAPTURE RESULT
-         * -----------------------------------------------------
-         */
-
-        uiState.capturedPhoto?.let { bitmap ->
-
-            CapturedPhotoPreview(
-                bitmap = bitmap,
-            )
-        }
-
-        /*
-         * -----------------------------------------------------
-         * ERROR
-         * -----------------------------------------------------
-         */
-
-        uiState.error?.let { error ->
-
-            Text(
-                text = error,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        MaterialTheme.colorScheme.errorContainer
-                    )
-                    .padding(12.dp),
-                color =
-                    MaterialTheme.colorScheme.onErrorContainer,
-                style =
-                    MaterialTheme.typography.bodySmall,
-            )
-        }
-
-        /*
-         * -----------------------------------------------------
-         * VIDEO SAVED
-         * -----------------------------------------------------
-         */
-
-        if (uiState.savedVideoUri != null) {
-
-            Text(
-                text = "Video saved to Gallery",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 16.dp,
-                        vertical = 6.dp,
-                    ),
-                color =
-                    MaterialTheme.colorScheme.primary,
-                style =
-                    MaterialTheme.typography.bodyMedium,
-            )
-        }
-
-        /*
-         * -----------------------------------------------------
-         * CAMERA CONTROLS
-         * -----------------------------------------------------
-         */
-
+        // Single bottom control row.
         Row(
             modifier = Modifier
+                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(
-                    horizontal = 16.dp,
-                    vertical = 8.dp,
-                ),
-            horizontalArrangement =
-                Arrangement.spacedBy(12.dp),
+                .background(Color.Black.copy(alpha = 0.55f))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-
-            /*
-             * START CAMERA
-             */
-
-            Button(
+            ControlButton(
+                label = if (cameraOn) "Stop" else "Start",
                 onClick = {
-                    viewModel.startPreview()
+                    if (cameraOn) {
+                        viewModel.stopPreview()
+                        decoder.resetDecoder()
+                    } else {
+                        viewModel.startPreview()
+                    }
                 },
-
-                enabled =
-                    surfaceReady &&
-                        !uiState.streaming &&
-                        !uiState.capturing &&
-                        !uiState.recording,
-
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
-            ) {
-
-                Text("Start Camera")
-            }
-
-            /*
-             * STOP CAMERA
-             */
-
-            Button(
+                enabled = !uiState.recording && (cameraOn || surfaceReady),
+                modifier = Modifier.weight(1f),
+            )
+            ControlButton(
+                label = if (uiState.recording) "Stop" else "Record",
                 onClick = {
-
-                    viewModel.stopPreview()
-
-                    /*
-                     * Keep the SurfaceView alive but reset the
-                     * MediaCodec so a fresh camera stream can
-                     * create a fresh decoder.
-                     */
-                    decoder.resetDecoder()
+                    if (uiState.recording) {
+                        viewModel.stopRecording()
+                    } else {
+                        viewModel.startRecording()
+                    }
                 },
-
-                enabled =
-                    !uiState.recording &&
-                        (
-                            uiState.streaming ||
-                                uiState.status == "Starting camera…"
-                            ),
-
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
-            ) {
-
-                Text("Stop Camera")
-            }
-        }
-
-        /*
-         * -----------------------------------------------------
-         * VIDEO RECORDING
-         * -----------------------------------------------------
-         */
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = 16.dp,
-                    vertical = 4.dp,
-                ),
-            horizontalArrangement =
-                Arrangement.spacedBy(12.dp),
-        ) {
-
-            /*
-             * START RECORDING
-             */
-
-            Button(
-                onClick = {
-                    viewModel.startRecording()
-                },
-
-                enabled =
-                    uiState.streaming &&
-                        !uiState.recording &&
-                        !uiState.capturing,
-
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
-            ) {
-
-                Text("Record Video")
-            }
-
-            /*
-             * STOP RECORDING
-             */
-
-            Button(
-                onClick = {
-                    viewModel.stopRecording()
-                },
-
-                enabled = uiState.recording,
-
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
-            ) {
-
-                Text("Stop Recording")
-            }
-        }
-
-        /*
-         * -----------------------------------------------------
-         * CAPTURE BUTTON
-         * -----------------------------------------------------
-         */
-
-        Button(
-            onClick = viewModel::capturePhoto,
-
-            enabled =
-                uiState.streaming &&
+                enabled = uiState.recording ||
+                    (uiState.streaming && !uiState.capturing),
+                modifier = Modifier.weight(1f),
+            )
+            ControlButton(
+                label = "Photo",
+                onClick = viewModel::capturePhoto,
+                enabled = uiState.streaming &&
                     !uiState.capturing &&
                     !uiState.recording,
-
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = 8.dp,
-                    bottom = 8.dp,
-                )
-                .height(56.dp),
-        ) {
-
-            if (uiState.capturing) {
-
-                CircularProgressIndicator(
-                    modifier = Modifier.size(22.dp),
-                )
-
-            } else {
-
-                Text("Capture Photo")
-            }
-        }
-
-        /*
-         * -----------------------------------------------------
-         * CAMERA SETTINGS
-         * -----------------------------------------------------
-         */
-
-        Button(
-            onClick = onCameraSettingsClick,
-
-            enabled = !uiState.recording,
-
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    start = 16.dp,
-                    end = 16.dp,
-                    bottom = 16.dp,
-                )
-                .height(56.dp),
-        ) {
-
-            Text("Camera Settings")
+                loading = uiState.capturing,
+                modifier = Modifier.weight(1f),
+            )
+            ControlButton(
+                label = "Settings",
+                onClick = onCameraSettingsClick,
+                enabled = !uiState.recording,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
-
-/*
- * =============================================================
- * RECORDING DURATION
- * =============================================================
- */
-
-private fun formatRecordingDuration(
-    durationMs: Long,
-): String {
-
-    val totalSeconds =
-        durationMs / 1_000L
-
-    val minutes =
-        totalSeconds / 60L
-
-    val seconds =
-        totalSeconds % 60L
-
-    return String.format(
-        "%02d:%02d",
-        minutes,
-        seconds,
-    )
-}
-
-/*
- * =============================================================
- * CAPTURED PHOTO
- * =============================================================
- */
 
 @Composable
-private fun CapturedPhotoPreview(
-    bitmap: Bitmap,
+private fun ControlButton(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    loading: Boolean = false,
 ) {
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                MaterialTheme.colorScheme.surface
-            )
-            .padding(12.dp),
-
-        verticalArrangement =
-            Arrangement.spacedBy(8.dp),
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = 8.dp),
+        modifier = modifier.height(48.dp),
     ) {
-
-        Text(
-            text = "Captured Photo",
-            style = MaterialTheme.typography.titleMedium,
-        )
-
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = "Captured photo",
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp),
-        )
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Text(label, maxLines = 1)
+        }
     }
 }
 
-/*
- * =============================================================
- * H.265 MEDIA CODEC DECODER
- * =============================================================
- *
- * MWDAT 0.9.0's VideoFrame exposes compressed video data.
- *
- * The frame contains:
- *
- *     buffer
- *     width
- *     height
- *     presentationTimeUs
- *     isCompressed
- *     isCodecConfig
- *
- * MWDAT's camera stream uses H.265/HEVC.
- *
- * We therefore decode the compressed frames using Android's
- * MediaCodec and render directly to the SurfaceView.
- *
- * This is completely independent from Gemini and audio.
- */
+private fun formatRecordingDuration(durationMs: Long): String {
+    val totalSeconds = durationMs / 1_000L
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return String.format("%02d:%02d", minutes, seconds)
+}
 
+/*
+ * H.265 decoder: the MWDAT camera stream sends compressed HEVC frames, which
+ * are decoded with Android's MediaCodec and rendered directly to the
+ * SurfaceView. Independent from Gemini and audio.
+ */
 private class H265SurfaceDecoder {
 
     private val lock = Any()
