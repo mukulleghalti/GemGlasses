@@ -172,6 +172,34 @@ class ConversationArchive @Inject constructor(
         return hits
     }
 
+    /** Full session by id, or null if missing/corrupt. */
+    fun getSession(id: String): ArchivedSession? =
+        runCatching {
+            val file = File(dir(), "$id.json")
+            if (!file.exists()) return@runCatching null
+            json.decodeFromString<ArchivedSession>(file.readText())
+        }.getOrNull()
+
+    /** Deletes one archived session. */
+    fun deleteSession(id: String) {
+        runCatching {
+            File(dir(), "$id.json").delete()
+        }.onFailure {
+            Log.w(TAG, "deleting session $id failed", it)
+        }
+    }
+
+    /** Deletes every archived session. */
+    fun clearAll() {
+        runCatching {
+            dir().listFiles { f -> f.extension == "json" }
+                .orEmpty()
+                .forEach { it.delete() }
+        }.onFailure {
+            Log.w(TAG, "clearing conversation archive failed", it)
+        }
+    }
+
     /** Keeps only the newest [MAX_SESSIONS] session files. */
     private fun prune() {
         val files = dir().listFiles { f -> f.extension == "json" }

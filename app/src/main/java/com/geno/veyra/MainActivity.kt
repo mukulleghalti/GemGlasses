@@ -39,6 +39,7 @@ import com.geno.veyra.glasses.CameraPermission
 import com.geno.veyra.glasses.GlassesManager
 import com.geno.veyra.ui.CameraSettingsScreen
 import com.geno.veyra.ui.CameraTestScreen
+import com.geno.veyra.ui.ConversationHistoryScreen
 import com.geno.veyra.ui.HomeScreen
 import com.geno.veyra.ui.SettingsScreen
 import com.geno.veyra.ui.TranslateScreen
@@ -511,7 +512,19 @@ private fun VeyraRoot() {
             composable("settings") {
 
                 SettingsScreen(
-                    modifier = Modifier
+                    modifier = Modifier,
+                    onHistoryClick = {
+                        navController.navigate("conversation_history")
+                    },
+                )
+            }
+
+            composable("conversation_history") {
+
+                ConversationHistoryScreen(
+                    onBack = {
+                        navController.popBackStack()
+                    },
                 )
             }
         }

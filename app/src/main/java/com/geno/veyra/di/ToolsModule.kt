@@ -1,6 +1,7 @@
 package com.geno.veyra.di
 
 import com.geno.veyra.tools.AgentTool
+import com.geno.veyra.tools.DeviceStatusTool
 import com.geno.veyra.tools.ListConversationsTool
 import com.geno.veyra.tools.ListMemoriesTool
 import com.geno.veyra.tools.MessageTool
@@ -59,4 +60,8 @@ abstract class ToolsModule {
     @Binds
     @IntoSet
     abstract fun listConversationsTool(tool: ListConversationsTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun deviceStatusTool(tool: DeviceStatusTool): AgentTool
 }
