@@ -1,6 +1,7 @@
 package com.lpecom.gemglasses.audio
 
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
@@ -13,6 +14,12 @@ import javax.inject.Singleton
  * speaker. The track is opened once and kept alive across session reconnects so
  * the transition is inaudible. On barge-in, [flush] clears queued audio
  * immediately so the assistant stops talking over the user.
+ *
+ * @param usage [AudioAttributes.USAGE_VOICE_COMMUNICATION] for the voice-call
+ *   channel (SCO) or [AudioAttributes.USAGE_MEDIA] for the high-quality music
+ *   channel (A2DP).
+ * @param preferredOutput optional output device to pin the track to (used by
+ *   the phone-speaker diagnostic so media streams don't follow A2DP anyway).
  */
 @Singleton
 class SpeakerSink @Inject constructor() {
@@ -25,12 +32,15 @@ class SpeakerSink @Inject constructor() {
         AudioFormat.ENCODING_PCM_16BIT,
     )
 
-    fun open() {
+    fun open(
+        usage: Int = AudioAttributes.USAGE_VOICE_COMMUNICATION,
+        preferredOutput: AudioDeviceInfo? = null,
+    ) {
         if (track != null) return
         track = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                    .setUsage(usage)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build(),
             )
@@ -43,9 +53,19 @@ class SpeakerSink @Inject constructor() {
             )
             .setBufferSizeInBytes(maxOf(minBuffer, AudioSpec.OUTPUT_SAMPLE_RATE))
             .setTransferMode(AudioTrack.MODE_STREAM)
+            .apply {
+                if (preferredOutput != null) {
+                    setPreferredDevice(preferredOutput)
+                }
+            }
             .build()
             .also { it.play() }
-        Log.i(TAG, "speaker opened")
+        Log.i(
+            TAG,
+            "speaker opened " +
+                "(usage=$usage, " +
+                "preferredOutput=${preferredOutput?.type})"
+        )
     }
 
     /** Queues a chunk of assistant audio for playback. */

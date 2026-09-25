@@ -2,6 +2,7 @@ package com.lpecom.gemglasses.agent
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.media.AudioAttributes
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import com.lpecom.gemglasses.audio.BluetoothAudioRouter
@@ -14,6 +15,8 @@ import com.lpecom.gemglasses.gemini.ToolRegistry
 import com.lpecom.gemglasses.glasses.GlassesCameraSource
 import com.lpecom.gemglasses.glasses.GlassesManager
 import com.lpecom.gemglasses.settings.AgentPreferences
+import com.lpecom.gemglasses.settings.AudioOutput
+import com.lpecom.gemglasses.settings.PlaybackQuality
 import com.lpecom.gemglasses.settings.SettingsRepository
 import com.lpecom.gemglasses.state.ConversationStore
 import com.lpecom.gemglasses.state.TranscriptEntry
@@ -86,20 +89,43 @@ class AgentController @Inject constructor(
          */
 //        router.routeToGlasses()
 
-        speaker.open()
-
         eventJob = scope.launch {
-            collectEvents()
-        }
-
-        micJob = scope.launch {
-            pumpMic()
-        }
-
-        scope.launch {
             val prefs = settings.snapshot()
 
             stopPhrase = prefs.stopPhrase
+
+            /*
+             * Diagnostic routing: "Phone speaker" forces the assistant's
+             * voice (and the mic) onto the phone so choppy audio can be
+             * blamed on (or cleared of) the Bluetooth link.
+             */
+            val preferPhone = prefs.audioOutput == AudioOutput.PHONE
+            if (preferPhone) {
+                router.routeToPhoneSpeaker()
+            }
+
+            /*
+             * Playback quality: "Call" keeps the voice-call channel (SCO);
+             * "Media" uses the high-quality music channel (A2DP).
+             */
+            val usage =
+                if (prefs.playbackQuality == PlaybackQuality.MEDIA) {
+                    AudioAttributes.USAGE_MEDIA
+                } else {
+                    AudioAttributes.USAGE_VOICE_COMMUNICATION
+                }
+
+            speaker.open(
+                usage = usage,
+                preferredOutput =
+                    if (preferPhone) {
+                        router.phoneSpeakerOutputDevice()
+                    } else {
+                        null
+                    },
+            )
+
+            launch { collectEvents() }
 
             sessionKeeper.start(
                 scope,
@@ -109,6 +135,10 @@ class AgentController @Inject constructor(
                     languageCode = prefs.languageCode,
                 ),
             )
+        }
+
+        micJob = scope.launch {
+            pumpMic()
         }
     }
 

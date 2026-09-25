@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lpecom.gemglasses.settings.AudioOutput
+import com.lpecom.gemglasses.settings.PlaybackQuality
 import com.lpecom.gemglasses.wakeword.WakeWordModelState
 
 @Composable
@@ -71,9 +73,14 @@ fun SettingsScreen(
         Setting(title = "Assistant Voice") {
             var voiceMenuOpen by remember { mutableStateOf(false) }
 
+            val selectedVoice =
+                VOICES.firstOrNull { it.name == prefs.voiceName }
+
             Box {
                 OutlinedTextField(
-                    value = prefs.voiceName,
+                    value = selectedVoice?.let {
+                        "${it.name} · ${it.gender.label}"
+                    } ?: prefs.voiceName,
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Voice") },
@@ -90,14 +97,27 @@ fun SettingsScreen(
                     onDismissRequest = { voiceMenuOpen = false },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    VOICES.forEach { voice ->
-                        DropdownMenuItem(
-                            text = { Text(voice) },
-                            onClick = {
-                                viewModel.setVoice(voice)
-                                voiceMenuOpen = false
-                            },
+                    VoiceGender.entries.forEach { gender ->
+                        Text(
+                            gender.label + " voices",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(
+                                horizontal = 16.dp,
+                                vertical = 6.dp,
+                            ),
                         )
+                        VOICES
+                            .filter { it.gender == gender }
+                            .forEach { voice ->
+                                DropdownMenuItem(
+                                    text = { Text(voice.name) },
+                                    onClick = {
+                                        viewModel.setVoice(voice.name)
+                                        voiceMenuOpen = false
+                                    },
+                                )
+                            }
                     }
                 }
                 // A read-only field doesn't emit clicks itself; this overlay
@@ -111,6 +131,40 @@ fun SettingsScreen(
             Text(
                 "Voice names are just identifiers — every voice speaks " +
                     "any language.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Setting(title = "Assistant audio output") {
+            AudioOutput.entries.forEach { output ->
+                FilterChip(
+                    selected = prefs.audioOutput == output,
+                    onClick = { viewModel.setAudioOutput(output) },
+                    label = { Text(output.label) },
+                )
+            }
+            Text(
+                "Diagnostic: play the assistant through the phone speaker " +
+                    "instead of the glasses to check whether choppy audio " +
+                    "comes from the Bluetooth link.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Setting(title = "Playback quality") {
+            PlaybackQuality.entries.forEach { quality ->
+                FilterChip(
+                    selected = prefs.playbackQuality == quality,
+                    onClick = { viewModel.setPlaybackQuality(quality) },
+                    label = { Text(quality.label) },
+                )
+            }
+            Text(
+                "Call uses the voice-call Bluetooth channel; Media uses " +
+                    "the high-quality music channel. Applies to the next " +
+                    "session.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -218,37 +272,50 @@ private val LANGUAGES = listOf(
 
 // Prebuilt Gemini Live voices (full set of 30). A wrong name makes the
 // server close the session, so these must match the API exactly.
+//
+// Google doesn't publish gender labels; the grouping below follows the
+// community-maintained male/female split for these voices.
+private enum class VoiceGender(val label: String) {
+    FEMALE("Female"),
+    MALE("Male"),
+}
+
+private data class GeminiVoice(
+    val name: String,
+    val gender: VoiceGender,
+)
+
 private val VOICES = listOf(
-    "Zephyr",
-    "Puck",
-    "Charon",
-    "Kore",
-    "Fenrir",
-    "Leda",
-    "Orus",
-    "Aoede",
-    "Callirrhoe",
-    "Autonoe",
-    "Enceladus",
-    "Iapetus",
-    "Umbriel",
-    "Algieba",
-    "Despina",
-    "Erinome",
-    "Algenib",
-    "Rasalgethi",
-    "Laomedeia",
-    "Achernar",
-    "Alnilam",
-    "Schedar",
-    "Gacrux",
-    "Pulcherrima",
-    "Achird",
-    "Zubenelgenubi",
-    "Vindemiatrix",
-    "Sadachbia",
-    "Sadaltager",
-    "Sulafat",
+    GeminiVoice("Aoede", VoiceGender.FEMALE),
+    GeminiVoice("Kore", VoiceGender.FEMALE),
+    GeminiVoice("Leda", VoiceGender.FEMALE),
+    GeminiVoice("Zephyr", VoiceGender.FEMALE),
+    GeminiVoice("Autonoe", VoiceGender.FEMALE),
+    GeminiVoice("Callirrhoe", VoiceGender.FEMALE),
+    GeminiVoice("Despina", VoiceGender.FEMALE),
+    GeminiVoice("Erinome", VoiceGender.FEMALE),
+    GeminiVoice("Gacrux", VoiceGender.FEMALE),
+    GeminiVoice("Laomedeia", VoiceGender.FEMALE),
+    GeminiVoice("Pulcherrima", VoiceGender.FEMALE),
+    GeminiVoice("Sulafat", VoiceGender.FEMALE),
+    GeminiVoice("Vindemiatrix", VoiceGender.FEMALE),
+    GeminiVoice("Achernar", VoiceGender.FEMALE),
+    GeminiVoice("Puck", VoiceGender.MALE),
+    GeminiVoice("Charon", VoiceGender.MALE),
+    GeminiVoice("Fenrir", VoiceGender.MALE),
+    GeminiVoice("Orus", VoiceGender.MALE),
+    GeminiVoice("Achird", VoiceGender.MALE),
+    GeminiVoice("Algenib", VoiceGender.MALE),
+    GeminiVoice("Algieba", VoiceGender.MALE),
+    GeminiVoice("Alnilam", VoiceGender.MALE),
+    GeminiVoice("Enceladus", VoiceGender.MALE),
+    GeminiVoice("Iapetus", VoiceGender.MALE),
+    GeminiVoice("Rasalgethi", VoiceGender.MALE),
+    GeminiVoice("Sadachbia", VoiceGender.MALE),
+    GeminiVoice("Sadaltager", VoiceGender.MALE),
+    GeminiVoice("Schedar", VoiceGender.MALE),
+    GeminiVoice("Umbriel", VoiceGender.MALE),
+    GeminiVoice("Zubenelgenubi", VoiceGender.MALE),
 )
 
 // Wake phrases the user can pick from. Every word must be in the Vosk model

@@ -183,6 +183,60 @@ class BluetoothAudioRouter @Inject constructor(
         active = true
     }
 
+    /**
+     * Diagnostic routing: forces the assistant's voice (and the mic) onto
+     * the phone instead of the glasses, so choppy audio can be blamed on
+     * (or cleared of) the Bluetooth link.
+     */
+    fun routeToPhoneSpeaker() {
+
+        Log.i(TAG, "Routing assistant audio to the phone speaker")
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+
+            val speaker =
+                audioManager.availableCommunicationDevices.firstOrNull {
+                    it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                }
+
+            audioManager.mode = AudioManager.MODE_NORMAL
+
+            if (speaker != null) {
+                audioManager.setCommunicationDevice(speaker)
+            } else {
+                audioManager.clearCommunicationDevice()
+            }
+
+            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+
+        } else {
+
+            @Suppress("DEPRECATION")
+            audioManager.stopBluetoothSco()
+
+            @Suppress("DEPRECATION")
+            audioManager.isBluetoothScoOn = false
+
+            @Suppress("DEPRECATION")
+            audioManager.isSpeakerphoneOn = true
+
+            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        }
+
+        active = true
+    }
+
+    /**
+     * The built-in loudspeaker as an output device, so media-usage streams
+     * (which ignore the communication device) can also be forced onto the
+     * phone during the diagnostic.
+     */
+    fun phoneSpeakerOutputDevice(): AudioDeviceInfo? =
+        audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .firstOrNull {
+                it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+            }
+
     fun restore() {
 
         if (!active) return
@@ -208,6 +262,9 @@ class BluetoothAudioRouter @Inject constructor(
 
             @Suppress("DEPRECATION")
             audioManager.stopBluetoothSco()
+
+            @Suppress("DEPRECATION")
+            audioManager.isSpeakerphoneOn = false
         }
 
         audioManager.mode = AudioManager.MODE_NORMAL
