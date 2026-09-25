@@ -7,13 +7,14 @@ on:
       - master
       - CameraTest
       - AddVideoPhotosave
+      - Muse_voice-wake
 
   workflow_dispatch:
     inputs:
       ref:
         description: "Branch or commit SHA to build"
         required: false
-        default: "CameraTest"
+        default: "Muse_voice-wake"
         type: string
 
 jobs:
@@ -86,42 +87,6 @@ jobs:
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
-
-      - name: Print APK signing information
-        shell: bash
-        run: |
-          set -e
-
-          APK=$(find app/build/outputs/apk/debug -type f -name "*.apk" | head -n 1)
-
-          if [ -z "$APK" ]; then
-            echo "No debug APK found."
-            exit 1
-          fi
-
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" \
-            -type f \
-            -name "apksigner" \
-            | sort -V \
-            | tail -n 1)
-
-          if [ -z "$APKSIGNER" ]; then
-            echo "apksigner was not found."
-            exit 1
-          fi
-
-          echo "APK: $APK"
-          echo
-          echo "Full signing information:"
-
-          "$APKSIGNER" verify \
-            --verbose \
-            --print-certs \
-            "$APK"
-
-          echo
-          echo "Android package/application ID:"
-          echo "com.lpecom.gemglasses"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
