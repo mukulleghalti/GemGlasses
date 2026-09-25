@@ -37,7 +37,7 @@ class SpeakerSink @Inject constructor() {
         preferredOutput: AudioDeviceInfo? = null,
     ) {
         if (track != null) return
-        track = AudioTrack.Builder()
+        val built = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(usage)
@@ -53,13 +53,12 @@ class SpeakerSink @Inject constructor() {
             )
             .setBufferSizeInBytes(maxOf(minBuffer, AudioSpec.OUTPUT_SAMPLE_RATE))
             .setTransferMode(AudioTrack.MODE_STREAM)
-            .apply {
-                if (preferredOutput != null) {
-                    setPreferredDevice(preferredOutput)
-                }
-            }
             .build()
-            .also { it.play() }
+        if (preferredOutput != null) {
+            built.setPreferredDevice(preferredOutput)
+        }
+        built.play()
+        track = built
         Log.i(
             TAG,
             "speaker opened " +
