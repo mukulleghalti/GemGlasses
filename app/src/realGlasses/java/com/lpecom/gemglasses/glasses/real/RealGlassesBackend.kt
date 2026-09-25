@@ -137,14 +137,6 @@ class RealGlassesBackend @Inject constructor(
         session = sharedSession
 
         Log.i(TAG, "RealGlassesBackend created")
-
-        if (session != null) {
-            Log.i(
-                TAG,
-                "Reusing existing MWDAT DeviceSession: " +
-                    session?.state?.value
-            )
-        }
     }
 
     // =========================================================================
@@ -186,16 +178,11 @@ class RealGlassesBackend @Inject constructor(
 
     override fun setActivity(activity: Activity) {
         this.activity = activity
-        Log.i(
-            TAG,
-            "Activity attached: ${activity::class.java.simpleName}"
-        )
     }
 
     override fun clearActivity(activity: Activity) {
         if (this.activity === activity) {
             this.activity = null
-            Log.i(TAG, "Activity detached")
         }
     }
 
@@ -393,11 +380,6 @@ class RealGlassesBackend @Inject constructor(
 
                     _connectionState.value =
                         ConnectionState.CONNECTED
-
-                    Log.i(
-                        TAG,
-                        "Reusing existing MWDAT session"
-                    )
 
                     return true
                 }
