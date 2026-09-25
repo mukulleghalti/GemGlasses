@@ -58,10 +58,17 @@ class WakeWordCoordinator @Inject constructor(
 
                 Log.d(TAG, "wake-word listening=$shouldListen")
 
-                if (shouldListen) {
-                    WakeWordService.start(context, inputs.prefs.wakePhrase)
-                } else {
-                    WakeWordService.stop(context)
+                // startForegroundService() can throw when the app is in the
+                // background (Android 12+ restrictions); never let that kill
+                // the coordinator — the next state change retries.
+                runCatching {
+                    if (shouldListen) {
+                        WakeWordService.start(context, inputs.prefs.wakePhrase)
+                    } else {
+                        WakeWordService.stop(context)
+                    }
+                }.onFailure { e ->
+                    Log.w(TAG, "wake-word service toggle failed", e)
                 }
             }
         }
