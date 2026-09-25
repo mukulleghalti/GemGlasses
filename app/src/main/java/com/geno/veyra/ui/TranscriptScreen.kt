@@ -3,10 +3,13 @@ package com.geno.veyra.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
@@ -16,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
@@ -24,6 +28,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno.veyra.state.CitedPlace
 import com.geno.veyra.state.TranscriptEntry
+import com.geno.veyra.agent.AgentStatus
 import android.graphics.BitmapFactory
 
 /**
@@ -36,6 +41,9 @@ fun TranscriptScreen(
 ) {
     val entries by viewModel.transcript.collectAsStateWithLifecycle()
     val places by viewModel.places.collectAsStateWithLifecycle()
+    val status by viewModel.status.collectAsStateWithLifecycle()
+    val micMuted by viewModel.micMuted.collectAsStateWithLifecycle()
+    val assistantRunning = status != AgentStatus.IDLE
 
     LazyColumn(
         modifier = modifier
@@ -44,11 +52,47 @@ fun TranscriptScreen(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
-            Text(
-                "Transcription",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(vertical = 12.dp),
-            )
+            /*
+             * Assistant mic mute lives here too, not just on the
+             * Home screen — this is where the user actually is while
+             * talking to the assistant. Only shown while a session
+             * runs; muting with no session would do nothing.
+             */
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Transcription",
+                    style = MaterialTheme.typography.titleLarge,
+                )
+
+                if (assistantRunning) {
+                    Button(
+                        onClick = {
+                            viewModel.setMicMuted(!micMuted)
+                        },
+                        colors = if (micMuted) {
+                            ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme
+                                    .colorScheme.errorContainer,
+                                contentColor = MaterialTheme
+                                    .colorScheme.onErrorContainer,
+                            )
+                        } else {
+                            ButtonDefaults.buttonColors()
+                        },
+                    ) {
+                        Text(
+                            if (micMuted) "Unmute mic"
+                            else "Mute mic"
+                        )
+                    }
+                }
+            }
         }
 
         if (entries.isEmpty()) {

@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geno.veyra.glasses.real.RealGlassesBackend
+import com.geno.veyra.glasses.CameraPermission
 import com.geno.veyra.settings.CameraResolution
 import com.geno.veyra.settings.SettingsRepository
 import com.meta.wearable.dat.camera.types.VideoFrame
@@ -99,6 +100,43 @@ class CameraTestViewModel @Inject constructor(
             viewModelScope.launch {
 
                 try {
+
+                    /*
+                     * The Meta Wearables CAMERA permission is NOT
+                     * requested by cameraTestFrames() — it only checks.
+                     *
+                     * Request it here (the assistant flow has its own
+                     * separate prompt, which is why the Camera Test
+                     * screen silently showed "Camera stopped" until the
+                     * assistant had been run once).
+                     *
+                     * requestCameraPermission() is a no-op prompt when
+                     * the permission is already granted.
+                     */
+                    val cameraPermission =
+                        backend.requestCameraPermission()
+
+                    if (
+                        cameraPermission !=
+                            CameraPermission.GRANTED
+                    ) {
+
+                        Log.w(
+                            TAG,
+                            "Camera Test: Meta camera permission " +
+                                "not granted ($cameraPermission)",
+                        )
+
+                        _uiState.value =
+                            _uiState.value.copy(
+                                status = "Camera permission needed",
+                                error = "Grant the Meta glasses camera " +
+                                    "permission to preview.",
+                                streaming = false,
+                            )
+
+                        return@launch
+                    }
 
                     /*
                      * Read the latest persisted Camera Test settings
