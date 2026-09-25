@@ -67,6 +67,7 @@ class VoskWakeWordEngine @Inject constructor(
 
     private var listenJob: Job? = null
     private var activePhrase: String? = null
+    private var activePattern: Regex? = null
     private var lastEmitMs = 0L
 
     init {
@@ -88,10 +89,11 @@ class VoskWakeWordEngine @Inject constructor(
 
             val dir = ensureModel()
             activePhrase = phrase
+            activePattern = phrasePattern(phrase)
 
             listenJob = scope.launch(Dispatchers.IO) {
                 try {
-                    listenLoop(dir, phrase)
+                    listenLoop(dir)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -111,19 +113,28 @@ class VoskWakeWordEngine @Inject constructor(
         listenJob?.cancel()
         listenJob = null
         activePhrase = null
+        activePattern = null
     }
 
     // Callers hold RECORD_AUDIO (the engine is only started when the
     // permission is granted); the annotation lives on start().
     @SuppressLint("MissingPermission")
-    private suspend fun listenLoop(modelDir: File, phrase: String) {
+    private suspend fun listenLoop(modelDir: File) {
         // Heavy native init (~1-2 s). We are already on Dispatchers.IO.
         val model = Model(modelDir.absolutePath)
         try {
-            val recognizer = Recognizer(model, SAMPLE_RATE_HZ, grammarJson(phrase))
+            /*
+             * Full-vocabulary decoding — deliberately no grammar constraint.
+             * The old two-word grammar (wake phrase + [unk]) forced the
+             * decoder to emit the wake phrase for any vaguely similar
+             * sound, which is why random speech triggered detections. With
+             * the full vocabulary, ordinary speech decodes as ordinary
+             * words and the phrase only appears when actually spoken.
+             */
+            val recognizer = Recognizer(model, SAMPLE_RATE_HZ)
             try {
                 micStreamer.stream().collect { chunk ->
-                    processChunk(recognizer, phrase, chunk)
+                    processChunk(recognizer, chunk)
                 }
             } finally {
                 recognizer.close()
@@ -135,7 +146,6 @@ class VoskWakeWordEngine @Inject constructor(
 
     private suspend fun processChunk(
         recognizer: Recognizer,
-        phrase: String,
         chunk: ByteArray,
     ) {
         recognizer.acceptWaveForm(chunk, chunk.size)
@@ -144,12 +154,13 @@ class VoskWakeWordEngine @Inject constructor(
             JSONObject(recognizer.partialResult).optString("partial")
         }.getOrDefault("")
 
-        if (partial.contains(phrase, ignoreCase = true)) {
+        val pattern = activePattern ?: return
+        if (pattern.containsMatchIn(partial)) {
             val now = SystemClock.elapsedRealtime()
             if (now - lastEmitMs > EMIT_COOLDOWN_MS) {
                 lastEmitMs = now
                 Log.i(TAG, "wake word detected (heard \"$partial\")")
-                _detections.emit(phrase)
+                _detections.emit(activePhrase ?: return)
             }
         }
     }
@@ -242,11 +253,17 @@ class VoskWakeWordEngine @Inject constructor(
     private fun isModelReady(dir: File): Boolean =
         dir.isDirectory && File(dir, "am/final.mdl").exists()
 
-    private fun grammarJson(phrase: String): String {
-        // Grammar-constrained decoding: only the wake phrase (plus [unk] for
-        // everything else) is in the search graph — fast and low false-accept.
-        val clean = phrase.replace("\"", "").trim()
-        return "[\"$clean\", \"[unk]\"]"
+    /**
+     * Builds a word-boundary regex for the wake phrase so "hey glasses"
+     * doesn't match inside longer words or word salads — the phrase must
+     * appear as its own words.
+     */
+    private fun phrasePattern(phrase: String): Regex {
+        val words = phrase.trim()
+            .split("\\s+".toRegex())
+            .filter { it.isNotEmpty() }
+        val body = words.joinToString("\\s+") { Regex.escape(it) }
+        return Regex("\\b$body\\b", RegexOption.IGNORE_CASE)
     }
 
     private companion object {

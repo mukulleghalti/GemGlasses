@@ -12,6 +12,7 @@ data class TranscriptEntry(
     val text: String,
     val seq: Long,
     val imageBytes: ByteArray? = null,
+    val timestamp: Long = System.currentTimeMillis(),
 ) {
     enum class Speaker { USER, ASSISTANT, SYSTEM }
 }

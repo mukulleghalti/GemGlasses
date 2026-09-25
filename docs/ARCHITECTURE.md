@@ -16,7 +16,7 @@ VAD, and barge-in in a single connection.
                                        │   ┌──────────────────────────┐   │          │ API key
                                        │   │ SessionKeeper            │   │  ephemeral│ (server only)
                                        │   │   └─ LiveSession (WS) ───┼───┼───────────┼──► Gemini
-                                       │   │ ToolRegistry → 7 tools   │   │  token    │    Live API
+                                       │   │ ToolRegistry → 9 tools   │   │  token    │    Live API
                                        │   └──────────────────────────┘   │          │
                                        │ ConversationStore → Compose UI   │          │
                                        └──────────────────────────────────┘
@@ -29,9 +29,9 @@ VAD, and barge-in in a single connection.
 | `glasses` | `GlassesBackend` abstraction over the Meta DAT SDK, with a `mock` backend (always available) and a real backend compiled only when the SDK is linked. |
 | `audio` | Bluetooth routing + PCM capture (16 kHz) and playback (24 kHz). |
 | `gemini` | `LiveSession` (WebSocket + wire protocol), `SessionKeeper` (resumption + reconnect), `ToolRegistry`, `TokenProvider`, `Models`. |
-| `tools` | The seven function tools (vision, navigation, places, message, save/list memories, mic mute) and their JSON schemas. |
+| `tools` | The nine function tools (vision, navigation, places, message, save/list memories, mic mute, search/list conversations) and their JSON schemas. |
 | `agent` | `AgentController` — the conductor that wires audio ⇄ session ⇄ tools ⇄ vision. |
-| `state` | `ConversationStore` — in-memory transcript + Maps-cited places. |
+| `state` | `ConversationStore` — in-memory transcript + Maps-cited places; `ConversationArchive` — on-device JSON archive of past sessions. |
 | `settings` | DataStore-backed language/voice preferences. |
 | `service` | Foreground service keeping the session alive in the background. |
 | `ui` | Compose screens (Home / Transcript / Settings) + `AgentViewModel`. |

@@ -1,12 +1,14 @@
 package com.geno.veyra.di
 
 import com.geno.veyra.tools.AgentTool
+import com.geno.veyra.tools.ListConversationsTool
 import com.geno.veyra.tools.ListMemoriesTool
 import com.geno.veyra.tools.MessageTool
 import com.geno.veyra.tools.MicMuteTool
 import com.geno.veyra.tools.NavigationTool
 import com.geno.veyra.tools.PlacesTool
 import com.geno.veyra.tools.SaveMemoryTool
+import com.geno.veyra.tools.SearchConversationsTool
 import com.geno.veyra.tools.VisionTool
 import dagger.Binds
 import dagger.Module
@@ -49,4 +51,12 @@ abstract class ToolsModule {
     @Binds
     @IntoSet
     abstract fun micMuteTool(tool: MicMuteTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun searchConversationsTool(tool: SearchConversationsTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun listConversationsTool(tool: ListConversationsTool): AgentTool
 }

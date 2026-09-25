@@ -19,6 +19,7 @@ import com.geno.veyra.glasses.GlassesManager
 import com.geno.veyra.settings.AgentPreferences
 import com.geno.veyra.settings.AudioOutput
 import com.geno.veyra.settings.SettingsRepository
+import com.geno.veyra.state.ConversationArchive
 import com.geno.veyra.state.ConversationStore
 import com.geno.veyra.state.TranscriptEntry
 import com.geno.veyra.tools.VisionBridge
@@ -60,6 +61,7 @@ class AgentController @Inject constructor(
     private val visionBridge: VisionBridge,
     private val translator: Provider<TranslateController>,
     private val micMute: MicMuteController,
+    private val archive: ConversationArchive,
 ) : VisionController {
 
     private val scope = CoroutineScope(SupervisorJob())
@@ -162,6 +164,9 @@ class AgentController @Inject constructor(
     }
 
     fun stop() {
+        // Persist this session's transcript before anything is torn down.
+        archive.saveSession(conversation.entries.value)
+
         sessionKeeper.stop()
 
         scope.coroutineContext.cancelChildren()
