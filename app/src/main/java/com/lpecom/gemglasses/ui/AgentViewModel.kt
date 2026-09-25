@@ -13,6 +13,7 @@ import com.lpecom.gemglasses.glasses.ConnectionState
 import com.lpecom.gemglasses.service.AgentForegroundService
 import com.lpecom.gemglasses.service.AssistantStarter
 import com.lpecom.gemglasses.settings.AgentPreferences
+import com.lpecom.gemglasses.settings.AudioOutput
 import com.lpecom.gemglasses.settings.SettingsRepository
 import com.lpecom.gemglasses.state.CitedPlace
 import com.lpecom.gemglasses.state.ConversationStore
@@ -163,6 +164,17 @@ class AgentViewModel @Inject constructor(
     fun setStopPhrase(phrase: String) {
         viewModelScope.launch {
             settings.setStopPhrase(phrase)
+        }
+    }
+
+    /**
+     * Changes where the assistant's voice plays (and, paired with it,
+     * which mic listens): the glasses, or the phone speaker with the
+     * glasses' mic.
+     */
+    fun setAudioOutput(output: AudioOutput) {
+        viewModelScope.launch {
+            settings.setAudioOutput(output)
         }
     }
 

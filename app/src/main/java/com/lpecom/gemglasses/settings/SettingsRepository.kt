@@ -49,6 +49,44 @@ enum class CameraResolution(
     }
 }
 
+/** Where the assistant's voice plays — and, paired with it, which mic listens. */
+enum class AudioOutput(
+    val storageValue: String,
+    val label: String,
+) {
+    /**
+     * Voice through the glasses over the high-quality music channel;
+     * the phone's mic listens.
+     */
+    GLASSES(
+        storageValue = "glasses",
+        label = "Glasses",
+    ),
+
+    /**
+     * Voice on the phone speaker; the glasses' mic listens (via the
+     * SCO voice channel) while they're connected.
+     */
+    PHONE_SPEAKER(
+        storageValue = "phone_speaker",
+        label = "Phone speaker",
+    );
+
+    companion object {
+        fun fromStorageValue(value: String?): AudioOutput {
+            // "phone" is the pre-removal diagnostic value; it meant
+            // phone-speaker output, so it maps to the new mode.
+            return when (value) {
+                PHONE_SPEAKER.storageValue,
+                "phone",
+                    -> PHONE_SPEAKER
+
+                else -> GLASSES
+            }
+        }
+    }
+}
+
 /** User-tunable session and camera preferences. */
 data class AgentPreferences(
     val languageCode: String,
@@ -58,6 +96,7 @@ data class AgentPreferences(
     val wakeWordEnabled: Boolean,
     val wakePhrase: String,
     val stopPhrase: String,
+    val audioOutput: AudioOutput,
     val bargeInEnabled: Boolean,
 ) {
     /** Built here so the persona text stays in one place. */
@@ -74,6 +113,7 @@ data class AgentPreferences(
             wakeWordEnabled = false,
             wakePhrase = DEFAULT_WAKE_PHRASE,
             stopPhrase = DEFAULT_STOP_PHRASE,
+            audioOutput = AudioOutput.GLASSES,
             bargeInEnabled = true,
         )
 
@@ -133,6 +173,9 @@ class SettingsRepository @Inject constructor(
 
     private val stopPhraseKey =
         stringPreferencesKey("stop_phrase")
+
+    private val audioOutputKey =
+        stringPreferencesKey("audio_output")
 
     private val bargeInEnabledKey =
         booleanPreferencesKey("barge_in_enabled")
@@ -200,6 +243,11 @@ class SettingsRepository @Inject constructor(
                     prefs[stopPhraseKey]
                         ?: AgentPreferences.DEFAULT.stopPhrase,
 
+                audioOutput =
+                    AudioOutput.fromStorageValue(
+                        prefs[audioOutputKey]
+                    ),
+
                 bargeInEnabled =
                     prefs[bargeInEnabledKey]
                         ?: AgentPreferences.DEFAULT.bargeInEnabled,
@@ -260,6 +308,14 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[stopPhraseKey] = phrase
+        }
+    }
+
+    suspend fun setAudioOutput(
+        output: AudioOutput,
+    ) {
+        context.dataStore.edit {
+            it[audioOutputKey] = output.storageValue
         }
     }
 

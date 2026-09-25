@@ -20,6 +20,61 @@ class BluetoothAudioRouter @Inject constructor(
     private var active = false
 
     /**
+     * Puts the glasses' microphone in the input chain via the SCO voice
+     * channel. Bringing SCO up suspends A2DP, but the caller pins
+     * playback to the phone speaker with a media-usage stream, which
+     * ignores the communication device — so the two don't fight.
+     *
+     * Returns true when the glasses' SCO device was found and selected;
+     * false keeps the phone mic (no SCO device, selection failed, or
+     * pre-Android-12). Never changes Bluetooth adapter state, so the
+     * Meta AI app's own BLE link is left alone.
+     */
+    fun routeMicToGlassesSco(): Boolean {
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            Log.i(
+                TAG,
+                "SCO mic selection needs Android 12+; keeping the phone mic",
+            )
+            return false
+        }
+
+        val sco = audioManager.availableCommunicationDevices.firstOrNull {
+            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+        }
+
+        if (sco == null) {
+            Log.i(
+                TAG,
+                "No SCO device found; keeping the phone mic",
+            )
+            return false
+        }
+
+        audioManager.mode = AudioManager.MODE_NORMAL
+
+        if (!audioManager.setCommunicationDevice(sco)) {
+            Log.w(
+                TAG,
+                "setCommunicationDevice(SCO) failed; keeping the phone mic",
+            )
+            audioManager.mode = AudioManager.MODE_NORMAL
+            return false
+        }
+
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        active = true
+
+        Log.i(
+            TAG,
+            "Glasses mic live via SCO (${sco.productName}); " +
+                "playback stays wherever the caller pinned it",
+        )
+        return true
+    }
+
+    /**
      * Preferred output for assistant playback. Playback is always the
      * high-quality music channel (A2DP): while the glasses are connected
      * the voice goes to them, otherwise it falls back to the phone

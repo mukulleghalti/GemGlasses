@@ -14,6 +14,7 @@ import com.lpecom.gemglasses.gemini.TokenProvider
 import com.lpecom.gemglasses.gemini.protocol.Tool
 import com.lpecom.gemglasses.glasses.ConnectionState
 import com.lpecom.gemglasses.glasses.GlassesManager
+import com.lpecom.gemglasses.settings.AudioOutput
 import com.lpecom.gemglasses.settings.SettingsRepository
 import javax.inject.Inject
 import javax.inject.Provider
@@ -108,19 +109,29 @@ class TranslateController @Inject constructor(
             val prefs = settings.snapshot()
 
             /*
-             * Same audio routing as the assistant: always the high-quality
-             * music channel (A2DP) — the translated voice goes to the
-             * glasses while they're connected, and falls back to the phone
-             * speaker when they aren't.
+             * Same audio routing as the assistant: glasses output over
+             * A2DP by default; "Phone speaker" output pins playback to
+             * the phone and takes the mic from the glasses over SCO.
              */
             val glassesConnected =
                 glassesManager.connectionState.first() ==
                     ConnectionState.CONNECTED
 
+            val phoneSpeakerMode =
+                prefs.audioOutput == AudioOutput.PHONE_SPEAKER
+
+            if (phoneSpeakerMode && glassesConnected) {
+                router.routeMicToGlassesSco()
+            }
+
             speaker.open(
                 usage = AudioAttributes.USAGE_MEDIA,
                 preferredOutput =
-                    router.preferredMediaOutput(glassesConnected),
+                    if (phoneSpeakerMode) {
+                        router.phoneSpeakerOutputDevice()
+                    } else {
+                        router.preferredMediaOutput(glassesConnected)
+                    },
             )
 
             val token =

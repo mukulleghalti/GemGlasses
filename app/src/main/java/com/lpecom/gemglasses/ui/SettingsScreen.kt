@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lpecom.gemglasses.settings.AudioOutput
 import com.lpecom.gemglasses.wakeword.WakeWordModelState
 
 @Composable
@@ -126,6 +127,26 @@ fun SettingsScreen(
             Text(
                 "Voice names are just identifiers — every voice speaks " +
                     "any language.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Setting(title = "Assistant audio output") {
+            ChipRow {
+                AudioOutput.entries.forEach { output ->
+                    FilterChip(
+                        selected = prefs.audioOutput == output,
+                        onClick = { viewModel.setAudioOutput(output) },
+                        label = { Text(output.label) },
+                    )
+                }
+            }
+            Text(
+                "Glasses: voice plays through the glasses in high quality " +
+                    "and the phone's mic listens. Phone speaker: voice " +
+                    "plays on the phone and the glasses' mic listens " +
+                    "while they're connected.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

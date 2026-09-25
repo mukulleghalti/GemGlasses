@@ -16,6 +16,7 @@ import com.lpecom.gemglasses.glasses.ConnectionState
 import com.lpecom.gemglasses.glasses.GlassesCameraSource
 import com.lpecom.gemglasses.glasses.GlassesManager
 import com.lpecom.gemglasses.settings.AgentPreferences
+import com.lpecom.gemglasses.settings.AudioOutput
 import com.lpecom.gemglasses.settings.SettingsRepository
 import com.lpecom.gemglasses.state.ConversationStore
 import com.lpecom.gemglasses.state.TranscriptEntry
@@ -115,17 +116,28 @@ class AgentController @Inject constructor(
              * Playback is always the high-quality music channel (A2DP):
              * the assistant's voice goes to the glasses while they're
              * connected, and falls back to the phone speaker when they
-             * aren't. No voice-call (SCO) path: bringing SCO up would
-             * suspend A2DP, which defeats media playback.
+             * aren't. "Phone speaker" output instead pins playback to
+             * the phone and takes the mic from the glasses over SCO.
              */
             val glassesConnected =
                 glassesManager.connectionState.first() ==
                     ConnectionState.CONNECTED
 
+            val phoneSpeakerMode =
+                prefs.audioOutput == AudioOutput.PHONE_SPEAKER
+
+            if (phoneSpeakerMode && glassesConnected) {
+                router.routeMicToGlassesSco()
+            }
+
             speaker.open(
                 usage = AudioAttributes.USAGE_MEDIA,
                 preferredOutput =
-                    router.preferredMediaOutput(glassesConnected),
+                    if (phoneSpeakerMode) {
+                        router.phoneSpeakerOutputDevice()
+                    } else {
+                        router.preferredMediaOutput(glassesConnected)
+                    },
             )
 
             launch { collectEvents() }
