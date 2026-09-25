@@ -163,6 +163,7 @@ class AgentController @Inject constructor(
                     systemInstruction = prefs.systemInstruction,
                     voiceName = prefs.voiceName,
                     languageCode = prefs.languageCode,
+                    bargeInEnabled = bargeInEnabled,
                 ),
             )
         }
@@ -349,6 +350,15 @@ class AgentController @Inject constructor(
     @SuppressLint("MissingPermission")
     private suspend fun pumpMic() {
         micStreamer.stream().collect { chunk ->
+            /*
+             * Half-duplex when barge-in is off: while the assistant is
+             * playing, its voice loops back through the mic
+             * (phone-speaker echo) and the server transcribes it as user
+             * speech — the assistant ends up talking to itself. Dropping
+             * mic input during playback breaks the loop; with barge-in
+             * disabled the user can't interrupt anyway.
+             */
+            if (!bargeInEnabled && speaker.isPlaying()) return@collect
             sessionKeeper.sendAudio(chunk)
         }
     }

@@ -20,6 +20,13 @@ data class SessionConfig(
     val systemInstruction: String,
     val voiceName: String,
     val languageCode: String,
+    /**
+     * Whether talking over the assistant cuts it off. When false the
+     * session is created with activityHandling=NO_INTERRUPTION, so the
+     * server never kills the model's turn on voice activity (its VAD
+     * was firing on phone-speaker echo and making the model stutter).
+     */
+    val bargeInEnabled: Boolean = true,
 )
 
 /**
@@ -229,6 +236,7 @@ class SessionKeeper @Inject constructor(
                 systemInstruction = config.systemInstruction,
                 voiceName = config.voiceName,
                 languageCode = config.languageCode,
+                bargeInEnabled = config.bargeInEnabled,
                 liveTools = toolRegistry.asLiveTools(),
                 resumeHandle = resumeHandle,
             )

@@ -56,6 +56,13 @@ class SpeakerSink @Inject constructor() {
     @Volatile
     private var maxGapMs: Long = 0L
 
+    /**
+     * When the writer thread last handed audio to AudioTrack. Powers
+     * [isPlaying] for half-duplex mic gating.
+     */
+    @Volatile
+    private var lastWriteNanos: Long = 0L
+
     private val minBuffer = AudioTrack.getMinBufferSize(
         AudioSpec.OUTPUT_SAMPLE_RATE,
         AudioFormat.CHANNEL_OUT_MONO,
@@ -100,6 +107,7 @@ class SpeakerSink @Inject constructor() {
         queue.clear()
         gatheringPreRoll = true
         lastEnqueueNanos = 0L
+        lastWriteNanos = 0L
         maxGapMs = 0L
         startWriter()
         Log.i(
@@ -168,6 +176,21 @@ class SpeakerSink @Inject constructor() {
         gatheringPreRoll = false
         bytesEnqueued = 0L
         bytesWritten = 0L
+        lastWriteNanos = 0L
+    }
+
+    /**
+     * Whether assistant audio is currently playing (or still draining
+     * out of the track buffer). Used for half-duplex mic gating when
+     * barge-in is off: while this is true the mic must not reach the
+     * server, or phone-speaker echo gets transcribed as user speech
+     * and the assistant ends up talking to itself.
+     */
+    fun isPlaying(): Boolean {
+        if (queue.isNotEmpty()) return true
+        val last = lastWriteNanos
+        return last != 0L &&
+            System.nanoTime() - last < PLAYING_TAIL_NANOS
     }
 
     private fun startWriter() {
@@ -187,6 +210,7 @@ class SpeakerSink @Inject constructor() {
                             AudioTrack.WRITE_BLOCKING,
                         )
                         bytesWritten += item.size
+                        lastWriteNanos = System.nanoTime()
                         if (gatheringPreRoll &&
                             bytesWritten >= preRollBytes
                         ) {
@@ -209,6 +233,13 @@ class SpeakerSink @Inject constructor() {
 
         /** Only gaps worth investigating get their own log line. */
         const val GAP_LOG_THRESHOLD_MS = 500L
+
+        /**
+         * How long after the last write the speaker still counts as
+         * playing: covers audio draining out of AudioTrack's buffer
+         * after the queue empties.
+         */
+        const val PLAYING_TAIL_NANOS = 1_000_000_000L
 
         /** Sentinel telling the writer thread to exit. */
         val STOP = Any()

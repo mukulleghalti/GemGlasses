@@ -22,6 +22,7 @@ class LiveSession(
     private val systemInstruction: String,
     private val voiceName: String,
     private val languageCode: String,
+    private val bargeInEnabled: Boolean = true,
     private val liveTools: List<Tool>,
     private val resumeHandle: String?,
 ) {
@@ -126,7 +127,14 @@ class LiveSession(
                 if (sent) {
                     Log.i(
                         TAG,
-                        ">>> Setup message sent successfully"
+                        ">>> Setup message sent successfully " +
+                            "(activityHandling=" +
+                            if (bargeInEnabled) {
+                                "default"
+                            } else {
+                                "NO_INTERRUPTION"
+                            } +
+                            ")"
                     )
                 } else {
                     Log.e(
@@ -464,6 +472,24 @@ class LiveSession(
                 ),
 
                 tools = liveTools,
+
+                /*
+                 * When barge-in is off the server must not cut the
+                 * model's turn when its voice-activity detector fires:
+                 * phone-speaker echo was transcribed as user speech,
+                 * interrupting the model mid-sentence (choppy audio)
+                 * and making it answer its own echo. NO_INTERRUPTION
+                 * lets the model finish; null keeps the default
+                 * interrupt behavior for barge-in mode.
+                 */
+                realtimeInputConfig =
+                    if (bargeInEnabled) {
+                        null
+                    } else {
+                        RealtimeInputConfig(
+                            activityHandling = "NO_INTERRUPTION",
+                        )
+                    },
 
                 /*
                  * Enable session resumption.
