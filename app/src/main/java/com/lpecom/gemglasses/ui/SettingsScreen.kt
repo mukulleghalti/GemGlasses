@@ -12,11 +12,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -81,9 +79,7 @@ fun SettingsScreen(
                     label = { Text("Voice") },
                     trailingIcon = {
                         Icon(
-                            imageVector =
-                                if (voiceMenuOpen) Icons.Filled.ArrowDropUp
-                                else Icons.Filled.ArrowDropDown,
+                            imageVector = Icons.Filled.ArrowDropDown,
                             contentDescription = null,
                         )
                     },
