@@ -148,7 +148,7 @@ class LiveSession(
                 webSocket: WebSocket,
                 bytes: ByteString,
             ) {
-                handleFrame(bytes.utf8())?.let { event ->
+                handleFrame(bytes.utf8()).forEach { event ->
                     trySend(event)
                 }
             }
@@ -157,7 +157,7 @@ class LiveSession(
                 webSocket: WebSocket,
                 text: String,
             ) {
-                handleFrame(text)?.let { event ->
+                handleFrame(text).forEach { event ->
                     trySend(event)
                 }
             }
@@ -507,10 +507,14 @@ class LiveSession(
 
     /**
      * Parse a Gemini server frame.
+     *
+     * A single frame can carry several things at once (e.g. the output
+     * transcription bundled with audio parts, or several audio parts),
+     * so this returns every event the frame contains.
      */
     private fun handleFrame(
         raw: String,
-    ): SessionEvent? {
+    ): List<SessionEvent> {
 
         val msg = runCatching {
             json.decodeFromString(
@@ -524,7 +528,7 @@ class LiveSession(
                 "Could not parse server message: ${error.message}\n$raw"
             )
 
-            return null
+            return emptyList()
         }
 
         /*
@@ -577,7 +581,7 @@ class LiveSession(
              */
             flushPendingMessages()
 
-            return SessionEvent.Ready
+            return listOf(SessionEvent.Ready)
         }
 
         /*
@@ -593,8 +597,10 @@ class LiveSession(
                     "timeLeft=${goAway.timeLeft}"
             )
 
-            return SessionEvent.GoingAway(
-                goAway.timeLeft
+            return listOf(
+                SessionEvent.GoingAway(
+                    goAway.timeLeft
+                )
             )
         }
 
@@ -606,8 +612,10 @@ class LiveSession(
         msg.toolCall?.let { toolCall ->
 
             if (toolCall.functionCalls.isNotEmpty()) {
-                return SessionEvent.ToolInvocation(
-                    toolCall.functionCalls
+                return listOf(
+                    SessionEvent.ToolInvocation(
+                        toolCall.functionCalls
+                    )
                 )
             }
         }
@@ -622,11 +630,11 @@ class LiveSession(
             /*
              * User interrupted Gemini.
              */
-            sc.interrupted
-                ?.takeIf { it }
-                ?.let {
-                    return SessionEvent.Interrupted
-                }
+            if (sc.interrupted == true) {
+                return listOf(SessionEvent.Interrupted)
+            }
+
+            val events = mutableListOf<SessionEvent>()
 
             /*
              * User speech transcription.
@@ -635,7 +643,7 @@ class LiveSession(
                 ?.text
                 ?.takeIf { it.isNotBlank() }
                 ?.let { text ->
-                    return SessionEvent.Transcript(
+                    events += SessionEvent.Transcript(
                         text = text,
                         fromUser = true,
                     )
@@ -643,46 +651,63 @@ class LiveSession(
 
             /*
              * Gemini output transcription.
+             *
+             * NOTE: no early return here — the same frame can also carry
+             * audio parts, and those must not be dropped.
              */
-            sc.outputTranscription
+            val assistantText = sc.outputTranscription
                 ?.text
                 ?.takeIf { it.isNotBlank() }
-                ?.let { text ->
-                    return SessionEvent.Transcript(
-                        text = text,
-                        fromUser = false,
-                    )
-                }
+            assistantText?.let { text ->
+                events += SessionEvent.Transcript(
+                    text = text,
+                    fromUser = false,
+                )
+            }
 
             /*
-             * Gemini audio output.
+             * Gemini audio output — EVERY audio part in the frame.
+             *
+             * The old code kept only the first audio part per frame and
+             * skipped audio entirely when a transcription was present in
+             * the same frame, silently dropping words from playback.
              */
-            sc.modelTurn
+            val audioBlobs = sc.modelTurn
                 ?.parts
-                ?.firstNotNullOfOrNull { part ->
-                    part.inlineData
-                }
-                ?.let { blob ->
-
-                    return SessionEvent.AudioChunk(
-                        Base64.decode(
-                            blob.data,
-                            Base64.NO_WRAP,
-                        )
+                ?.mapNotNull { part -> part.inlineData }
+                .orEmpty()
+            if (audioBlobs.size > 1 ||
+                (assistantText != null && audioBlobs.isNotEmpty())
+            ) {
+                Log.d(
+                    TAG,
+                    "Multi-part server frame: " +
+                        "audioParts=${audioBlobs.size}, " +
+                        "hasTranscription=${assistantText != null}"
+                )
+            }
+            audioBlobs.forEach { blob ->
+                events += SessionEvent.AudioChunk(
+                    Base64.decode(
+                        blob.data,
+                        Base64.NO_WRAP,
                     )
-                }
+                )
+            }
 
             /*
              * End of model turn.
              */
-            sc.turnComplete
-                ?.takeIf { it }
-                ?.let {
-                    return SessionEvent.TurnComplete
-                }
+            if (sc.turnComplete == true) {
+                events += SessionEvent.TurnComplete
+            }
+
+            if (events.isNotEmpty()) {
+                return events
+            }
         }
 
-        return null
+        return emptyList()
     }
 
     private fun ByteArray.b64(): String =
