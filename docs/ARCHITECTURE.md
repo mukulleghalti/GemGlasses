@@ -29,7 +29,7 @@ VAD, and barge-in in a single connection.
 | `glasses` | `GlassesBackend` abstraction over the Meta DAT SDK, with a `mock` backend (always available) and a real backend compiled only when the SDK is linked. |
 | `audio` | Bluetooth routing + PCM capture (16 kHz) and playback (24 kHz). |
 | `gemini` | `LiveSession` (WebSocket + wire protocol), `SessionKeeper` (resumption + reconnect), `ToolRegistry`, `TokenProvider`, `Models`. |
-| `tools` | The ten function tools (vision, navigation, places, message, save/list memories, mic mute, search/list conversations, device status) and their JSON schemas. |
+| `tools` | The fifteen function tools (vision, navigation, places, message, save/list memories, mic mute, search/list conversations, device status, media control, set/list/cancel timers & reminders) and their JSON schemas. |
 | `agent` | `AgentController` — the conductor that wires audio ⇄ session ⇄ tools ⇄ vision. |
 | `state` | `ConversationStore` — in-memory transcript + Maps-cited places; `ConversationArchive` — on-device JSON archive of past sessions (also browsable/deletable from the Conversation History screen in Settings). |
 | `settings` | DataStore-backed language/voice preferences. |

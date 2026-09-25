@@ -1,8 +1,13 @@
 package com.geno.veyra.di
 
 import com.geno.veyra.tools.AgentTool
+import com.geno.veyra.tools.CancelAlertTool
 import com.geno.veyra.tools.DeviceStatusTool
+import com.geno.veyra.tools.ListAlertsTool
 import com.geno.veyra.tools.ListConversationsTool
+import com.geno.veyra.tools.MediaControlTool
+import com.geno.veyra.tools.SetReminderTool
+import com.geno.veyra.tools.SetTimerTool
 import com.geno.veyra.tools.ListMemoriesTool
 import com.geno.veyra.tools.MessageTool
 import com.geno.veyra.tools.MicMuteTool
@@ -64,4 +69,24 @@ abstract class ToolsModule {
     @Binds
     @IntoSet
     abstract fun deviceStatusTool(tool: DeviceStatusTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun mediaControlTool(tool: MediaControlTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun setTimerTool(tool: SetTimerTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun setReminderTool(tool: SetReminderTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun listAlertsTool(tool: ListAlertsTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun cancelAlertTool(tool: CancelAlertTool): AgentTool
 }

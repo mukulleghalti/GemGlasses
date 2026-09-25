@@ -10,6 +10,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -101,7 +104,22 @@ data class AgentPreferences(
 ) {
     /** Built here so the persona text stays in one place. */
     val systemInstruction: String
-        get() = DEFAULT_SYSTEM_INSTRUCTION
+        get() = buildString {
+            append(DEFAULT_SYSTEM_INSTRUCTION)
+            append("\n\nCurrent date and time: ")
+            append(currentDateTime())
+            append(
+                ". Use this to resolve relative times like " +
+                    "\"in 20 minutes\" or \"at 6pm\" into epoch " +
+                    "milliseconds for set_reminder.",
+            )
+        }
+
+    private fun currentDateTime(): String =
+        SimpleDateFormat(
+            "EEEE, d MMMM yyyy, HH:mm",
+            Locale.getDefault(),
+        ).format(Date())
 
     companion object {
 
@@ -138,6 +156,14 @@ data class AgentPreferences(
             - To find real places, use search_places. Never invent business or place names.
             - To navigate, use start_navigation.
             - To send a message, use send_message.
+            - To control music playback (play, pause, next, previous), use media_control.
+              It acts on whichever audio app is active; it cannot pick an app or playlist.
+            - For countdown timers, use set_timer with durationSeconds.
+              For reminders at a specific time, use set_reminder with triggerAtMillis.
+              Use list_alerts and cancel_alert to manage them.
+            - To check phone battery or whether the glasses are connected, use get_device_status.
+              The glasses' own battery percentage is not available — never invent one.
+            - To recall earlier chats, use list_conversations and search_conversations.
             
             If you are unsure about something, ask a brief clarifying question.
         """.trimIndent()

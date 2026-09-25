@@ -68,6 +68,11 @@
             android:exported="false"
             android:foregroundServiceType="microphone|connectedDevice" />
 
+        <!-- Timer/reminder alerts fired by AlarmManager -->
+        <receiver
+            android:name=".alerts.AlertReceiver"
+            android:exported="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
