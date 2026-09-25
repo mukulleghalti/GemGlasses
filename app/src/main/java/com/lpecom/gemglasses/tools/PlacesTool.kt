@@ -21,7 +21,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 
 /**
- * `buscar_lugares` — grounded place search. The heavy lifting (Gemini
+ * `search_places` — grounded place search. The heavy lifting (Gemini
  * `generateContent` + Maps grounding, with the API key) happens on the backend
  * Worker; the client just forwards the query and current location, then splits
  * the result into a short spoken summary (returned to the model) and the list
@@ -34,35 +34,35 @@ class PlacesTool @Inject constructor(
     private val conversation: ConversationStore,
 ) : AgentTool {
 
-    override val name = "buscar_lugares"
+    override val name = "search_places"
 
     override val declaration = FunctionDeclaration(
         name = name,
-        description = "Busca lugares reais próximos (restaurantes, farmácias, etc.) " +
-            "usando dados do Google Maps. Sempre use esta ferramenta em vez de " +
-            "inventar nomes de estabelecimentos.",
+        description = "Searches for real nearby places (restaurants, pharmacies, etc.) " +
+            "using Google Maps data. Always use this tool instead of " +
+            "inventing establishment names.",
         parameters = schema(
             """
             {
               "type": "object",
               "properties": {
-                "consulta": {
+                "query": {
                   "type": "string",
-                  "description": "O que procurar, ex.: 'café aberto agora', 'farmácia mais próxima'."
+                  "description": "What to look for, e.g.: 'cafe open now', 'nearest pharmacy'."
                 }
               },
-              "required": ["consulta"]
+              "required": ["query"]
             }
             """
         ),
     )
 
     override suspend fun execute(args: JsonObject): JsonObject = withContext(Dispatchers.IO) {
-        val consulta = args.requireString("consulta")
+        val query = args.requireString("query")
         val loc = location.current()
 
         val payload = buildJsonObject {
-            put("query", consulta)
+            put("query", query)
             if (loc != null) {
                 put("latitude", loc.latitude)
                 put("longitude", loc.longitude)
@@ -84,14 +84,14 @@ class PlacesTool @Inject constructor(
         }.getOrElse {
             buildJsonObject {
                 put("status", "error")
-                put("resumo", "Não consegui buscar lugares agora.")
+                put("summary", "Couldn't look up places right now.")
             }
         }
     }
 
     private fun parseAndPublish(body: String): JsonObject {
         val root = json.parseToJsonElement(body).jsonObject
-        val summary = root["summary"]?.jsonPrimitive?.content ?: "Encontrei alguns lugares."
+        val summary = root["summary"]?.jsonPrimitive?.content ?: "I found a few places."
         val places = root["places"]?.jsonArray.orEmpty().mapNotNull { el ->
             val obj = el.jsonObject
             val title = obj["title"]?.jsonPrimitive?.content ?: return@mapNotNull null
@@ -102,7 +102,7 @@ class PlacesTool @Inject constructor(
 
         return buildJsonObject {
             put("status", "ok")
-            put("resumo", summary)
+            put("summary", summary)
             put("total", places.size)
         }
     }

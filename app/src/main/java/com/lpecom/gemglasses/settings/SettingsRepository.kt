@@ -82,10 +82,10 @@ data class AgentPreferences(
             Speak English by default unless the user asks for another language.
             
             Use tools when appropriate:
-            - To see what the user is looking at, use capturar_visao.
-            - To find real places, use buscar_lugares. Never invent business or place names.
-            - To navigate, use iniciar_navegacao.
-            - To send a message, use enviar_mensagem.
+            - To see what the user is looking at, use capture_vision.
+            - To find real places, use search_places. Never invent business or place names.
+            - To navigate, use start_navigation.
+            - To send a message, use send_message.
             
             If you are unsure about something, ask a brief clarifying question.
         """.trimIndent()

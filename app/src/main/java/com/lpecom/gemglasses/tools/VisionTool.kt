@@ -7,7 +7,7 @@ import kotlinx.serialization.json.put
 import javax.inject.Inject
 
 /**
- * Bridges the `capturar_visao` tool to whatever component actually streams
+ * Bridges the `capture_vision` tool to whatever component actually streams
  * frames (the session orchestrator wires the glasses camera to the Live
  * socket). Kept as an interface so the tool has no dependency on the glasses or
  * gemini packages.
@@ -18,7 +18,7 @@ interface VisionController {
 }
 
 /**
- * `capturar_visao` — turns on the glasses camera on demand. Frames then arrive
+ * `capture_vision` — turns on the glasses camera on demand. Frames then arrive
  * over the existing Live socket as realtime video input for a bounded window,
  * which keeps the session nominally audio-only and sidesteps the 2-minute
  * video cap.
@@ -27,12 +27,12 @@ class VisionTool @Inject constructor(
     private val vision: VisionController,
 ) : AgentTool {
 
-    override val name = "capturar_visao"
+    override val name = "capture_vision"
 
     override val declaration = FunctionDeclaration(
         name = name,
-        description = "Ativa a câmera dos óculos para ver o que o usuário está " +
-            "vendo. Use quando a pergunta exigir contexto visual (ex.: 'o que é isso?').",
+        description = "Turns on the glasses camera to see what the user is " +
+            "looking at. Use when the question needs visual context (e.g.: 'what is this?').",
         parameters = schema(
             """
             { "type": "object", "properties": {} }

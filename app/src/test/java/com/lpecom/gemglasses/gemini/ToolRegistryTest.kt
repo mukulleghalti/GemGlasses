@@ -36,12 +36,12 @@ class ToolRegistryTest {
     @Test
     fun `dispatch routes to the matching tool and preserves call id`() = runTest {
         val registry = ToolRegistry(
-            setOf(FakeTool("iniciar_navegacao") { buildJsonObject { put("status", "started") } }),
+            setOf(FakeTool("start_navigation") { buildJsonObject { put("status", "started") } }),
         )
-        val response = registry.dispatch(FunctionCall(id = "call-1", name = "iniciar_navegacao"))
+        val response = registry.dispatch(FunctionCall(id = "call-1", name = "start_navigation"))
 
         assertEquals("call-1", response.id)
-        assertEquals("iniciar_navegacao", response.name)
+        assertEquals("start_navigation", response.name)
         assertEquals("started", response.response["status"]?.jsonPrimitive?.content)
     }
 

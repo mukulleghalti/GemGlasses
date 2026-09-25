@@ -124,8 +124,8 @@ fun SettingsScreen(
         }
 
         Text(
-            "Privacidade: transcrições ficam só no aparelho e nunca são sincronizadas. " +
-                "A chave da API vive apenas no backend; o app usa tokens efêmeros.",
+            "Privacy: transcripts stay on this device and are never synced. " +
+                "The API key lives only on the backend; the app uses ephemeral tokens.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -144,9 +144,9 @@ private fun Setting(title: String, content: @Composable () -> Unit) {
 }
 
 private val LANGUAGES = listOf(
-    "pt-BR" to "Português",
+    "pt-BR" to "Portuguese",
     "en-US" to "English",
-    "es-ES" to "Español",
+    "es-ES" to "Spanish",
 )
 
 // Prebuilt Gemini Live voices (subset).

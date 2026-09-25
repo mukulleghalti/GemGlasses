@@ -12,7 +12,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
 
-/** Simple lat/lng snapshot used to ground `buscar_lugares`. */
+/** Simple lat/lng snapshot used to ground `search_places`. */
 data class LatLng(val latitude: Double, val longitude: Double)
 
 /** Thin wrapper over FusedLocationProvider returning the current fix, or null. */

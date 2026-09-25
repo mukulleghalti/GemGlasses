@@ -36,7 +36,7 @@ enum class AgentStatus { IDLE, CONNECTING, LISTENING, RECONNECTING, ERROR }
  * opens playback, starts the [SessionKeeper], pumps the mic into the socket,
  * and reacts to every [SessionEvent] — playing audio, updating the transcript,
  * flushing on barge-in, and dispatching tool calls. It also serves vision bursts
- * requested by the `capturar_visao` tool.
+ * requested by the `capture_vision` tool.
  */
 @Singleton
 class AgentController @Inject constructor(
@@ -116,15 +116,15 @@ class AgentController @Inject constructor(
         _status.value = AgentStatus.IDLE
     }
 
-    // VisionController: called by the capturar_visao tool.
+    // VisionController: called by the capture_vision tool.
     override fun startVisionBurst(durationMs: Long) {
         scope.launch {
             if (!glassesManager.ensureCameraPermission()) {
-                conversation.note("Permissão de câmera negada.")
+                conversation.note("Camera permission denied.")
                 return@launch
             }
 
-            conversation.note("👁️ Visão ativada")
+            conversation.note("👁️ Vision on")
 
             cameraSource.runBurst(durationMs) { jpeg ->
 
@@ -142,7 +142,7 @@ class AgentController @Inject constructor(
                 sessionKeeper.sendFrame(jpeg)
             }
 
-            conversation.note("Visão desativada")
+            conversation.note("Vision off")
         }
     }
 

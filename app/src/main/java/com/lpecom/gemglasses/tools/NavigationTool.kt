@@ -11,48 +11,48 @@ import kotlinx.serialization.json.put
 import javax.inject.Inject
 
 /**
- * `iniciar_navegacao` — launches turn-by-turn navigation in Google Maps.
+ * `start_navigation` — launches turn-by-turn navigation in Google Maps.
  * Falls back to a universal Maps URL if the Maps app is not installed.
  */
 class NavigationTool @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : AgentTool {
 
-    override val name = "iniciar_navegacao"
+    override val name = "start_navigation"
 
     override val declaration = FunctionDeclaration(
         name = name,
-        description = "Inicia navegação por GPS até um destino no Google Maps. " +
-            "Use quando o usuário pedir para ir a algum lugar.",
+        description = "Starts GPS navigation to a destination in Google Maps. " +
+            "Use when the user asks to go somewhere.",
         parameters = schema(
             """
             {
               "type": "object",
               "properties": {
-                "destino": {
+                "destination": {
                   "type": "string",
-                  "description": "Endereço ou nome do lugar de destino."
+                  "description": "Destination address or place name."
                 },
-                "modo": {
+                "mode": {
                   "type": "string",
                   "enum": ["driving", "walking", "transit"],
-                  "description": "Modo de transporte. Padrão: driving."
+                  "description": "Transportation mode. Default: driving."
                 }
               },
-              "required": ["destino"]
+              "required": ["destination"]
             }
             """
         ),
     )
 
     override suspend fun execute(args: JsonObject): JsonObject {
-        val destino = args.requireString("destino")
-        val modo = args.optString("modo", "driving")
+        val destination = args.requireString("destination")
+        val mode = args.optString("mode", "driving")
 
-        val encoded = Uri.encode(destino)
+        val encoded = Uri.encode(destination)
         val navIntent = Intent(
             Intent.ACTION_VIEW,
-            Uri.parse("google.navigation:q=$encoded&mode=${modeFlag(modo)}"),
+            Uri.parse("google.navigation:q=$encoded&mode=${modeFlag(mode)}"),
         ).apply {
             setPackage("com.google.android.apps.maps")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -64,7 +64,7 @@ class NavigationTool @Inject constructor(
                 Intent.ACTION_VIEW,
                 Uri.parse(
                     "https://www.google.com/maps/dir/?api=1" +
-                        "&destination=$encoded&travelmode=$modo",
+                        "&destination=$encoded&travelmode=$mode",
                 ),
             ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
             runCatching { context.startActivity(web) }
@@ -72,13 +72,13 @@ class NavigationTool @Inject constructor(
 
         return buildJsonObject {
             put("status", "started")
-            put("destino", destino)
-            put("modo", modo)
+            put("destination", destination)
+            put("mode", mode)
         }
     }
 
     // Maps' google.navigation scheme uses single-letter mode flags.
-    private fun modeFlag(modo: String) = when (modo) {
+    private fun modeFlag(mode: String) = when (mode) {
         "walking" -> "w"
         "transit" -> "r"
         else -> "d"

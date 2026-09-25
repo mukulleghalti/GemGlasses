@@ -14,7 +14,7 @@ object Models {
     /** Native-audio Live model: speech-to-speech, VAD, barge-in in one socket. */
     const val GEMINI_LIVE_MODEL = "gemini-3.8-live"
 
-    /** REST model used for `buscar_lugares` (generateContent + Maps grounding). */
+    /** REST model used for `search_places` (generateContent + Maps grounding). */
     const val GEMINI_GROUNDING_MODEL = "gemini-2.5-flash"
 
     /** BidiGenerateContent WebSocket endpoint (host only; token is a query param). */

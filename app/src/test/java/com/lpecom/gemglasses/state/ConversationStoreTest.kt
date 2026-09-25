@@ -19,8 +19,8 @@ class ConversationStoreTest {
     @Test
     fun `switching speaker starts a new line`() {
         val store = ConversationStore()
-        store.appendTranscript("Cadê o café?", TranscriptEntry.Speaker.USER)
-        store.appendTranscript("Perto de você:", TranscriptEntry.Speaker.ASSISTANT)
+        store.appendTranscript("Where's the coffee?", TranscriptEntry.Speaker.USER)
+        store.appendTranscript("Near you:", TranscriptEntry.Speaker.ASSISTANT)
 
         val entries = store.entries.value
         assertEquals(2, entries.size)
@@ -38,11 +38,11 @@ class ConversationStoreTest {
     @Test
     fun `places de-duplicate by uri`() {
         val store = ConversationStore()
-        store.addPlaces(listOf(CitedPlace("Café A", "https://maps/a")))
+        store.addPlaces(listOf(CitedPlace("Cafe A", "https://maps/a")))
         store.addPlaces(
             listOf(
-                CitedPlace("Café A (dup)", "https://maps/a"),
-                CitedPlace("Café B", "https://maps/b"),
+                CitedPlace("Cafe A (dup)", "https://maps/a"),
+                CitedPlace("Cafe B", "https://maps/b"),
             ),
         )
         assertEquals(2, store.places.value.size)

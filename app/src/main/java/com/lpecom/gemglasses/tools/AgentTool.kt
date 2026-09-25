@@ -12,7 +12,7 @@ import kotlinx.serialization.json.JsonObject
  * spec (see CLAUDE.md / docs).
  */
 interface AgentTool {
-    /** Function name as the model sees it (e.g. "buscar_lugares"). */
+    /** Function name as the model sees it (e.g. "search_places"). */
     val name: String
 
     /** The declaration advertised to Gemini in the setup message. */
