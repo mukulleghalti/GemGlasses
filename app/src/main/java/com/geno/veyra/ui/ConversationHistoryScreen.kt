@@ -48,6 +48,7 @@ private val turnTimeFormat =
 private fun formatDate(millis: Long): String =
     sessionDateFormat.format(Date(millis))
 
+@Composable
 private fun speakerLabel(speaker: String): String =
     if (speaker == "USER") stringResource(R.string.transcript_you) else "Veyra"
 
