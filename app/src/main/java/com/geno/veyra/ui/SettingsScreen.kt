@@ -144,6 +144,18 @@ fun SettingsScreen(
             onClick = { showMemoriesDialog = true },
         )
 
+        SectionLabel("AI Settings")
+        SettingRow(
+            title = "Web Search",
+            subtitle = "Let the assistant access up-to-date online information",
+            trailing = {
+                Switch(
+                    checked = prefs.webSearchEnabled,
+                    onCheckedChange = { viewModel.setWebSearchEnabled(it) },
+                )
+            },
+        )
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()

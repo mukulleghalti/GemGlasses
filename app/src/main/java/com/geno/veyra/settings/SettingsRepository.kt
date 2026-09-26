@@ -101,6 +101,7 @@ data class AgentPreferences(
     val stopPhrase: String,
     val audioOutput: AudioOutput,
     val bargeInEnabled: Boolean,
+    val webSearchEnabled: Boolean,
 ) {
     /** Built here so the persona text stays in one place. */
     val systemInstruction: String
@@ -113,6 +114,13 @@ data class AgentPreferences(
                     "\"in 20 minutes\" or \"at 6pm\" into epoch " +
                     "milliseconds for set_reminder.",
             )
+            if (webSearchEnabled) {
+                append(
+                    "\n\nWeb search is enabled: use it for current, " +
+                        "time-sensitive, or explicitly requested online " +
+                        "information instead of relying on training data.",
+                )
+            }
         }
 
     private fun currentDateTime(): String =
@@ -133,6 +141,7 @@ data class AgentPreferences(
             stopPhrase = DEFAULT_STOP_PHRASE,
             audioOutput = AudioOutput.GLASSES,
             bargeInEnabled = true,
+            webSearchEnabled = false,
         )
 
         /** Default wake phrase ("Hey Glasses"). Lowercase: Vosk decodes lowercase. */
@@ -206,6 +215,9 @@ class SettingsRepository @Inject constructor(
     private val bargeInEnabledKey =
         booleanPreferencesKey("barge_in_enabled")
 
+    private val webSearchEnabledKey =
+        booleanPreferencesKey("web_search_enabled")
+
     private val translateSourceLangKey =
         stringPreferencesKey("translate_source_lang")
 
@@ -277,6 +289,10 @@ class SettingsRepository @Inject constructor(
                 bargeInEnabled =
                     prefs[bargeInEnabledKey]
                         ?: AgentPreferences.DEFAULT.bargeInEnabled,
+
+                webSearchEnabled =
+                    prefs[webSearchEnabledKey]
+                        ?: AgentPreferences.DEFAULT.webSearchEnabled,
             )
         }
 
@@ -350,6 +366,14 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[bargeInEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setWebSearchEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[webSearchEnabledKey] = enabled
         }
     }
 }

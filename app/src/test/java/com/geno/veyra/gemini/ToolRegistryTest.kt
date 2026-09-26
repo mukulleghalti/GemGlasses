@@ -29,8 +29,22 @@ class ToolRegistryTest {
                 FakeTool("b") { buildJsonObject { } },
             ),
         )
-        val decls = registry.asLiveTools().single().functionDeclarations!!
+        val tools = registry.asLiveTools(webSearchEnabled = false)
+        val decls = tools.single().functionDeclarations!!
         assertEquals(setOf("a", "b"), decls.map { it.name }.toSet())
+    }
+
+    @Test
+    fun `asLiveTools adds the Google Search tool only when enabled`() {
+        val registry = ToolRegistry(emptySet())
+
+        val without = registry.asLiveTools(webSearchEnabled = false)
+        assertEquals(1, without.size)
+        assertEquals(null, without.single().googleSearch)
+
+        val with = registry.asLiveTools(webSearchEnabled = true)
+        assertEquals(2, with.size)
+        assertEquals(true, with.last().googleSearch != null)
     }
 
     @Test

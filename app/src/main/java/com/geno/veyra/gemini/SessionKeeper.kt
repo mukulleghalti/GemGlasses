@@ -27,6 +27,12 @@ data class SessionConfig(
      * was firing on phone-speaker echo and making the model stutter).
      */
     val bargeInEnabled: Boolean = true,
+    /**
+     * Whether the session declares Gemini's built-in Google Search
+     * grounding tool. Off by default: searches are billed per query
+     * and add latency to the conversation.
+     */
+    val webSearchEnabled: Boolean = false,
 )
 
 /**
@@ -237,7 +243,7 @@ class SessionKeeper @Inject constructor(
                 voiceName = config.voiceName,
                 languageCode = config.languageCode,
                 bargeInEnabled = config.bargeInEnabled,
-                liveTools = toolRegistry.asLiveTools(),
+                liveTools = toolRegistry.asLiveTools(config.webSearchEnabled),
                 resumeHandle = resumeHandle,
             )
 

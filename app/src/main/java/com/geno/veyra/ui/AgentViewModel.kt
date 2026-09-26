@@ -222,6 +222,16 @@ class AgentViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Toggles web search: whether the assistant may use Google Search
+     * grounding during a session.
+     */
+    fun setWebSearchEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setWebSearchEnabled(enabled)
+        }
+    }
+
     // --- Gemini API key --------------------------------------------------
 
     /** Status of the saved API key, as last verified against Google. */

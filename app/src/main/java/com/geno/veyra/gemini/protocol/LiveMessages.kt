@@ -126,7 +126,16 @@ data class Part(
 @Serializable
 data class Tool(
     val functionDeclarations: List<FunctionDeclaration>? = null,
+    val googleSearch: GoogleSearch? = null,
 )
+
+/**
+ * Gemini's built-in web-search grounding tool. Serializes as
+ * `{ "googleSearch": {} }`; declared alongside function declarations
+ * in the Live setup's `tools` array.
+ */
+@Serializable
+class GoogleSearch
 
 @Serializable
 data class FunctionDeclaration(

@@ -3,6 +3,7 @@ package com.geno.veyra.gemini
 import android.util.Log
 import com.geno.veyra.gemini.protocol.FunctionCall
 import com.geno.veyra.gemini.protocol.FunctionResponse
+import com.geno.veyra.gemini.protocol.GoogleSearch
 import com.geno.veyra.gemini.protocol.Tool
 import com.geno.veyra.tools.AgentTool
 import kotlinx.serialization.json.buildJsonObject
@@ -20,9 +21,19 @@ class ToolRegistry @Inject constructor(
 ) {
     private val byName: Map<String, AgentTool> = tools.associateBy { it.name }
 
-    /** The single `tools` entry sent in the Live setup message. */
-    fun asLiveTools(): List<Tool> =
-        listOf(Tool(functionDeclarations = byName.values.map { it.declaration }))
+    /** The `tools` array sent in the Live setup message. */
+    fun asLiveTools(webSearchEnabled: Boolean): List<Tool> =
+        buildList {
+            add(
+                Tool(
+                    functionDeclarations =
+                        byName.values.map { it.declaration },
+                ),
+            )
+            if (webSearchEnabled) {
+                add(Tool(googleSearch = GoogleSearch()))
+            }
+        }
 
     /** Runs one function call and packages the response for the socket. */
     suspend fun dispatch(call: FunctionCall): FunctionResponse {

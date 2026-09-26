@@ -154,6 +154,7 @@ class AgentController @Inject constructor(
                     voiceName = prefs.voiceName,
                     languageCode = prefs.languageCode,
                     bargeInEnabled = bargeInEnabled,
+                    webSearchEnabled = prefs.webSearchEnabled,
                 ),
             )
         }
