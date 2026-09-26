@@ -85,6 +85,13 @@ android {
         buildConfig = true
     }
 
+    lint {
+        // lintVital crashes on release builds (AGP lint bug in
+        // NonNullableMutableLiveDataDetector); the check itself is
+        // irrelevant here, so disable just that detector.
+        disable("NullSafeMutableLiveData")
+    }
+
     sourceSets {
         getByName("main") {
             java.srcDir("src/realGlasses/java")
