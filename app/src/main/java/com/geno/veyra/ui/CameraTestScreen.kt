@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -133,11 +134,15 @@ fun CameraTestScreen(
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         }
 
-        // Slim top bar: back + status.
+        // Slim top bar: back + status. statusBarsPadding() keeps it
+        // clear of the status bar (this screen draws edge-to-edge).
+        // The scrim is drawn before the inset so it also sits
+        // behind the status icons for contrast.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color.Black.copy(alpha = 0.55f))
+                .statusBarsPadding()
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -172,7 +177,7 @@ fun CameraTestScreen(
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 60.dp)
+                    .padding(top = 96.dp)
                     .background(
                         Color(0xFFC62828),
                         RoundedCornerShape(16.dp),
@@ -189,7 +194,7 @@ fun CameraTestScreen(
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 60.dp)
+                    .padding(top = 96.dp)
                     .background(
                         MaterialTheme.colorScheme.errorContainer,
                         RoundedCornerShape(10.dp),
