@@ -21,15 +21,48 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * User-visible camera state, kept as data (not raw strings) so the
+ * composable can render it through string resources.
+ */
+sealed interface CameraTestStatus {
+    data object Ready : CameraTestStatus
+    data object Starting : CameraTestStatus
+    data object PermissionNeeded : CameraTestStatus
+    data object Stopped : CameraTestStatus
+    data object Error : CameraTestStatus
+    data object PhotoCaptured : CameraTestStatus
+    data object CaptureFailed : CameraTestStatus
+    data object RecordingFailed : CameraTestStatus
+    data object VideoSaved : CameraTestStatus
+    data object VideoSavedNoAudio : CameraTestStatus
+    data object RecordingStopped : CameraTestStatus
+    data class Live(val width: Int, val height: Int) : CameraTestStatus
+    data class Recording(val durationText: String) : CameraTestStatus
+}
+
+/**
+ * User-visible camera error, kept as data so the composable can render it
+ * through string resources. [Runtime] carries an unexpected exception
+ * message, which is intentionally never translated.
+ */
+sealed interface CameraTestError {
+    data object PermissionNeeded : CameraTestError
+    data object JpegDecodeFailed : CameraTestError
+    data object NoVideoFile : CameraTestError
+    data class RecorderFrame(val detail: String) : CameraTestError
+    data class Runtime(val message: String) : CameraTestError
+}
+
 data class CameraTestUiState(
-    val status: String = "Ready",
+    val status: CameraTestStatus = CameraTestStatus.Ready,
     val streaming: Boolean = false,
     val capturing: Boolean = false,
     val recording: Boolean = false,
     val recordingDurationMs: Long = 0L,
     val capturedPhoto: android.graphics.Bitmap? = null,
     val savedVideoUri: android.net.Uri? = null,
-    val error: String? = null,
+    val error: CameraTestError? = null,
 )
 
 @HiltViewModel
@@ -91,7 +124,7 @@ class CameraTestViewModel @Inject constructor(
 
         _uiState.value =
             _uiState.value.copy(
-                status = "Starting camera…",
+                status = CameraTestStatus.Starting,
                 streaming = false,
                 error = null,
             )
@@ -129,9 +162,8 @@ class CameraTestViewModel @Inject constructor(
 
                         _uiState.value =
                             _uiState.value.copy(
-                                status = "Camera permission needed",
-                                error = "Grant the Meta glasses camera " +
-                                    "permission to preview.",
+                                status = CameraTestStatus.PermissionNeeded,
+                                error = CameraTestError.PermissionNeeded,
                                 streaming = false,
                             )
 
@@ -214,13 +246,16 @@ class CameraTestViewModel @Inject constructor(
                                             if (
                                                 _uiState.value.recording
                                             ) {
-                                                "Recording — ${
+                                                CameraTestStatus.Recording(
                                                     formatDuration(
                                                         _uiState.value.recordingDurationMs
-                                                    )
-                                                }"
+                                                    ),
+                                                )
                                             } else {
-                                                "Live — ${frame.width} × ${frame.height}"
+                                                CameraTestStatus.Live(
+                                                    frame.width,
+                                                    frame.height,
+                                                )
                                             },
                                         streaming = true,
                                         error = null,
@@ -276,10 +311,10 @@ class CameraTestViewModel @Inject constructor(
                                     _uiState.value =
                                         _uiState.value.copy(
                                             error =
-                                                "Recorder frame error: ${
+                                                CameraTestError.RecorderFrame(
                                                     e.message
-                                                        ?: e::class.java.simpleName
-                                                }",
+                                                        ?: e::class.java.simpleName,
+                                                ),
                                         )
                                 }
                             }
@@ -302,7 +337,7 @@ class CameraTestViewModel @Inject constructor(
 
                     _uiState.value =
                         _uiState.value.copy(
-                            status = "Camera stopped",
+                            status = CameraTestStatus.Stopped,
                             streaming = false,
                         )
 
@@ -334,12 +369,14 @@ class CameraTestViewModel @Inject constructor(
 
                     _uiState.value =
                         _uiState.value.copy(
-                            status = "Camera error",
+                            status = CameraTestStatus.Error,
                             streaming = false,
                             recording = false,
                             error =
-                                e.message
-                                    ?: e::class.java.simpleName,
+                                CameraTestError.Runtime(
+                                    e.message
+                                        ?: e::class.java.simpleName,
+                                ),
                         )
                 }
             }
@@ -401,8 +438,7 @@ class CameraTestViewModel @Inject constructor(
                             _uiState.value =
                                 _uiState.value.copy(
                                     capturing = false,
-                                    error =
-                                        "Photo captured but could not decode JPEG",
+                                    error = CameraTestError.JpegDecodeFailed,
                                 )
 
                         } else {
@@ -417,7 +453,7 @@ class CameraTestViewModel @Inject constructor(
                                 _uiState.value.copy(
                                     capturing = false,
                                     capturedPhoto = bitmap,
-                                    status = "Photo captured",
+                                    status = CameraTestStatus.PhotoCaptured,
                                     error = null,
                                 )
                         }
@@ -434,9 +470,11 @@ class CameraTestViewModel @Inject constructor(
                             _uiState.value.copy(
                                 capturing = false,
                                 error =
-                                    error.message
-                                        ?: error::class.java.simpleName,
-                                status = "Capture failed",
+                                    CameraTestError.Runtime(
+                                        error.message
+                                            ?: error::class.java.simpleName,
+                                    ),
+                                status = CameraTestStatus.CaptureFailed,
                             )
                     }
 
@@ -452,9 +490,11 @@ class CameraTestViewModel @Inject constructor(
                     _uiState.value.copy(
                         capturing = false,
                         error =
-                            e.message
-                                ?: e::class.java.simpleName,
-                        status = "Capture failed",
+                            CameraTestError.Runtime(
+                                e.message
+                                    ?: e::class.java.simpleName,
+                            ),
+                        status = CameraTestStatus.CaptureFailed,
                     )
             }
         }
@@ -513,9 +553,11 @@ class CameraTestViewModel @Inject constructor(
             _uiState.value =
                 _uiState.value.copy(
                     error =
-                        e.message
-                            ?: e::class.java.simpleName,
-                    status = "Recording failed",
+                        CameraTestError.Runtime(
+                            e.message
+                                ?: e::class.java.simpleName,
+                        ),
+                    status = CameraTestStatus.RecordingFailed,
                 )
 
             return
@@ -530,7 +572,7 @@ class CameraTestViewModel @Inject constructor(
                 recordingDurationMs = 0L,
                 savedVideoUri = null,
                 error = null,
-                status = "Recording — 00:00",
+                status = CameraTestStatus.Recording(formatDuration(0L)),
             )
 
         Log.i(
@@ -553,9 +595,9 @@ class CameraTestViewModel @Inject constructor(
                         _uiState.value.copy(
                             recordingDurationMs = elapsed,
                             status =
-                                "Recording — ${
-                                    formatDuration(elapsed)
-                                }",
+                                CameraTestStatus.Recording(
+                                    formatDuration(elapsed),
+                                ),
                         )
                 }
             }
@@ -613,16 +655,16 @@ class CameraTestViewModel @Inject constructor(
                 status =
                     if (uri != null) {
                         if (videoRecorder.lastRecordingHadAudio()) {
-                            "Video saved"
+                            CameraTestStatus.VideoSaved
                         } else {
-                            "Video saved (no audio)"
+                            CameraTestStatus.VideoSavedNoAudio
                         }
                     } else {
-                        "Recording stopped"
+                        CameraTestStatus.RecordingStopped
                     },
                 error =
                     if (uri == null) {
-                        "No video file was created"
+                        CameraTestError.NoVideoFile
                     } else {
                         null
                     },
@@ -655,7 +697,7 @@ class CameraTestViewModel @Inject constructor(
 
         _uiState.value =
             _uiState.value.copy(
-                status = "Camera stopped",
+                status = CameraTestStatus.Stopped,
                 streaming = false,
                 capturing = false,
                 recording = false,

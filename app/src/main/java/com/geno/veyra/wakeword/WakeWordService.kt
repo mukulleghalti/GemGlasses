@@ -17,6 +17,7 @@ import com.geno.veyra.MainActivity
 import com.geno.veyra.R
 import com.geno.veyra.service.AssistantStarter
 import com.geno.veyra.settings.AgentPreferences
+import com.geno.veyra.settings.AppLocaleStore
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +35,11 @@ import javax.inject.Inject
  */
 @AndroidEntryPoint
 class WakeWordService : Service() {
+
+    override fun attachBaseContext(newBase: Context) {
+        // Show the wake-word notification in the chosen app language.
+        super.attachBaseContext(AppLocaleStore.wrapWithAppLocale(newBase))
+    }
 
     @Inject
     lateinit var engine: WakeWordEngine

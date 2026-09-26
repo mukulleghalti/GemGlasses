@@ -1,11 +1,13 @@
 package com.geno.veyra.settings
 
 import android.content.Context
+import androidx.annotation.StringRes
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.geno.veyra.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -19,12 +21,14 @@ import javax.inject.Singleton
 enum class CameraResolution(
     val storageValue: String,
     val label: String,
+    @StringRes val labelRes: Int,
     val width: Int,
     val height: Int,
 ) {
     LOW(
         storageValue = "low",
         label = "Low — 360 × 640",
+        labelRes = R.string.camera_resolution_low,
         width = 360,
         height = 640,
     ),
@@ -32,6 +36,7 @@ enum class CameraResolution(
     MEDIUM(
         storageValue = "medium",
         label = "Medium — 504 × 896",
+        labelRes = R.string.camera_resolution_medium,
         width = 504,
         height = 896,
     ),
@@ -39,6 +44,7 @@ enum class CameraResolution(
     HIGH(
         storageValue = "high",
         label = "High — 720 × 1280",
+        labelRes = R.string.camera_resolution_high,
         width = 720,
         height = 1280,
     );
@@ -55,7 +61,7 @@ enum class CameraResolution(
 /** Where the assistant's voice plays — and, paired with it, which mic listens. */
 enum class AudioOutput(
     val storageValue: String,
-    val label: String,
+    @StringRes val labelRes: Int,
 ) {
     /**
      * Voice through the glasses over the high-quality music channel;
@@ -63,7 +69,7 @@ enum class AudioOutput(
      */
     GLASSES(
         storageValue = "glasses",
-        label = "Glasses",
+        labelRes = R.string.settings_audio_glasses,
     ),
 
     /**
@@ -72,7 +78,7 @@ enum class AudioOutput(
      */
     PHONE_SPEAKER(
         storageValue = "phone_speaker",
-        label = "Phone speaker",
+        labelRes = R.string.settings_audio_phone,
     );
 
     companion object {
@@ -203,6 +209,55 @@ private val Context.dataStore by preferencesDataStore(
     name = "veyra_settings"
 )
 
+/**
+ * UI language options offered in Settings. The stored value is a BCP-47
+ * language tag, or `null` for "follow the system language".
+ */
+enum class AppLanguage(val tag: String?) {
+    SYSTEM(null),
+    ENGLISH("en"),
+    SPANISH("es"),
+    PORTUGUESE("pt"),
+    FRENCH("fr"),
+    ;
+
+    companion object {
+        fun fromTag(tag: String?): AppLanguage =
+            entries.firstOrNull { it.tag == tag } ?: SYSTEM
+    }
+}
+
+/**
+ * Synchronous SharedPreferences cache of the chosen app language.
+ *
+ * DataStore reads are asynchronous, but `MainActivity.attachBaseContext`
+ * must decide the locale synchronously before any resources load, so the
+ * language choice is mirrored here on every save. This cache holds no
+ * other settings.
+ */
+object AppLocaleStore {
+    private const val PREFS_NAME = "veyra_locale"
+    private const val KEY_APP_LANGUAGE = "app_language"
+
+    fun cachedAppLanguageTag(context: Context): String? =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_APP_LANGUAGE, null)
+
+    fun cacheAppLanguageTag(context: Context, tag: String?) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_APP_LANGUAGE, tag)
+            .apply()
+    }
+
+    /**
+     * Wraps [context] with the cached app locale. Safe to call from a
+     * `BroadcastReceiver` or anywhere a locale-aware `Context` is needed.
+     */
+    fun wrapWithAppLocale(context: Context): Context =
+        LocaleHelper.wrapForLocale(context, cachedAppLanguageTag(context))
+}
+
 @Singleton
 class SettingsRepository @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -210,6 +265,9 @@ class SettingsRepository @Inject constructor(
 
     private val langKey =
         stringPreferencesKey("language_code")
+
+    private val appLanguageKey =
+        stringPreferencesKey("app_language")
 
     private val voiceKey =
         stringPreferencesKey("voice_name")
@@ -351,6 +409,28 @@ class SettingsRepository @Inject constructor(
         context.dataStore.edit {
             it[langKey] = code
         }
+    }
+
+    /**
+     * App UI language as a BCP-47 tag, or `null` for the system language.
+     * Separate from [AgentPreferences.languageCode], which controls the
+     * assistant's spoken language.
+     */
+    val appLanguage: Flow<String?> =
+        context.dataStore.data.map { prefs ->
+            prefs[appLanguageKey]
+        }
+
+    suspend fun setAppLanguage(tag: String?) {
+        context.dataStore.edit {
+            if (tag == null) {
+                it.remove(appLanguageKey)
+            } else {
+                it[appLanguageKey] = tag
+            }
+        }
+        // Mirror into the synchronous cache read by attachBaseContext.
+        AppLocaleStore.cacheAppLanguageTag(context, tag)
     }
 
     suspend fun setVoice(voice: String) {

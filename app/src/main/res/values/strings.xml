@@ -1,10 +1,225 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Veyra</string>
-        <string name="notification_channel">Assistant Session</string>
-            <string name="notification_title">Veyra Active</string>
-                <string name="notification_text">Gemini Assistant listening through glasses</string>
-        <string name="wakeword_channel">Voice Wake-Up</string>
-            <string name="wakeword_title">Listening for wake word</string>
-                <string name="wakeword_text">Say \"%1$s\" to start the assistant</string>
-                </resources>
+    <string name="notification_channel">Assistant Session</string>
+    <string name="notification_title">Veyra Active</string>
+    <string name="notification_text">Gemini Assistant listening through glasses</string>
+    <string name="wakeword_channel">Voice Wake-Up</string>
+    <string name="wakeword_title">Listening for wake word</string>
+    <string name="wakeword_text">Say \"%1$s\" to start the assistant</string>
+
+    <!-- Common -->
+    <string name="common_done">Done</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_connecting">Connecting…</string>
+    <string name="common_assistant">Assistant</string>
+    <string name="common_translate">Translate</string>
+    <string name="common_settings">Settings</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">Home</string>
+
+    <!-- Home -->
+    <string name="home_tagline">Gemini for your glasses</string>
+    <string name="home_api_key">API key</string>
+    <string name="home_glasses_title">Glasses</string>
+    <string name="home_no_device">No device found</string>
+    <string name="home_connected">Connected</string>
+    <string name="home_connection_error">Connection error</string>
+    <string name="home_registered_not_connected">Registered — not connected</string>
+    <string name="home_register_glasses">Register glasses</string>
+    <string name="home_register_hint">Opens the Meta app to pair &amp; register</string>
+    <string name="home_connecting_to_glasses">Connecting to glasses…</string>
+    <string name="home_glasses_connected">Glasses connected</string>
+    <string name="home_retry_connection">Retry connection</string>
+    <string name="home_connect_glasses">Connect glasses</string>
+    <string name="home_stop_assistant">Stop Assistant</string>
+    <string name="home_start_assistant">Start Assistant</string>
+    <string name="home_assistant_hint">Talk to Gemini through your glasses</string>
+    <string name="home_tile_camera_test">Camera Test</string>
+    <string name="home_tile_camera_test_sub">Check glasses feed</string>
+    <string name="home_tile_translate_sub">Live translation</string>
+
+    <!-- Agent / registration status labels -->
+    <string name="status_stopped">Stopped</string>
+    <string name="status_listening">Listening</string>
+    <string name="status_reconnecting">Reconnecting…</string>
+    <string name="status_error">Error</string>
+    <string name="reg_registered">Registered</string>
+    <string name="reg_registering">Registering…</string>
+    <string name="reg_not_registered">Not registered</string>
+    <string name="reg_revoked">Registration revoked — reconnect</string>
+    <string name="reg_unknown">Status unknown</string>
+
+    <!-- Assistant tab -->
+    <string name="assistant_menu_desc">Conversations</string>
+    <string name="assistant_mute_desc">Mute mic</string>
+    <string name="assistant_unmute_desc">Unmute mic</string>
+    <string name="assistant_drawer_title">Conversations</string>
+    <string name="assistant_new_conversation">New conversation</string>
+    <string name="assistant_idle_hint">Just a tap away</string>
+    <string name="assistant_live">Live</string>
+    <string name="assistant_ended">Ended</string>
+    <string name="assistant_empty_transcript">The conversation will appear here when the session starts.</string>
+    <string name="assistant_cited_places">Cited Places (Google Maps)</string>
+    <string name="transcript_you">You</string>
+    <string name="transcript_system">System</string>
+    <string name="captured_photo_desc">Captured photo</string>
+    <string name="captured_photo_error">Captured photo could not be displayed.</string>
+
+    <!-- Conversation history -->
+    <string name="history_delete_all_title">Delete all conversations?</string>
+    <string name="history_delete_all_message">This permanently deletes every archived session from this device. This cannot be undone.</string>
+    <string name="history_delete_all_confirm">Delete all</string>
+    <string name="history_title">Conversation history</string>
+    <string name="history_clear_all">Clear all</string>
+    <string name="history_subtitle">Past assistant sessions, stored only on this device. Tap one to read it, or search across all of them.</string>
+    <string name="history_search_label">Search conversations</string>
+    <string name="history_empty">No archived conversations yet. End an assistant session and it will appear here.</string>
+    <string name="history_no_text">(no text captured)</string>
+    <plurals name="history_turns">
+        <item quantity="one">%d turn</item>
+        <item quantity="other">%d turns</item>
+    </plurals>
+    <string name="history_no_matches">No matches for \"%1$s\".</string>
+    <string name="history_delete_one_title">Delete this conversation?</string>
+    <string name="history_delete_one_message">This permanently deletes the session from %1$s. This cannot be undone.</string>
+    <string name="history_back">← Back</string>
+
+    <!-- Settings -->
+    <string name="settings_section_general">General</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_system">System default</string>
+    <string name="settings_language_dialog_title">App language</string>
+    <string name="settings_section_assistant">Assistant</string>
+    <string name="settings_section_wakeup">Wake-up</string>
+    <string name="settings_section_memory">Memory</string>
+    <string name="settings_section_ai">AI Settings</string>
+    <string name="settings_section_advanced">Advanced</string>
+    <string name="settings_voice">Voice</string>
+    <string name="settings_audio_output">Audio output</string>
+    <string name="settings_barge_in">Barge-in</string>
+    <string name="settings_barge_in_sub">Talking over the assistant cuts it off</string>
+    <string name="settings_stop_phrase">Stop phrase</string>
+    <string name="settings_voice_wakeup">Voice wake-up</string>
+    <string name="settings_wake_on">On</string>
+    <string name="settings_wake_off">Off</string>
+    <string name="settings_memories">Memories</string>
+    <plurals name="settings_memories_saved">
+        <item quantity="one">%d saved</item>
+        <item quantity="other">%d saved</item>
+    </plurals>
+    <string name="settings_web_search">Web Search</string>
+    <string name="settings_web_search_sub">Let the assistant access up-to-date online information</string>
+    <string name="settings_gemini_model">Gemini Model</string>
+    <string name="settings_auto_titles">Auto History Titles</string>
+    <string name="settings_auto_titles_sub">Generate short titles for past conversations</string>
+    <string name="settings_qr_scan">QR Bar Scan</string>
+    <string name="settings_qr_scan_sub">Let the assistant scan QR codes and barcodes</string>
+    <string name="settings_ocr">OCR</string>
+    <string name="settings_ocr_sub">Let the assistant read text from what it sees</string>
+    <string name="settings_api_key">Gemini API key</string>
+    <string name="settings_api_key_set">Set</string>
+    <string name="settings_api_key_not_set">Not set</string>
+    <string name="settings_check_connection">Check Connection</string>
+    <string name="settings_conn_checking">Checking…</string>
+    <string name="settings_conn_ok">Connection OK</string>
+    <string name="settings_conn_tap">Tap to test</string>
+    <string name="settings_conn_missing">No key saved</string>
+    <string name="settings_conn_fallback">Couldn\'t verify the key.</string>
+    <string name="settings_privacy_note">Transcripts stay on this device and are never synced.</string>
+    <string name="settings_save">Save</string>
+    <string name="settings_voice_dialog_title">Assistant voice</string>
+    <string name="settings_voices_group">%1$s voices</string>
+    <string name="settings_voice_female">Female</string>
+    <string name="settings_voice_male">Male</string>
+    <string name="settings_model_default_sub">Default · low-latency voice</string>
+    <string name="settings_model_legacy_sub">Legacy fallback</string>
+    <string name="settings_audio_dialog_title">Audio output</string>
+    <string name="settings_audio_desc">Glasses: voice plays through the glasses in high quality and the phone\'s mic listens. Phone speaker: voice plays on the phone and the glasses\' mic listens while they\'re connected.</string>
+    <string name="settings_audio_glasses">Glasses</string>
+    <string name="settings_audio_phone">Phone speaker</string>
+    <string name="settings_stop_dialog_title">Stop phrase</string>
+    <string name="settings_stop_desc">Saying this while the assistant is listening ends the session.</string>
+    <string name="settings_stop_custom">Custom: “%1$s”</string>
+    <string name="settings_stop_custom_label">Custom phrase</string>
+    <string name="settings_wake_dialog_title">Voice wake-up</string>
+    <string name="settings_wake_listen">Listen for wake word</string>
+    <string name="settings_wake_mic_needed">Microphone permission is required. Grant it by tapping the + button on the Assistant tab once.</string>
+    <string name="settings_wake_phrase_label">Wake phrase</string>
+    <string name="settings_wake_custom_label">Custom wake phrase</string>
+    <string name="settings_wake_vocab_note">Only words the offline voice model knows will trigger — common English words are safest.</string>
+    <string name="settings_wake_model_download">Voice model downloads on first use (~40 MB, Wi-Fi recommended).</string>
+    <string name="settings_wake_model_downloading">Downloading voice model…</string>
+    <string name="settings_wake_model_downloading_pct">Downloading voice model… %1$d%%</string>
+    <string name="settings_wake_model_ready">Voice model ready.</string>
+    <string name="settings_wake_model_error">Voice model error: %1$s</string>
+    <string name="settings_memories_title">Memories</string>
+    <string name="settings_memories_empty">Nothing saved yet. Say “remember this …” in a session to add one.</string>
+    <string name="settings_apikey_dialog_title">Gemini API key</string>
+    <string name="settings_apikey_label">API key</string>
+    <string name="settings_apikey_hide">Hide key</string>
+    <string name="settings_apikey_show">Show key</string>
+    <string name="settings_apikey_save_test">Save &amp; test</string>
+    <string name="settings_apikey_remove">Remove</string>
+    <string name="settings_apikey_unchecked">Key saved — tap Save &amp; test to verify it.</string>
+    <string name="settings_apikey_checking">Verifying key with Google…</string>
+    <string name="settings_apikey_valid">Key verified — the assistant is ready.</string>
+    <string name="settings_apikey_invalid">Key problem: %1$s</string>
+    <string name="settings_apikey_missing">No key saved yet.</string>
+    <string name="settings_apikey_note">Get a free key from Google AI Studio. It\'s stored encrypted on this phone and sent only to Google — the app mints its own short-lived tokens, no server in the middle.</string>
+
+    <!-- Translate -->
+    <string name="translate_from">From</string>
+    <string name="translate_to">To</string>
+    <string name="translate_swap_desc">Swap languages</string>
+    <string name="translate_empty">Tap the microphone and start talking — the translation appears here.</string>
+    <string name="translate_start">Start translating</string>
+    <string name="translate_stop">Stop</string>
+    <string name="translate_retry">Retry</string>
+    <string name="translate_clear_desc">Clear history</string>
+    <string name="translate_error">Couldn\'t reach the translator. Check your connection and retry.</string>
+
+    <!-- Camera settings -->
+    <string name="camera_settings_title">Camera Settings</string>
+    <string name="camera_settings_note">These settings apply the next time the camera starts.</string>
+    <string name="camera_resolution">Resolution</string>
+    <string name="camera_resolution_low">Low — 360 × 640</string>
+    <string name="camera_resolution_medium">Medium — 504 × 896</string>
+    <string name="camera_resolution_high">High — 720 × 1280</string>
+    <string name="camera_frame_rate">Frame Rate</string>
+    <string name="camera_fps">%1$d FPS</string>
+    <string name="camera_current">Current: %1$s, %2$d FPS</string>
+
+    <!-- Camera test -->
+    <string name="camera_back">Back</string>
+    <string name="camera_status_ready">Ready</string>
+    <string name="camera_status_starting">Starting camera…</string>
+    <string name="camera_status_permission">Camera permission needed</string>
+    <string name="camera_status_stopped">Camera stopped</string>
+    <string name="camera_status_error">Camera error</string>
+    <string name="camera_status_photo">Photo captured</string>
+    <string name="camera_status_capture_failed">Capture failed</string>
+    <string name="camera_status_rec_failed">Recording failed</string>
+    <string name="camera_status_recording">Recording — %1$s</string>
+    <string name="camera_status_live">Live — %1$d × %2$d</string>
+    <string name="camera_status_video_saved">Video saved</string>
+    <string name="camera_status_video_saved_no_audio">Video saved (no audio)</string>
+    <string name="camera_status_rec_stopped">Recording stopped</string>
+    <string name="camera_error_permission">Grant the Meta glasses camera permission to use Camera Test</string>
+    <string name="camera_error_jpeg">Photo captured but could not decode JPEG</string>
+    <string name="camera_error_no_video">No video file was created</string>
+    <string name="camera_error_recorder">Recorder frame error: %1$s</string>
+    <string name="camera_rec_badge">● REC %1$s</string>
+    <string name="camera_video_saved">Video saved to Gallery</string>
+    <string name="camera_start">Start</string>
+    <string name="camera_stop">Stop</string>
+    <string name="camera_record">Record</string>
+    <string name="camera_photo">Photo</string>
+
+    <!-- Timer / reminder alerts -->
+    <string name="alert_channel_name">Timers &amp; reminders</string>
+    <string name="alert_timer_done">Timer done</string>
+    <string name="alert_reminder">Reminder</string>
+</resources>

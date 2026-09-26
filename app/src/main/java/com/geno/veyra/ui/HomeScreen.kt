@@ -30,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,11 +44,13 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.geno.veyra.R
 import com.geno.veyra.agent.AgentStatus
 import com.geno.veyra.glasses.ConnectionState
 import com.geno.veyra.glasses.GlassesDevice
@@ -170,16 +173,16 @@ fun HomeScreen(
         ) {
 
             QuickTile(
-                title = "Camera Test",
-                subtitle = "Check glasses feed",
+                title = stringResource(R.string.home_tile_camera_test),
+                subtitle = stringResource(R.string.home_tile_camera_test_sub),
                 icon = Icons.Default.PhotoCamera,
                 onClick = onCameraTestClick,
                 modifier = Modifier.weight(1f),
             )
 
             QuickTile(
-                title = "Translate",
-                subtitle = "Live translation",
+                title = stringResource(R.string.common_translate),
+                subtitle = stringResource(R.string.home_tile_translate_sub),
                 icon = Icons.Default.Translate,
                 onClick = onTranslateClick,
                 modifier = Modifier.weight(1f),
@@ -267,7 +270,7 @@ private fun BrandHeader(
             )
 
             Text(
-                text = "Gemini for your glasses",
+                text = stringResource(R.string.home_tagline),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -335,7 +338,7 @@ private fun ApiKeyPill(
         )
 
         Text(
-            text = "API key",
+            text = stringResource(R.string.home_api_key),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             color =
@@ -391,14 +394,14 @@ private fun GlassesCard(
                 GlassesGlyph()
 
                 Text(
-                    text = "Glasses",
+                    text = stringResource(R.string.home_glasses_title),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                 )
             }
 
             Text(
-                text = device?.name ?: "No device found",
+                text = device?.name ?: stringResource(R.string.home_no_device),
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(start = 34.dp),
             )
@@ -407,16 +410,16 @@ private fun GlassesCard(
                 text = when {
 
                     connectionState == ConnectionState.CONNECTED ->
-                        "Connected"
+                        stringResource(R.string.home_connected)
 
                     connectionState == ConnectionState.CONNECTING ->
-                        "Connecting…"
+                        stringResource(R.string.common_connecting)
 
                     connectionState == ConnectionState.ERROR ->
-                        "Connection error"
+                        stringResource(R.string.home_connection_error)
 
                     registration == RegistrationState.REGISTERED ->
-                        "Registered — not connected"
+                        stringResource(R.string.home_registered_not_connected)
 
                     else ->
                         registration.label()
@@ -440,13 +443,12 @@ private fun GlassesCard(
                         shape = RoundedCornerShape(16.dp),
                     ) {
 
-                        Text("Register glasses")
+                        Text(stringResource(R.string.home_register_glasses))
                     }
 
                     Text(
                         text =
-                            "Opens the Meta app to pair " +
-                                "& register",
+                            stringResource(R.string.home_register_hint),
                         style = MaterialTheme.typography.labelSmall,
                         color =
                             MaterialTheme.colorScheme
@@ -459,7 +461,7 @@ private fun GlassesCard(
                 connectionState == ConnectionState.CONNECTING -> {
 
                     Text(
-                        text = "Connecting to glasses…",
+                        text = stringResource(R.string.home_connecting_to_glasses),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.primary,
@@ -469,7 +471,7 @@ private fun GlassesCard(
                 connectionState == ConnectionState.CONNECTED -> {
 
                     Text(
-                        text = "Glasses connected",
+                        text = stringResource(R.string.home_glasses_connected),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.primary,
@@ -484,7 +486,7 @@ private fun GlassesCard(
                         shape = RoundedCornerShape(16.dp),
                     ) {
 
-                        Text("Retry connection")
+                        Text(stringResource(R.string.home_retry_connection))
                     }
                 }
 
@@ -496,7 +498,7 @@ private fun GlassesCard(
                         shape = RoundedCornerShape(16.dp),
                     ) {
 
-                        Text("Connect glasses")
+                        Text(stringResource(R.string.home_connect_glasses))
                     }
                 }
             }
@@ -656,9 +658,9 @@ private fun AssistantHero(
                 Text(
                     text =
                         if (running) {
-                            "Stop Assistant"
+                            stringResource(R.string.home_stop_assistant)
                         } else {
-                            "Start Assistant"
+                            stringResource(R.string.home_start_assistant)
                         },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.ExtraBold,
@@ -670,7 +672,7 @@ private fun AssistantHero(
                         if (running) {
                             status.label()
                         } else {
-                            "Talk to Gemini through your glasses"
+                            stringResource(R.string.home_assistant_hint)
                         },
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.85f),
@@ -734,40 +736,44 @@ private fun QuickTile(
     }
 }
 
+@Composable
+@ReadOnlyComposable
 private fun AgentStatus.label(): String =
     when (this) {
 
         AgentStatus.IDLE ->
-            "Stopped"
+            stringResource(R.string.status_stopped)
 
         AgentStatus.CONNECTING ->
-            "Connecting…"
+            stringResource(R.string.common_connecting)
 
         AgentStatus.LISTENING ->
-            "Listening"
+            stringResource(R.string.status_listening)
 
         AgentStatus.RECONNECTING ->
-            "Reconnecting…"
+            stringResource(R.string.status_reconnecting)
 
         AgentStatus.ERROR ->
-            "Error"
+            stringResource(R.string.status_error)
     }
 
+@Composable
+@ReadOnlyComposable
 private fun RegistrationState.label(): String =
     when (this) {
 
         RegistrationState.REGISTERED ->
-            "Registered"
+            stringResource(R.string.reg_registered)
 
         RegistrationState.REGISTERING ->
-            "Registering…"
+            stringResource(R.string.reg_registering)
 
         RegistrationState.NOT_REGISTERED ->
-            "Not registered"
+            stringResource(R.string.reg_not_registered)
 
         RegistrationState.REVOKED ->
-            "Registration revoked — reconnect"
+            stringResource(R.string.reg_revoked)
 
         RegistrationState.UNKNOWN ->
-            "Status unknown"
+            stringResource(R.string.reg_unknown)
     }

@@ -38,10 +38,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.geno.veyra.R
 import com.meta.wearable.dat.camera.types.VideoFrame
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -87,7 +89,7 @@ fun CameraTestScreen(
     }
 
     val cameraOn =
-        uiState.streaming || uiState.status == "Starting camera…"
+        uiState.streaming || uiState.status == CameraTestStatus.Starting
 
     Box(
         modifier = Modifier
@@ -154,10 +156,46 @@ fun CameraTestScreen(
                 },
                 enabled = !uiState.recording,
             ) {
-                Text("Back", color = Color.White)
+                Text(stringResource(R.string.camera_back), color = Color.White)
             }
+            val statusText =
+                when (val status = uiState.status) {
+                    CameraTestStatus.Ready ->
+                        stringResource(R.string.camera_status_ready)
+                    CameraTestStatus.Starting ->
+                        stringResource(R.string.camera_status_starting)
+                    CameraTestStatus.PermissionNeeded ->
+                        stringResource(R.string.camera_status_permission)
+                    CameraTestStatus.Stopped ->
+                        stringResource(R.string.camera_status_stopped)
+                    CameraTestStatus.Error ->
+                        stringResource(R.string.camera_status_error)
+                    CameraTestStatus.PhotoCaptured ->
+                        stringResource(R.string.camera_status_photo)
+                    CameraTestStatus.CaptureFailed ->
+                        stringResource(R.string.camera_status_capture_failed)
+                    CameraTestStatus.RecordingFailed ->
+                        stringResource(R.string.camera_status_rec_failed)
+                    CameraTestStatus.VideoSaved ->
+                        stringResource(R.string.camera_status_video_saved)
+                    CameraTestStatus.VideoSavedNoAudio ->
+                        stringResource(R.string.camera_status_video_saved_no_audio)
+                    CameraTestStatus.RecordingStopped ->
+                        stringResource(R.string.camera_status_rec_stopped)
+                    is CameraTestStatus.Live ->
+                        stringResource(
+                            R.string.camera_status_live,
+                            status.width,
+                            status.height,
+                        )
+                    is CameraTestStatus.Recording ->
+                        stringResource(
+                            R.string.camera_status_recording,
+                            status.durationText,
+                        )
+                }
             Text(
-                text = uiState.status,
+                text = statusText,
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (uiState.error == null) {
                     Color.White.copy(alpha = 0.8f)
@@ -172,7 +210,10 @@ fun CameraTestScreen(
         // Recording badge.
         if (uiState.recording) {
             Text(
-                text = "● REC ${formatRecordingDuration(uiState.recordingDurationMs)}",
+                text = stringResource(
+                    R.string.camera_rec_badge,
+                    formatRecordingDuration(uiState.recordingDurationMs),
+                ),
                 color = Color.White,
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier
@@ -188,8 +229,24 @@ fun CameraTestScreen(
 
         // Error banner.
         uiState.error?.let { error ->
+            val errorText =
+                when (error) {
+                    CameraTestError.PermissionNeeded ->
+                        stringResource(R.string.camera_error_permission)
+                    CameraTestError.JpegDecodeFailed ->
+                        stringResource(R.string.camera_error_jpeg)
+                    CameraTestError.NoVideoFile ->
+                        stringResource(R.string.camera_error_no_video)
+                    is CameraTestError.RecorderFrame ->
+                        stringResource(
+                            R.string.camera_error_recorder,
+                            error.detail,
+                        )
+                    is CameraTestError.Runtime ->
+                        error.message
+                }
             Text(
-                text = error,
+                text = errorText,
                 color = MaterialTheme.colorScheme.onErrorContainer,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier
@@ -206,7 +263,7 @@ fun CameraTestScreen(
         // Saved confirmation.
         if (uiState.savedVideoUri != null) {
             Text(
-                text = "Video saved to Gallery",
+                text = stringResource(R.string.camera_video_saved),
                 color = Color.White,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier
@@ -229,7 +286,7 @@ fun CameraTestScreen(
             ) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "Captured photo",
+                    contentDescription = stringResource(R.string.captured_photo_desc),
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .size(104.dp)
@@ -257,7 +314,9 @@ fun CameraTestScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             ControlButton(
-                label = if (cameraOn) "Stop" else "Start",
+                label =
+                    if (cameraOn) stringResource(R.string.camera_stop)
+                    else stringResource(R.string.camera_start),
                 onClick = {
                     if (cameraOn) {
                         viewModel.stopPreview()
@@ -270,7 +329,9 @@ fun CameraTestScreen(
                 modifier = Modifier.weight(1f),
             )
             ControlButton(
-                label = if (uiState.recording) "Stop" else "Record",
+                label =
+                    if (uiState.recording) stringResource(R.string.camera_stop)
+                    else stringResource(R.string.camera_record),
                 onClick = {
                     if (uiState.recording) {
                         viewModel.stopRecording()
@@ -283,7 +344,7 @@ fun CameraTestScreen(
                 modifier = Modifier.weight(1f),
             )
             ControlButton(
-                label = "Photo",
+                label = stringResource(R.string.camera_photo),
                 onClick = viewModel::capturePhoto,
                 enabled = uiState.streaming &&
                     !uiState.capturing &&
@@ -292,7 +353,7 @@ fun CameraTestScreen(
                 modifier = Modifier.weight(1f),
             )
             ControlButton(
-                label = "Settings",
+                label = stringResource(R.string.common_settings),
                 onClick = onCameraSettingsClick,
                 enabled = !uiState.recording,
                 modifier = Modifier.weight(1f),
