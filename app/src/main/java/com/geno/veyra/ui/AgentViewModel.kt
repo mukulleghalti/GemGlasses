@@ -232,6 +232,30 @@ class AgentViewModel @Inject constructor(
         }
     }
 
+    fun setAutoHistoryTitles(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setAutoHistoryTitles(enabled)
+        }
+    }
+
+    fun setQrScanEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setQrScanEnabled(enabled)
+        }
+    }
+
+    fun setOcrEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setOcrEnabled(enabled)
+        }
+    }
+
+    fun setLiveModel(modelId: String) {
+        viewModelScope.launch {
+            settings.setLiveModel(modelId)
+        }
+    }
+
     // --- Gemini API key --------------------------------------------------
 
     /** Status of the saved API key, as last verified against Google. */
@@ -282,6 +306,26 @@ class AgentViewModel @Inject constructor(
     fun clearApiKey() {
         keyRepository.clearKey()
         _apiKeyState.value = ApiKeyState.Missing
+    }
+
+    /**
+     * Re-verifies the saved key against Google on demand (the "Check
+     * Connection" row under Advanced). Same check as [saveApiKey].
+     */
+    fun checkConnection() {
+        viewModelScope.launch {
+            if (!keyRepository.hasKey()) {
+                _apiKeyState.value = ApiKeyState.Missing
+                return@launch
+            }
+            _apiKeyState.value = ApiKeyState.Checking
+            _apiKeyState.value = try {
+                tokenProvider.fetchEphemeralToken()
+                ApiKeyState.Valid
+            } catch (e: Exception) {
+                ApiKeyState.Invalid(e.message ?: "Couldn't verify the key.")
+            }
+        }
     }
 
     /**

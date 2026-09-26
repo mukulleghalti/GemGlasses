@@ -61,6 +61,7 @@ class SearchConversationsTool @Inject constructor(
                         "date",
                         dateFormat().format(Date(hit.startedAt)),
                     )
+                    hit.title?.let { put("title", it) }
                     put(
                         "excerpt",
                         buildJsonArray {
@@ -92,8 +93,9 @@ class ListConversationsTool @Inject constructor(
     override val declaration = FunctionDeclaration(
         name = name,
         description = "Lists the user's recent past assistant sessions, " +
-            "newest first, each with its date and a short preview of what " +
-            "it was about. Call when the user asks what you've talked " +
+            "newest first, each with its date, auto-generated title " +
+            "(when available), and a short preview of what it was " +
+            "about. Call when the user asks what you've talked " +
             "about lately or wants to pick up an earlier topic. Present " +
             "as a short dated list.",
         parameters = schema(
@@ -115,6 +117,7 @@ class ListConversationsTool @Inject constructor(
                         "date",
                         dateFormat().format(Date(summary.startedAt)),
                     )
+                    summary.title?.let { put("title", it) }
                     put("preview", summary.preview)
                     put("turns", summary.turnCount)
                 }

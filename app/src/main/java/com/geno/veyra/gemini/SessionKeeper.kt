@@ -2,6 +2,7 @@ package com.geno.veyra.gemini
 
 import android.util.Log
 import com.geno.veyra.gemini.protocol.FunctionResponse
+import com.geno.veyra.settings.DEFAULT_LIVE_MODEL
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -20,6 +21,8 @@ data class SessionConfig(
     val systemInstruction: String,
     val voiceName: String,
     val languageCode: String,
+    /** Live model id chosen in AI Settings (Gemini Model). */
+    val model: String = DEFAULT_LIVE_MODEL,
     /**
      * Whether talking over the assistant cuts it off. When false the
      * session is created with activityHandling=NO_INTERRUPTION, so the
@@ -28,11 +31,11 @@ data class SessionConfig(
      */
     val bargeInEnabled: Boolean = true,
     /**
-     * Whether the session declares Gemini's built-in Google Search
-     * grounding tool. Off by default: searches are billed per query
-     * and add latency to the conversation.
+     * Toggle-gated tool capabilities for the session (web search,
+     * QR/barcode scan, OCR). Each mirrors an AI Settings switch and
+     * controls which tools are declared in the Live setup message.
      */
-    val webSearchEnabled: Boolean = false,
+    val toolFlags: ToolFlags = ToolFlags(),
 )
 
 /**
@@ -243,8 +246,9 @@ class SessionKeeper @Inject constructor(
                 voiceName = config.voiceName,
                 languageCode = config.languageCode,
                 bargeInEnabled = config.bargeInEnabled,
-                liveTools = toolRegistry.asLiveTools(config.webSearchEnabled),
+                liveTools = toolRegistry.asLiveTools(config.toolFlags),
                 resumeHandle = resumeHandle,
+                modelName = config.model,
             )
 
             /*

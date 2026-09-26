@@ -3,6 +3,7 @@ package com.geno.veyra.glasses
 import android.util.Log
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
@@ -80,6 +81,22 @@ class GlassesCameraSource @Inject constructor(
         return count
     }
 
+    /**
+     * Captures a single JPEG frame from the glasses camera.
+     *
+     * The backend starts the camera stream on demand and stops it when
+     * the flow collection ends, so this is self-contained: null means
+     * the camera wasn't available in time.
+     */
+    suspend fun captureFrame(
+        timeoutMs: Long = CAPTURE_TIMEOUT_MS,
+    ): ByteArray? =
+        withTimeoutOrNull(timeoutMs) {
+            runCatching {
+                backend.cameraFrames().first()
+            }.getOrNull()
+        }
+
     private companion object {
 
         const val TAG = "GlassesCameraSource"
@@ -87,5 +104,7 @@ class GlassesCameraSource @Inject constructor(
         const val DEFAULT_MAX_FRAMES = 20
 
         const val FRAME_INTERVAL_MS = 1_000L
+
+        const val CAPTURE_TIMEOUT_MS = 30_000L
     }
 }

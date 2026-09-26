@@ -96,6 +96,10 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
 
     implementation("com.google.android.gms:play-services-location:21.3.0")
+    // ML Kit thin clients (models download via Play Services): QR/barcode + OCR.
+    implementation(libs.play.services.mlkit.barcode.scanning)
+    implementation(libs.play.services.mlkit.text.recognition)
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation("com.facebook.soloader:soloader:0.10.5")
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("com.facebook.infer.annotation:infer-annotation:0.18.0")

@@ -3,6 +3,7 @@ package com.geno.veyra.gemini
 import android.util.Base64
 import android.util.Log
 import com.geno.veyra.gemini.protocol.*
+import com.geno.veyra.settings.DEFAULT_LIVE_MODEL
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -25,6 +26,7 @@ class LiveSession(
     private val bargeInEnabled: Boolean = true,
     private val liveTools: List<Tool>,
     private val resumeHandle: String?,
+    private val modelName: String = DEFAULT_LIVE_MODEL,
 ) {
 
     @Volatile
@@ -444,9 +446,10 @@ class LiveSession(
         return ClientMessage(
             setup = Setup(
                 /*
-                 * Current Gemini 3.8 Live model.
+                 * Live model chosen in AI Settings (Gemini Model).
+                 * Defaults to the current Gemini 3.8 Live model.
                  */
-                model = "models/gemini-3.8-live",
+                model = modelName,
 
                 generationConfig = GenerationConfig(
                     responseModalities = listOf("AUDIO"),

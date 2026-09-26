@@ -102,6 +102,10 @@ data class AgentPreferences(
     val audioOutput: AudioOutput,
     val bargeInEnabled: Boolean,
     val webSearchEnabled: Boolean,
+    val autoHistoryTitles: Boolean,
+    val qrScanEnabled: Boolean,
+    val ocrEnabled: Boolean,
+    val liveModel: String,
 ) {
     /** Built here so the persona text stays in one place. */
     val systemInstruction: String
@@ -119,6 +123,18 @@ data class AgentPreferences(
                     "\n\nWeb search is enabled: use it for current, " +
                         "time-sensitive, or explicitly requested online " +
                         "information instead of relying on training data.",
+                )
+            }
+            if (qrScanEnabled) {
+                append(
+                    "\n\nQR/barcode scanning is enabled: when the user " +
+                        "asks to scan a code, call scan_barcode.",
+                )
+            }
+            if (ocrEnabled) {
+                append(
+                    "\n\nText recognition is enabled: when the user asks " +
+                        "what some text says, call read_text.",
                 )
             }
         }
@@ -142,6 +158,10 @@ data class AgentPreferences(
             audioOutput = AudioOutput.GLASSES,
             bargeInEnabled = true,
             webSearchEnabled = false,
+            autoHistoryTitles = true,
+            qrScanEnabled = false,
+            ocrEnabled = false,
+            liveModel = DEFAULT_LIVE_MODEL,
         )
 
         /** Default wake phrase ("Hey Glasses"). Lowercase: Vosk decodes lowercase. */
@@ -218,6 +238,18 @@ class SettingsRepository @Inject constructor(
     private val webSearchEnabledKey =
         booleanPreferencesKey("web_search_enabled")
 
+    private val autoHistoryTitlesKey =
+        booleanPreferencesKey("auto_history_titles")
+
+    private val qrScanEnabledKey =
+        booleanPreferencesKey("qr_scan_enabled")
+
+    private val ocrEnabledKey =
+        booleanPreferencesKey("ocr_enabled")
+
+    private val liveModelKey =
+        stringPreferencesKey("live_model")
+
     private val translateSourceLangKey =
         stringPreferencesKey("translate_source_lang")
 
@@ -293,6 +325,22 @@ class SettingsRepository @Inject constructor(
                 webSearchEnabled =
                     prefs[webSearchEnabledKey]
                         ?: AgentPreferences.DEFAULT.webSearchEnabled,
+
+                autoHistoryTitles =
+                    prefs[autoHistoryTitlesKey]
+                        ?: AgentPreferences.DEFAULT.autoHistoryTitles,
+
+                qrScanEnabled =
+                    prefs[qrScanEnabledKey]
+                        ?: AgentPreferences.DEFAULT.qrScanEnabled,
+
+                ocrEnabled =
+                    prefs[ocrEnabledKey]
+                        ?: AgentPreferences.DEFAULT.ocrEnabled,
+
+                liveModel =
+                    prefs[liveModelKey]
+                        ?: AgentPreferences.DEFAULT.liveModel,
             )
         }
 
@@ -374,6 +422,38 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[webSearchEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setAutoHistoryTitles(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[autoHistoryTitlesKey] = enabled
+        }
+    }
+
+    suspend fun setQrScanEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[qrScanEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setOcrEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[ocrEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setLiveModel(
+        modelId: String,
+    ) {
+        context.dataStore.edit {
+            it[liveModelKey] = modelId
         }
     }
 }

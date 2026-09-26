@@ -2,6 +2,8 @@ package com.geno.veyra.state
 
 import android.content.Context
 import android.util.Log
+import com.geno.veyra.settings.GeminiKeyRepository
+import com.geno.veyra.settings.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -10,6 +12,17 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
@@ -29,6 +42,7 @@ data class ArchivedSession(
     val id: String,
     val startedAt: Long,
     val turns: List<ArchivedTurn>,
+    val title: String? = null,
 )
 
 /** Lightweight summary for listing past sessions. */
@@ -37,6 +51,7 @@ data class SessionSummary(
     val startedAt: Long,
     val preview: String,
     val turnCount: Int,
+    val title: String? = null,
 )
 
 /** One search hit: the matching excerpt with surrounding turns for context. */
@@ -44,6 +59,7 @@ data class ConversationHit(
     val sessionId: String,
     val startedAt: Long,
     val excerpt: List<ArchivedTurn>,
+    val title: String? = null,
 )
 
 /**
@@ -60,6 +76,9 @@ data class ConversationHit(
 @Singleton
 class ConversationArchive @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val settings: SettingsRepository,
+    private val keyRepository: GeminiKeyRepository,
+    private val client: OkHttpClient,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -98,13 +117,97 @@ class ConversationArchive @Inject constructor(
         )
         scope.launch {
             runCatching {
-                File(dir(), "${session.id}.json")
-                    .writeText(json.encodeToString(session))
+                val file = File(dir(), "${session.id}.json")
+                file.writeText(json.encodeToString(session))
                 prune()
+
+                /*
+                 * Auto history titles: one cheap summarization call per
+                 * session, then rewrite the file with the title. Best
+                 * effort — a missing key or failed call just leaves the
+                 * session untitled.
+                 */
+                if (settings.snapshot().autoHistoryTitles) {
+                    generateTitle(session)?.let { title ->
+                        file.writeText(
+                            json.encodeToString(
+                                session.copy(title = title),
+                            ),
+                        )
+                    }
+                }
             }.onFailure {
                 Log.w(TAG, "archiving session failed", it)
             }
         }
+    }
+
+    /**
+     * Asks Gemini for a short title for [session]. Returns null when
+     * there is no API key or the call fails.
+     */
+    private suspend fun generateTitle(
+        session: ArchivedSession,
+    ): String? {
+        val apiKey = keyRepository.getKey() ?: return null
+        val transcript = session.turns
+            .joinToString("\n") { "${it.speaker}: ${it.text}" }
+            .take(2000)
+        if (transcript.isBlank()) return null
+
+        val payload = buildJsonObject {
+            put(
+                "contents",
+                buildJsonArray {
+                    addJsonObject {
+                        put("role", "user")
+                        put(
+                            "parts",
+                            buildJsonArray {
+                                addJsonObject {
+                                    put(
+                                        "text",
+                                        "Generate a short title, max 6 " +
+                                            "words, no quotes, for this " +
+                                            "conversation:\n\n$transcript",
+                                    )
+                                }
+                            },
+                        )
+                    }
+                },
+            )
+            put(
+                "generationConfig",
+                buildJsonObject { put("maxOutputTokens", 32) },
+            )
+        }
+
+        val request = Request.Builder()
+            .url("$GEMINI_API/models/$TITLE_MODEL:generateContent")
+            .header("x-goog-api-key", apiKey)
+            .post(payload.toString().toRequestBody(JSON_MEDIA))
+            .build()
+
+        return runCatching {
+            client.newCall(request).execute().use { response ->
+                check(response.isSuccessful) {
+                    "title generation failed (${response.code})"
+                }
+                val root = json.parseToJsonElement(
+                    response.body?.string().orEmpty(),
+                ).jsonObject
+                root["candidates"]
+                    ?.jsonArray?.firstOrNull()?.jsonObject
+                    ?.get("content")?.jsonObject
+                    ?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject
+                    ?.get("text")?.jsonPrimitive?.content
+                    ?.trim()
+                    ?.trim('"')
+                    ?.take(80)
+                    ?.ifBlank { null }
+            }
+        }.getOrNull()
     }
 
     /** Recent sessions, newest first. */
@@ -130,6 +233,7 @@ class ConversationArchive @Inject constructor(
                         startedAt = session.startedAt,
                         preview = firstUser.take(PREVIEW_CHARS),
                         turnCount = session.turns.size,
+                        title = session.title,
                     )
                 }
         }.getOrDefault(emptyList())
@@ -164,6 +268,7 @@ class ConversationArchive @Inject constructor(
                                 sessionId = session.id,
                                 startedAt = session.startedAt,
                                 excerpt = session.turns.subList(from, to + 1),
+                                title = session.title,
                             )
                         }
                     }
@@ -212,5 +317,8 @@ class ConversationArchive @Inject constructor(
         const val TAG = "ConversationArchive"
         const val MAX_SESSIONS = 50
         const val PREVIEW_CHARS = 80
+        const val GEMINI_API = "https://generativelanguage.googleapis.com/v1beta"
+        const val TITLE_MODEL = "gemini-2.5-flash"
+        val JSON_MEDIA = "application/json".toMediaType()
     }
 }

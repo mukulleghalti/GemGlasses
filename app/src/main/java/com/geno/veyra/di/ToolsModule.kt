@@ -14,6 +14,8 @@ import com.geno.veyra.tools.MicMuteTool
 import com.geno.veyra.tools.NavigationTool
 import com.geno.veyra.tools.PlacesTool
 import com.geno.veyra.tools.SaveMemoryTool
+import com.geno.veyra.tools.ScanBarcodeTool
+import com.geno.veyra.tools.OcrTool
 import com.geno.veyra.tools.SearchConversationsTool
 import com.geno.veyra.tools.VisionTool
 import dagger.Binds
@@ -89,4 +91,12 @@ abstract class ToolsModule {
     @Binds
     @IntoSet
     abstract fun cancelAlertTool(tool: CancelAlertTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun scanBarcodeTool(tool: ScanBarcodeTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun ocrTool(tool: OcrTool): AgentTool
 }

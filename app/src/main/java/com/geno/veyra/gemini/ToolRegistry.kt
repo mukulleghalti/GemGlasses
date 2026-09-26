@@ -6,10 +6,21 @@ import com.geno.veyra.gemini.protocol.FunctionResponse
 import com.geno.veyra.gemini.protocol.GoogleSearch
 import com.geno.veyra.gemini.protocol.Tool
 import com.geno.veyra.tools.AgentTool
+import com.geno.veyra.tools.ToolGate
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/**
+ * Toggle-gated tool capabilities for a Live session. Each flag mirrors an
+ * AI Settings switch; see [ToolGate] on [AgentTool].
+ */
+data class ToolFlags(
+    val webSearch: Boolean = false,
+    val qrScan: Boolean = false,
+    val ocr: Boolean = false,
+)
 
 /**
  * Holds the app's [AgentTool]s, exposes their declarations for the Live setup
@@ -21,16 +32,28 @@ class ToolRegistry @Inject constructor(
 ) {
     private val byName: Map<String, AgentTool> = tools.associateBy { it.name }
 
-    /** The `tools` array sent in the Live setup message. */
-    fun asLiveTools(webSearchEnabled: Boolean): List<Tool> =
+    /**
+     * The `tools` array sent in the Live setup message. Toggle-gated tools
+     * are only declared when their [ToolFlags] entry is on; the rest are
+     * always advertised.
+     */
+    fun asLiveTools(flags: ToolFlags): List<Tool> =
         buildList {
+            val declarations = byName.values
+                .filter { tool ->
+                    when (tool.gate) {
+                        ToolGate.ALWAYS -> true
+                        ToolGate.QR_SCAN -> flags.qrScan
+                        ToolGate.OCR -> flags.ocr
+                    }
+                }
+                .map { it.declaration }
             add(
                 Tool(
-                    functionDeclarations =
-                        byName.values.map { it.declaration },
+                    functionDeclarations = declarations,
                 ),
             )
-            if (webSearchEnabled) {
+            if (flags.webSearch) {
                 add(Tool(googleSearch = GoogleSearch()))
             }
         }

@@ -52,6 +52,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno.veyra.settings.AudioOutput
+import com.geno.veyra.settings.LIVE_MODELS
 import com.geno.veyra.wakeword.WakeWordModelState
 
 /**
@@ -73,6 +74,7 @@ fun SettingsScreen(
     var showWakeDialog by remember { mutableStateOf(false) }
     var showMemoriesDialog by remember { mutableStateOf(false) }
     var showApiKeyDialog by remember { mutableStateOf(false) }
+    var showModelDialog by remember { mutableStateOf(false) }
     var advancedExpanded by remember { mutableStateOf(false) }
 
     val selectedVoice = VOICES.firstOrNull { it.name == prefs.voiceName }
@@ -89,6 +91,7 @@ fun SettingsScreen(
         (if (prefs.wakeWordEnabled) "On" else "Off") +
             " · $wakePhraseLabel"
     val apiKeySet = viewModel.savedApiKey != null
+    val apiKeyState by viewModel.apiKeyState.collectAsStateWithLifecycle()
 
     Column(
         modifier = modifier
@@ -155,6 +158,42 @@ fun SettingsScreen(
                 )
             },
         )
+        SettingRow(
+            title = "Gemini Model",
+            value = LIVE_MODELS.firstOrNull { it.id == prefs.liveModel }
+                ?.label ?: prefs.liveModel,
+            onClick = { showModelDialog = true },
+        )
+        SettingRow(
+            title = "Auto History Titles",
+            subtitle = "Generate short titles for past conversations",
+            trailing = {
+                Switch(
+                    checked = prefs.autoHistoryTitles,
+                    onCheckedChange = { viewModel.setAutoHistoryTitles(it) },
+                )
+            },
+        )
+        SettingRow(
+            title = "QR Bar Scan",
+            subtitle = "Let the assistant scan QR codes and barcodes",
+            trailing = {
+                Switch(
+                    checked = prefs.qrScanEnabled,
+                    onCheckedChange = { viewModel.setQrScanEnabled(it) },
+                )
+            },
+        )
+        SettingRow(
+            title = "OCR",
+            subtitle = "Let the assistant read text from what it sees",
+            trailing = {
+                Switch(
+                    checked = prefs.ocrEnabled,
+                    onCheckedChange = { viewModel.setOcrEnabled(it) },
+                )
+            },
+        )
 
         Row(
             modifier = Modifier
@@ -184,6 +223,19 @@ fun SettingsScreen(
                 value = if (apiKeySet) "Set" else "Not set",
                 onClick = { showApiKeyDialog = true },
             )
+            SettingRow(
+                title = "Check Connection",
+                value = when (val state = apiKeyState) {
+                    is AgentViewModel.ApiKeyState.Checking -> "Checking…"
+                    is AgentViewModel.ApiKeyState.Valid -> "Connection OK"
+                    is AgentViewModel.ApiKeyState.Invalid ->
+                        state.message.take(40)
+
+                    is AgentViewModel.ApiKeyState.Missing -> "No key saved"
+                    is AgentViewModel.ApiKeyState.Unchecked -> "Tap to test"
+                },
+                onClick = { viewModel.checkConnection() },
+            )
         }
 
         Text(
@@ -194,6 +246,16 @@ fun SettingsScreen(
         )
     }
 
+    if (showModelDialog) {
+        ModelDialog(
+            current = prefs.liveModel,
+            onSelect = {
+                viewModel.setLiveModel(it)
+                showModelDialog = false
+            },
+            onDismiss = { showModelDialog = false },
+        )
+    }
     if (showVoiceDialog) {
         VoiceDialog(
             current = prefs.voiceName,
@@ -369,6 +431,58 @@ private fun VoiceDialog(
                                 onClick = { onSelect(voice.name) },
                             )
                         }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        },
+    )
+}
+
+@Composable
+private fun ModelDialog(
+    current: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Gemini Model") },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 420.dp),
+            ) {
+                items(LIVE_MODELS) { model ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(model.id) }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween,
+                        verticalAlignment =
+                            Alignment.CenterVertically,
+                    ) {
+                        Column {
+                            Text(
+                                model.label,
+                                style =
+                                    MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                model.subtitle,
+                                style =
+                                    MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme
+                                    .onSurfaceVariant,
+                            )
+                        }
+                        RadioButton(
+                            selected = model.id == current,
+                            onClick = { onSelect(model.id) },
+                        )
                     }
                 }
             }

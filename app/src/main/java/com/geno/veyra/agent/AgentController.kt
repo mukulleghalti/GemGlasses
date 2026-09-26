@@ -12,6 +12,7 @@ import com.geno.veyra.audio.SpeakerSink
 import com.geno.veyra.gemini.SessionConfig
 import com.geno.veyra.gemini.SessionEvent
 import com.geno.veyra.gemini.SessionKeeper
+import com.geno.veyra.gemini.ToolFlags
 import com.geno.veyra.gemini.ToolRegistry
 import com.geno.veyra.glasses.ConnectionState
 import com.geno.veyra.glasses.GlassesCameraSource
@@ -154,7 +155,12 @@ class AgentController @Inject constructor(
                     voiceName = prefs.voiceName,
                     languageCode = prefs.languageCode,
                     bargeInEnabled = bargeInEnabled,
-                    webSearchEnabled = prefs.webSearchEnabled,
+                    toolFlags = ToolFlags(
+                        webSearch = prefs.webSearchEnabled,
+                        qrScan = prefs.qrScanEnabled,
+                        ocr = prefs.ocrEnabled,
+                    ),
+                    model = prefs.liveModel,
                 ),
             )
         }

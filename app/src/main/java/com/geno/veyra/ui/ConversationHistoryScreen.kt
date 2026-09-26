@@ -202,7 +202,8 @@ fun ConversationHistoryScreen(
                                     Arrangement.spacedBy(4.dp),
                             ) {
                                 Text(
-                                    formatDate(session.startedAt),
+                                    session.title
+                                        ?: formatDate(session.startedAt),
                                     style = MaterialTheme.typography
                                         .labelMedium,
                                     color = MaterialTheme.colorScheme
