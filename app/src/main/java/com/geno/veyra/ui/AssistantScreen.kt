@@ -303,6 +303,9 @@ private fun IdleAssistant(modifier: Modifier = Modifier) {
 private fun RipplingVLogo() {
     val ripple1 = remember { Animatable(0f) }
     val ripple2 = remember { Animatable(0f) }
+    // Read in the @Composable context: Canvas {} is a DrawScope, where
+    // MaterialTheme.colorScheme is not callable.
+    val logoPrimary = MaterialTheme.colorScheme.primary
 
     val breathe = rememberInfiniteTransition(label = "vBreathe")
     val coreScale by breathe.animateFloat(
@@ -387,7 +390,7 @@ private fun RipplingVLogo() {
                 }
                 drawPath(
                     path = path,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = logoPrimary,
                     style = Stroke(
                         width = 12f,
                         cap = StrokeCap.Round,
