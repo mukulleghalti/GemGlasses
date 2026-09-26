@@ -28,9 +28,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.geno.veyra.R
 import com.geno.veyra.state.ArchivedTurn
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -45,8 +48,9 @@ private val turnTimeFormat =
 private fun formatDate(millis: Long): String =
     sessionDateFormat.format(Date(millis))
 
+@Composable
 private fun speakerLabel(speaker: String): String =
-    if (speaker == "USER") "You" else "Veyra"
+    if (speaker == "USER") stringResource(R.string.transcript_you) else "Veyra"
 
 /**
  * Browse, search, and delete archived assistant sessions. Everything
@@ -72,11 +76,10 @@ fun ConversationHistoryScreen(
     if (showClearAllConfirm) {
         AlertDialog(
             onDismissRequest = { showClearAllConfirm = false },
-            title = { Text("Delete all conversations?") },
+            title = { Text(stringResource(R.string.history_delete_all_title)) },
             text = {
                 Text(
-                    "This permanently deletes every archived session " +
-                        "from this device. This cannot be undone.",
+                    stringResource(R.string.history_delete_all_message),
                 )
             },
             confirmButton = {
@@ -86,14 +89,14 @@ fun ConversationHistoryScreen(
                         showClearAllConfirm = false
                     },
                 ) {
-                    Text("Delete all")
+                    Text(stringResource(R.string.history_delete_all_confirm))
                 }
             },
             dismissButton = {
                 TextButton(
                     onClick = { showClearAllConfirm = false },
                 ) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.common_cancel))
                 }
             },
         )
@@ -127,21 +130,20 @@ fun ConversationHistoryScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "Conversation history",
+                    stringResource(R.string.history_title),
                     style = MaterialTheme.typography.titleLarge,
                 )
                 if (sessions.isNotEmpty()) {
                     TextButton(
                         onClick = { showClearAllConfirm = true },
                     ) {
-                        Text("Clear all")
+                        Text(stringResource(R.string.history_clear_all))
                     }
                 }
             }
 
             Text(
-                "Past assistant sessions, stored only on this device. " +
-                    "Tap one to read it, or search across all of them.",
+                stringResource(R.string.history_subtitle),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp),
@@ -156,7 +158,7 @@ fun ConversationHistoryScreen(
                 TextButton(
                     onClick = { showClearAllConfirm = true },
                 ) {
-                    Text("Clear all")
+                    Text(stringResource(R.string.history_clear_all))
                 }
             }
         }
@@ -164,7 +166,7 @@ fun ConversationHistoryScreen(
         OutlinedTextField(
             value = query,
             onValueChange = viewModel::setQuery,
-            label = { Text("Search conversations") },
+            label = { Text(stringResource(R.string.history_search_label)) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -174,8 +176,7 @@ fun ConversationHistoryScreen(
         if (query.isBlank()) {
             if (sessions.isEmpty()) {
                 Text(
-                    "No archived conversations yet. End an assistant " +
-                        "session and it will appear here.",
+                    stringResource(R.string.history_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 16.dp),
@@ -211,7 +212,7 @@ fun ConversationHistoryScreen(
                                 )
                                 Text(
                                     session.preview.ifBlank {
-                                        "(no text captured)"
+                                        stringResource(R.string.history_no_text)
                                     },
                                     style = MaterialTheme.typography
                                         .bodyMedium,
@@ -225,7 +226,7 @@ fun ConversationHistoryScreen(
                                         Alignment.CenterVertically,
                                 ) {
                                     Text(
-                                        "${session.turnCount} turns",
+                                        pluralStringResource(R.plurals.history_turns, session.turnCount, session.turnCount),
                                         style = MaterialTheme.typography
                                             .labelSmall,
                                         color = MaterialTheme.colorScheme
@@ -238,7 +239,7 @@ fun ConversationHistoryScreen(
                                             )
                                         },
                                     ) {
-                                        Text("Delete")
+                                        Text(stringResource(R.string.common_delete))
                                     }
                                 }
                             }
@@ -249,7 +250,7 @@ fun ConversationHistoryScreen(
         } else {
             if (hits.isEmpty()) {
                 Text(
-                    "No matches for \"$query\".",
+                    stringResource(R.string.history_no_matches, query),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 16.dp),
@@ -312,11 +313,10 @@ private fun SessionDetail(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete this conversation?") },
+            title = { Text(stringResource(R.string.history_delete_one_title)) },
             text = {
                 Text(
-                    "This permanently deletes the session from " +
-                        formatDate(startedAt) + ". This cannot be undone.",
+                    stringResource(R.string.history_delete_one_message, formatDate(startedAt)),
                 )
             },
             confirmButton = {
@@ -326,14 +326,14 @@ private fun SessionDetail(
                         onDelete()
                     },
                 ) {
-                    Text("Delete")
+                    Text(stringResource(R.string.common_delete))
                 }
             },
             dismissButton = {
                 TextButton(
                     onClick = { showDeleteConfirm = false },
                 ) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.common_cancel))
                 }
             },
         )
@@ -345,10 +345,10 @@ private fun SessionDetail(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TextButton(onClick = onBack) {
-            Text("← Back")
+            Text(stringResource(R.string.history_back))
         }
         TextButton(onClick = { showDeleteConfirm = true }) {
-            Text("Delete")
+            Text(stringResource(R.string.common_delete))
         }
     }
 

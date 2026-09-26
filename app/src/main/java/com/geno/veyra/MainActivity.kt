@@ -1,6 +1,7 @@
 package com.geno.veyra
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -26,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -43,6 +45,9 @@ import com.geno.veyra.ui.CameraTestScreen
 import com.geno.veyra.ui.HomeScreen
 import com.geno.veyra.ui.SettingsScreen
 import com.geno.veyra.ui.TranslateScreen
+import com.geno.veyra.R
+import com.geno.veyra.settings.AppLocaleStore
+import com.geno.veyra.settings.LocaleHelper
 import com.geno.veyra.ui.theme.VeyraTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.coroutines.resume
@@ -54,6 +59,15 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        // Apply the saved app language before any resources are loaded.
+        // Uses the synchronous SharedPreferences cache because DataStore
+        // reads are asynchronous and attachBaseContext must return a
+        // Context immediately.
+        val tag = AppLocaleStore.cachedAppLanguageTag(newBase)
+        super.attachBaseContext(LocaleHelper.wrapForLocale(newBase, tag))
+    }
 
     @Inject
     lateinit var glassesManager: GlassesManager
@@ -337,25 +351,25 @@ private fun VeyraRoot() {
 
             BottomNavItem(
                 "home",
-                "Home",
+                stringResource(R.string.nav_home),
                 Icons.Default.Home
             ),
 
             BottomNavItem(
                 "translate",
-                "Translate",
+                stringResource(R.string.common_translate),
                 Icons.Default.Translate
             ),
 
             BottomNavItem(
                 "transcript",
-                "Assistant",
+                stringResource(R.string.common_assistant),
                 Icons.AutoMirrored.Filled.Chat
             ),
 
             BottomNavItem(
                 "settings",
-                "Settings",
+                stringResource(R.string.common_settings),
                 Icons.Default.Settings
             ),
         )

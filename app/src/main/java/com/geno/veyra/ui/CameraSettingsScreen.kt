@@ -14,9 +14,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.geno.veyra.R
 import com.geno.veyra.settings.CameraResolution
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -40,13 +42,13 @@ fun CameraSettingsScreen(
     ) {
 
         Text(
-            text = "Camera Settings",
+            text = stringResource(R.string.camera_settings_title),
             style = MaterialTheme.typography.headlineSmall,
         )
 
         Text(
             text =
-                "These settings apply the next time the camera starts.",
+                stringResource(R.string.camera_settings_note),
             style = MaterialTheme.typography.bodyMedium,
             color =
                 MaterialTheme.colorScheme.onSurfaceVariant,
@@ -58,7 +60,7 @@ fun CameraSettingsScreen(
         ) {
 
             Text(
-                text = "Resolution",
+                text = stringResource(R.string.camera_resolution),
                 style = MaterialTheme.typography.titleMedium,
             )
 
@@ -84,7 +86,7 @@ fun CameraSettingsScreen(
                         },
 
                         label = {
-                            Text(resolution.label)
+                            Text(stringResource(resolution.labelRes))
                         },
                     )
                 }
@@ -97,7 +99,7 @@ fun CameraSettingsScreen(
         ) {
 
             Text(
-                text = "Frame Rate",
+                text = stringResource(R.string.camera_frame_rate),
                 style = MaterialTheme.typography.titleMedium,
             )
 
@@ -121,7 +123,7 @@ fun CameraSettingsScreen(
                         },
 
                         label = {
-                            Text("$fps FPS")
+                            Text(stringResource(R.string.camera_fps, fps))
                         },
                     )
                 }
@@ -130,8 +132,11 @@ fun CameraSettingsScreen(
 
         Text(
             text =
-                "Current: ${preferences.cameraResolution.label}, " +
-                    "${preferences.cameraFrameRate} FPS",
+                stringResource(
+                    R.string.camera_current,
+                    stringResource(preferences.cameraResolution.labelRes),
+                    preferences.cameraFrameRate,
+                ),
 
             style = MaterialTheme.typography.bodyMedium,
 
@@ -143,7 +148,7 @@ fun CameraSettingsScreen(
             onClick = onBack,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Done")
+            Text(stringResource(R.string.common_done))
         }
     }
 }

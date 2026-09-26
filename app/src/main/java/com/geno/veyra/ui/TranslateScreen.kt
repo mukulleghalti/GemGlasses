@@ -42,10 +42,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.geno.veyra.R
 import com.geno.veyra.translate.TranslateLanguage
 import com.geno.veyra.translate.TranslateStatus
 import com.geno.veyra.translate.TranslationExchange
@@ -89,7 +91,7 @@ fun TranslateScreen(
             .padding(16.dp),
     ) {
         Text(
-            text = "Translate",
+            text = stringResource(R.string.common_translate),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
         )
@@ -103,7 +105,7 @@ fun TranslateScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             LanguagePicker(
-                label = "From",
+                label = stringResource(R.string.translate_from),
                 selected = sourceLang,
                 options =
                     listOf(TranslateLanguage.AUTO) +
@@ -117,12 +119,12 @@ fun TranslateScreen(
             ) {
                 Icon(
                     imageVector = Icons.Filled.SwapHoriz,
-                    contentDescription = "Swap languages",
+                    contentDescription = stringResource(R.string.translate_swap_desc),
                 )
             }
 
             LanguagePicker(
-                label = "To",
+                label = stringResource(R.string.translate_to),
                 selected = targetLang,
                 options = TranslateLanguage.ALL,
                 onSelect = viewModel::setTarget,
@@ -143,9 +145,7 @@ fun TranslateScreen(
             if (exchanges.isEmpty()) {
                 item {
                     Text(
-                        text =
-                            "Tap the microphone and start talking — " +
-                                "the translation appears here.",
+                        text = stringResource(R.string.translate_empty),
                         color =
                             MaterialTheme.colorScheme
                                 .onSurfaceVariant,
@@ -211,10 +211,10 @@ fun TranslateScreen(
                 Spacer(modifier = Modifier.size(8.dp))
                 Text(
                     when (status) {
-                        TranslateStatus.IDLE -> "Start translating"
-                        TranslateStatus.CONNECTING -> "Connecting…"
-                        TranslateStatus.LISTENING -> "Stop"
-                        TranslateStatus.ERROR -> "Retry"
+                        TranslateStatus.IDLE -> stringResource(R.string.translate_start)
+                        TranslateStatus.CONNECTING -> stringResource(R.string.common_connecting)
+                        TranslateStatus.LISTENING -> stringResource(R.string.translate_stop)
+                        TranslateStatus.ERROR -> stringResource(R.string.translate_retry)
                     },
                 )
             }
@@ -225,7 +225,7 @@ fun TranslateScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Clear,
-                        contentDescription = "Clear history",
+                        contentDescription = stringResource(R.string.translate_clear_desc),
                     )
                 }
             }
@@ -234,7 +234,7 @@ fun TranslateScreen(
         if (status == TranslateStatus.ERROR) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Couldn't reach the translator. Check your connection and retry.",
+                text = stringResource(R.string.translate_error),
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
             )

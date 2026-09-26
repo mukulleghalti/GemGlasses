@@ -11,6 +11,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.geno.veyra.MainActivity
 import com.geno.veyra.R
+import com.geno.veyra.settings.AppLocaleStore
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,13 +52,17 @@ class AlertReceiver : BroadcastReceiver() {
             runCatching { scheduler.removeFired(id) }
         }
 
-        ensureChannel(context)
-        postNotification(context, kind, label)
+        // Resolve user-visible strings in the chosen app language, not
+        // the system language.
+        val localized = AppLocaleStore.wrapWithAppLocale(context)
+        val title = localized.getString(
+            if (kind == "timer") R.string.alert_timer_done else R.string.alert_reminder,
+        )
 
-        val speech = when (kind) {
-            "timer" -> "Timer done. $label"
-            else -> "Reminder. $label"
-        }
+        ensureChannel(localized)
+        postNotification(context, title, label)
+
+        val speech = "$title. $label"
 
         speaker.speak(speech.trim()) {
             pending.finish()
@@ -71,7 +76,7 @@ class AlertReceiver : BroadcastReceiver() {
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
-                "Timers & reminders",
+                context.getString(R.string.alert_channel_name),
                 NotificationManager.IMPORTANCE_HIGH,
             ),
         )
@@ -79,7 +84,7 @@ class AlertReceiver : BroadcastReceiver() {
 
     private fun postNotification(
         context: Context,
-        kind: String,
+        title: String,
         label: String,
     ) {
         val openApp = PendingIntent.getActivity(
@@ -89,8 +94,6 @@ class AlertReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or
                 PendingIntent.FLAG_IMMUTABLE,
         )
-
-        val title = if (kind == "timer") "Timer done" else "Reminder"
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_glasses)

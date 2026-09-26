@@ -13,6 +13,7 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.geno.veyra.MainActivity
 import com.geno.veyra.R
+import com.geno.veyra.settings.AppLocaleStore
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -25,6 +26,11 @@ import javax.inject.Inject
  */
 @AndroidEntryPoint
 class AgentForegroundService : Service() {
+
+    override fun attachBaseContext(newBase: Context) {
+        // Show the session notification in the chosen app language.
+        super.attachBaseContext(AppLocaleStore.wrapWithAppLocale(newBase))
+    }
 
     private var wakeLock: PowerManager.WakeLock? = null
 

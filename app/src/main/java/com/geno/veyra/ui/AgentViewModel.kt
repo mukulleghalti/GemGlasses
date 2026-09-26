@@ -15,6 +15,7 @@ import com.geno.veyra.glasses.ConnectionState
 import com.geno.veyra.service.AgentForegroundService
 import com.geno.veyra.service.AssistantStarter
 import com.geno.veyra.settings.AgentPreferences
+import com.geno.veyra.settings.AppLocaleStore
 import com.geno.veyra.settings.AudioOutput
 import com.geno.veyra.settings.GeminiKeyRepository
 import com.geno.veyra.settings.Memory
@@ -90,6 +91,14 @@ class AgentViewModel @Inject constructor(
     val preferences: StateFlow<AgentPreferences> =
         settings.preferences
             .stateInDefault(AgentPreferences.DEFAULT)
+
+    /**
+     * App UI language as a BCP-47 tag, or `null` for the system language.
+     * Independent of the assistant's spoken language.
+     */
+    val appLanguage: StateFlow<String?> =
+        settings.appLanguage
+            .stateInDefault(null)
 
     val wakeWordModelState: StateFlow<WakeWordModelState> =
         wakeWordEngine.modelState
@@ -223,6 +232,20 @@ class AgentViewModel @Inject constructor(
     }
 
     /**
+     * Persists the app UI language. Callers should recreate the activity
+     * afterwards so the new locale applies immediately.
+     */
+    fun setAppLanguage(tag: String?) {
+        // Cache synchronously first: callers recreate the activity right
+        // after this call, and attachBaseContext must see the new tag before
+        // the DataStore write completes.
+        AppLocaleStore.cacheAppLanguageTag(getApplication(), tag)
+        viewModelScope.launch {
+            settings.setAppLanguage(tag)
+        }
+    }
+
+    /**
      * Toggles web search: whether the assistant may use Google Search
      * grounding during a session.
      */
@@ -270,7 +293,7 @@ class AgentViewModel @Inject constructor(
         data object Valid : ApiKeyState
 
         /** Google rejected the key, or no key is saved. */
-        data class Invalid(val message: String) : ApiKeyState
+        data class Invalid(val message: String?) : ApiKeyState
 
         /** No key saved at all. */
         data object Missing : ApiKeyState
@@ -298,7 +321,7 @@ class AgentViewModel @Inject constructor(
                 tokenProvider.fetchEphemeralToken()
                 ApiKeyState.Valid
             } catch (e: Exception) {
-                ApiKeyState.Invalid(e.message ?: "Couldn't verify the key.")
+                ApiKeyState.Invalid(e.message)
             }
         }
     }
@@ -323,7 +346,7 @@ class AgentViewModel @Inject constructor(
                 tokenProvider.fetchEphemeralToken()
                 ApiKeyState.Valid
             } catch (e: Exception) {
-                ApiKeyState.Invalid(e.message ?: "Couldn't verify the key.")
+                ApiKeyState.Invalid(e.message)
             }
         }
     }

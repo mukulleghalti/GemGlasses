@@ -1,6 +1,7 @@
 package com.geno.veyra.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.pm.PackageManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,12 +48,18 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
+import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.geno.veyra.R
+import com.geno.veyra.settings.AppLanguage
 import com.geno.veyra.settings.AudioOutput
 import com.geno.veyra.settings.LIVE_MODELS
+import com.geno.veyra.settings.LocaleHelper
 import com.geno.veyra.wakeword.WakeWordModelState
 
 /**
@@ -75,11 +82,12 @@ fun SettingsScreen(
     var showMemoriesDialog by remember { mutableStateOf(false) }
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var showModelDialog by remember { mutableStateOf(false) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
     var advancedExpanded by remember { mutableStateOf(false) }
 
     val selectedVoice = VOICES.firstOrNull { it.name == prefs.voiceName }
     val voiceLabel = selectedVoice?.let {
-        "${it.name} · ${it.gender.label}"
+        "${it.name} · ${stringResource(it.gender.labelRes)}"
     } ?: prefs.voiceName
     val stopLabel = STOP_PHRASES.firstOrNull {
         it.first == prefs.stopPhrase
@@ -88,10 +96,13 @@ fun SettingsScreen(
         it.first == prefs.wakePhrase
     }?.second ?: prefs.wakePhrase
     val wakeSubtitle =
-        (if (prefs.wakeWordEnabled) "On" else "Off") +
+        (if (prefs.wakeWordEnabled) stringResource(R.string.settings_wake_on) else stringResource(R.string.settings_wake_off)) +
             " · $wakePhraseLabel"
     val apiKeySet = viewModel.savedApiKey != null
     val apiKeyState by viewModel.apiKeyState.collectAsStateWithLifecycle()
+    val appLanguageTag by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val appLanguage = AppLanguage.fromTag(appLanguageTag)
+    val activity = LocalContext.current as? Activity
 
     Column(
         modifier = modifier
@@ -101,25 +112,37 @@ fun SettingsScreen(
             .padding(bottom = 24.dp),
     ) {
         Text(
-            "Settings",
+            stringResource(R.string.common_settings),
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(vertical = 12.dp),
         )
 
-        SectionLabel("Assistant")
+        SectionLabel(stringResource(R.string.settings_section_general))
         SettingRow(
-            title = "Voice",
+            title = stringResource(R.string.settings_language),
+            value =
+                if (appLanguage == AppLanguage.SYSTEM) {
+                    stringResource(R.string.settings_language_system)
+                } else {
+                    LocaleHelper.displayName(appLanguage.tag!!)
+                },
+            onClick = { showLanguageDialog = true },
+        )
+
+        SectionLabel(stringResource(R.string.settings_section_assistant))
+        SettingRow(
+            title = stringResource(R.string.settings_voice),
             value = voiceLabel,
             onClick = { showVoiceDialog = true },
         )
         SettingRow(
-            title = "Audio output",
-            value = prefs.audioOutput.label,
+            title = stringResource(R.string.settings_audio_output),
+            value = stringResource(prefs.audioOutput.labelRes),
             onClick = { showAudioDialog = true },
         )
         SettingRow(
-            title = "Barge-in",
-            subtitle = "Talking over the assistant cuts it off",
+            title = stringResource(R.string.settings_barge_in),
+            subtitle = stringResource(R.string.settings_barge_in_sub),
             trailing = {
                 Switch(
                     checked = prefs.bargeInEnabled,
@@ -128,29 +151,29 @@ fun SettingsScreen(
             },
         )
         SettingRow(
-            title = "Stop phrase",
+            title = stringResource(R.string.settings_stop_phrase),
             value = stopLabel,
             onClick = { showStopPhraseDialog = true },
         )
 
-        SectionLabel("Wake-up")
+        SectionLabel(stringResource(R.string.settings_section_wakeup))
         SettingRow(
-            title = "Voice wake-up",
+            title = stringResource(R.string.settings_voice_wakeup),
             subtitle = wakeSubtitle,
             onClick = { showWakeDialog = true },
         )
 
-        SectionLabel("Memory")
+        SectionLabel(stringResource(R.string.settings_section_memory))
         SettingRow(
-            title = "Memories",
-            value = "${memories.size} saved",
+            title = stringResource(R.string.settings_memories_title),
+            value = pluralStringResource(R.plurals.settings_memories_saved, memories.size, memories.size),
             onClick = { showMemoriesDialog = true },
         )
 
-        SectionLabel("AI Settings")
+        SectionLabel(stringResource(R.string.settings_section_ai))
         SettingRow(
-            title = "Web Search",
-            subtitle = "Let the assistant access up-to-date online information",
+            title = stringResource(R.string.settings_web_search),
+            subtitle = stringResource(R.string.settings_web_search_sub),
             trailing = {
                 Switch(
                     checked = prefs.webSearchEnabled,
@@ -159,14 +182,14 @@ fun SettingsScreen(
             },
         )
         SettingRow(
-            title = "Gemini Model",
+            title = stringResource(R.string.settings_gemini_model),
             value = LIVE_MODELS.firstOrNull { it.id == prefs.liveModel }
                 ?.label ?: prefs.liveModel,
             onClick = { showModelDialog = true },
         )
         SettingRow(
-            title = "Auto History Titles",
-            subtitle = "Generate short titles for past conversations",
+            title = stringResource(R.string.settings_auto_titles),
+            subtitle = stringResource(R.string.settings_auto_titles_sub),
             trailing = {
                 Switch(
                     checked = prefs.autoHistoryTitles,
@@ -175,8 +198,8 @@ fun SettingsScreen(
             },
         )
         SettingRow(
-            title = "QR Bar Scan",
-            subtitle = "Let the assistant scan QR codes and barcodes",
+            title = stringResource(R.string.settings_qr_scan),
+            subtitle = stringResource(R.string.settings_qr_scan_sub),
             trailing = {
                 Switch(
                     checked = prefs.qrScanEnabled,
@@ -185,8 +208,8 @@ fun SettingsScreen(
             },
         )
         SettingRow(
-            title = "OCR",
-            subtitle = "Let the assistant read text from what it sees",
+            title = stringResource(R.string.settings_ocr),
+            subtitle = stringResource(R.string.settings_ocr_sub),
             trailing = {
                 Switch(
                     checked = prefs.ocrEnabled,
@@ -204,7 +227,7 @@ fun SettingsScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "ADVANCED",
+                stringResource(R.string.settings_section_advanced).uppercase(),
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.2.sp,
@@ -219,33 +242,47 @@ fun SettingsScreen(
         }
         if (advancedExpanded) {
             SettingRow(
-                title = "Gemini API key",
-                value = if (apiKeySet) "Set" else "Not set",
+                title = stringResource(R.string.settings_api_key),
+                value = if (apiKeySet) stringResource(R.string.settings_api_key_set) else stringResource(R.string.settings_api_key_not_set),
                 onClick = { showApiKeyDialog = true },
             )
             SettingRow(
-                title = "Check Connection",
+                title = stringResource(R.string.settings_check_connection),
                 value = when (val state = apiKeyState) {
-                    is AgentViewModel.ApiKeyState.Checking -> "Checking…"
-                    is AgentViewModel.ApiKeyState.Valid -> "Connection OK"
+                    is AgentViewModel.ApiKeyState.Checking -> stringResource(R.string.settings_conn_checking)
+                    is AgentViewModel.ApiKeyState.Valid -> stringResource(R.string.settings_conn_ok)
                     is AgentViewModel.ApiKeyState.Invalid ->
-                        state.message.take(40)
+                        (state.message
+                            ?: stringResource(R.string.settings_conn_fallback)).take(40)
 
-                    is AgentViewModel.ApiKeyState.Missing -> "No key saved"
-                    is AgentViewModel.ApiKeyState.Unchecked -> "Tap to test"
+                    is AgentViewModel.ApiKeyState.Missing -> stringResource(R.string.settings_conn_missing)
+                    is AgentViewModel.ApiKeyState.Unchecked -> stringResource(R.string.settings_conn_tap)
                 },
                 onClick = { viewModel.checkConnection() },
             )
         }
 
         Text(
-            "Transcripts stay on this device and are never synced.",
+            stringResource(R.string.settings_privacy_note),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 20.dp),
         )
     }
 
+    if (showLanguageDialog) {
+        LanguageDialog(
+            current = appLanguage,
+            onSelect = { option ->
+                showLanguageDialog = false
+                if (option != appLanguage) {
+                    viewModel.setAppLanguage(option.tag)
+                    activity?.recreate()
+                }
+            },
+            onDismiss = { showLanguageDialog = false },
+        )
+    }
     if (showModelDialog) {
         ModelDialog(
             current = prefs.liveModel,
@@ -392,7 +429,7 @@ private fun VoiceDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Assistant voice") },
+        title = { Text(stringResource(R.string.settings_voice_dialog_title)) },
         text = {
             LazyColumn(
                 modifier = Modifier.heightIn(max = 420.dp),
@@ -400,7 +437,7 @@ private fun VoiceDialog(
                 VoiceGender.entries.forEach { gender ->
                     item {
                         Text(
-                            gender.label + " voices",
+                            stringResource(R.string.settings_voices_group, stringResource(gender.labelRes)),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(vertical = 6.dp),
@@ -436,7 +473,53 @@ private fun VoiceDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
+        },
+    )
+}
+
+@Composable
+private fun LanguageDialog(
+    current: AppLanguage,
+    onSelect: (AppLanguage) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_language_dialog_title)) },
+        text = {
+            Column {
+                AppLanguage.entries.forEach { option ->
+                    val label =
+                        if (option == AppLanguage.SYSTEM) {
+                            stringResource(R.string.settings_language_system)
+                        } else {
+                            LocaleHelper.displayName(option.tag!!)
+                        }
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(option) }
+                                .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = option == current,
+                            onClick = { onSelect(option) },
+                        )
+                        Text(
+                            label,
+                            modifier = Modifier.padding(start = 12.dp),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_done))
+            }
         },
     )
 }
@@ -449,7 +532,7 @@ private fun ModelDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Gemini Model") },
+        title = { Text(stringResource(R.string.settings_gemini_model)) },
         text = {
             LazyColumn(
                 modifier = Modifier.heightIn(max = 420.dp),
@@ -472,7 +555,7 @@ private fun ModelDialog(
                                     MaterialTheme.typography.bodyLarge,
                             )
                             Text(
-                                model.subtitle,
+                                stringResource(model.subtitleRes),
                                 style =
                                     MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme
@@ -488,7 +571,7 @@ private fun ModelDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
         },
     )
 }
@@ -501,14 +584,11 @@ private fun AudioOutputDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Audio output") },
+        title = { Text(stringResource(R.string.settings_audio_dialog_title)) },
         text = {
             Column {
                 Text(
-                    "Glasses: voice plays through the glasses in high " +
-                        "quality and the phone's mic listens. Phone " +
-                        "speaker: voice plays on the phone and the " +
-                        "glasses' mic listens while they're connected.",
+                    stringResource(R.string.settings_audio_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp),
@@ -523,7 +603,7 @@ private fun AudioOutputDialog(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            output.label,
+                            stringResource(output.labelRes),
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.weight(1f),
                         )
@@ -536,7 +616,7 @@ private fun AudioOutputDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
         },
     )
 }
@@ -552,12 +632,11 @@ private fun StopPhraseDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Stop phrase") },
+        title = { Text(stringResource(R.string.settings_stop_dialog_title)) },
         text = {
             Column {
                 Text(
-                    "Saying this while the assistant is listening ends " +
-                        "the session.",
+                    stringResource(R.string.settings_stop_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp),
@@ -584,7 +663,7 @@ private fun StopPhraseDialog(
                 }
                 if (!isPreset) {
                     Text(
-                        "Custom: “$current”",
+                        stringResource(R.string.settings_stop_custom, current),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(vertical = 4.dp),
@@ -593,7 +672,7 @@ private fun StopPhraseDialog(
                 OutlinedTextField(
                     value = custom,
                     onValueChange = { custom = it },
-                    label = { Text("Custom phrase") },
+                    label = { Text(stringResource(R.string.settings_stop_custom_label)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         imeAction = ImeAction.Done,
@@ -623,7 +702,13 @@ private fun StopPhraseDialog(
                     }
                 },
             ) {
-                Text(if (custom.isBlank()) "Done" else "Save")
+                Text(
+                    if (custom.isBlank()) {
+                        stringResource(R.string.common_done)
+                    } else {
+                        stringResource(R.string.settings_save)
+                    },
+                )
             }
         },
     )
@@ -647,7 +732,7 @@ private fun WakeUpDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Voice wake-up") },
+        title = { Text(stringResource(R.string.settings_wake_dialog_title)) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(
@@ -661,7 +746,7 @@ private fun WakeUpDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "Listen for wake word",
+                        stringResource(R.string.settings_wake_listen),
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.weight(1f),
                     )
@@ -676,8 +761,7 @@ private fun WakeUpDialog(
 
                 if (!micGranted) {
                     Text(
-                        "Microphone permission is required. Grant it by " +
-                            "tapping the + button on the Assistant tab once.",
+                        stringResource(R.string.settings_wake_mic_needed),
                         style = MaterialTheme.typography.bodySmall,
                         color =
                             MaterialTheme.colorScheme.onSurfaceVariant,
@@ -685,7 +769,7 @@ private fun WakeUpDialog(
                 }
 
                 Text(
-                    "Wake phrase",
+                    stringResource(R.string.settings_wake_phrase_label),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -702,7 +786,7 @@ private fun WakeUpDialog(
                 OutlinedTextField(
                     value = custom,
                     onValueChange = { custom = it },
-                    label = { Text("Custom wake phrase") },
+                    label = { Text(stringResource(R.string.settings_wake_custom_label)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         imeAction = ImeAction.Done,
@@ -718,27 +802,27 @@ private fun WakeUpDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    "Only words the offline voice model knows will " +
-                        "trigger — common English words are safest.",
+                    stringResource(R.string.settings_wake_vocab_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 val modelStatusText = when (val state = modelState) {
                     WakeWordModelState.NotDownloaded ->
-                        "Voice model downloads on first use (~40 MB, " +
-                            "Wi-Fi recommended)."
+                        stringResource(R.string.settings_wake_model_download)
                     is WakeWordModelState.Downloading ->
                         if (state.progress < 0f) {
-                            "Downloading voice model…"
+                            stringResource(R.string.settings_wake_model_downloading)
                         } else {
-                            "Downloading voice model… " +
-                                "${(state.progress * 100).toInt()}%"
+                            stringResource(
+                                R.string.settings_wake_model_downloading_pct,
+                                (state.progress * 100).toInt(),
+                            )
                         }
                     WakeWordModelState.Ready ->
-                        "Voice model ready."
+                        stringResource(R.string.settings_wake_model_ready)
                     is WakeWordModelState.Error ->
-                        "Voice model error: ${state.message}"
+                        stringResource(R.string.settings_wake_model_error, state.message)
                 }
                 Text(
                     modelStatusText,
@@ -759,7 +843,7 @@ private fun WakeUpDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
         },
     )
 }
@@ -773,12 +857,11 @@ private fun MemoriesDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Memories") },
+        title = { Text(stringResource(R.string.settings_memories_title)) },
         text = {
             if (memories.isEmpty()) {
                 Text(
-                    "Nothing saved yet. Say “remember this …” in a " +
-                        "session to add one.",
+                    stringResource(R.string.settings_memories_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -808,7 +891,7 @@ private fun MemoriesDialog(
                                     viewModel.deleteMemory(memory.id)
                                 },
                             ) {
-                                Text("Delete")
+                                Text(stringResource(R.string.common_delete))
                             }
                         }
                     }
@@ -816,7 +899,7 @@ private fun MemoriesDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
         },
     )
 }
@@ -834,7 +917,7 @@ private fun ApiKeyDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Gemini API key") },
+        title = { Text(stringResource(R.string.settings_apikey_dialog_title)) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(
@@ -845,7 +928,7 @@ private fun ApiKeyDialog(
                 OutlinedTextField(
                     value = keyInput,
                     onValueChange = { keyInput = it },
-                    label = { Text("API key") },
+                    label = { Text(stringResource(R.string.settings_apikey_label)) },
                     singleLine = true,
                     visualTransformation =
                         if (passwordVisible) {
@@ -868,9 +951,9 @@ private fun ApiKeyDialog(
                                     },
                                 contentDescription =
                                     if (passwordVisible) {
-                                        "Hide key"
+                                        stringResource(R.string.settings_apikey_hide)
                                     } else {
-                                        "Show key"
+                                        stringResource(R.string.settings_apikey_show)
                                     },
                             )
                         }
@@ -898,7 +981,7 @@ private fun ApiKeyDialog(
                             apiKeyState !=
                             AgentViewModel.ApiKeyState.Checking,
                     ) {
-                        Text("Save & test")
+                        Text(stringResource(R.string.settings_apikey_save_test))
                     }
                     if (viewModel.savedApiKey != null) {
                         TextButton(
@@ -907,22 +990,26 @@ private fun ApiKeyDialog(
                                 keyInput = ""
                             },
                         ) {
-                            Text("Remove")
+                            Text(stringResource(R.string.settings_apikey_remove))
                         }
                     }
                 }
 
                 val statusText = when (val state = apiKeyState) {
                     AgentViewModel.ApiKeyState.Unchecked ->
-                        "Key saved — tap Save & test to verify it."
+                        stringResource(R.string.settings_apikey_unchecked)
                     AgentViewModel.ApiKeyState.Checking ->
-                        "Verifying key with Google…"
+                        stringResource(R.string.settings_apikey_checking)
                     AgentViewModel.ApiKeyState.Valid ->
-                        "Key verified — the assistant is ready."
+                        stringResource(R.string.settings_apikey_valid)
                     is AgentViewModel.ApiKeyState.Invalid ->
-                        "Key problem: ${state.message}"
+                        stringResource(
+                        R.string.settings_apikey_invalid,
+                        state.message
+                            ?: stringResource(R.string.settings_conn_fallback),
+                    )
                     AgentViewModel.ApiKeyState.Missing ->
-                        "No key saved yet."
+                        stringResource(R.string.settings_apikey_missing)
                 }
                 val statusColor =
                     if (apiKeyState is AgentViewModel.ApiKeyState.Invalid) {
@@ -936,17 +1023,14 @@ private fun ApiKeyDialog(
                     color = statusColor,
                 )
                 Text(
-                    "Get a free key from Google AI Studio. It's stored " +
-                        "encrypted on this phone and sent only to Google — " +
-                        "the app mints its own short-lived tokens, no " +
-                        "server in the middle.",
+                    stringResource(R.string.settings_apikey_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
         },
     )
 }
@@ -968,9 +1052,9 @@ private fun ChipRow(content: @Composable () -> Unit) {
 //
 // Google doesn't publish gender labels; the grouping below follows the
 // community-maintained male/female split for these voices.
-private enum class VoiceGender(val label: String) {
-    FEMALE("Female"),
-    MALE("Male"),
+private enum class VoiceGender(@StringRes val labelRes: Int) {
+    FEMALE(R.string.settings_voice_female),
+    MALE(R.string.settings_voice_male),
 }
 
 private data class GeminiVoice(

@@ -69,10 +69,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.geno.veyra.R
 import com.geno.veyra.agent.AgentStatus
 import com.geno.veyra.state.CitedPlace
 import com.geno.veyra.state.TranscriptEntry
@@ -185,12 +187,12 @@ private fun AssistantTopBar(
     onToggleMic: () -> Unit,
 ) {
     TopAppBar(
-        title = { Text("Assistant") },
+        title = { Text(stringResource(R.string.common_assistant)) },
         navigationIcon = {
             IconButton(onClick = onMenuClick) {
                 Icon(
                     imageVector = Icons.Filled.Menu,
-                    contentDescription = "Conversations",
+                    contentDescription = stringResource(R.string.assistant_menu_desc),
                 )
             }
         },
@@ -207,8 +209,8 @@ private fun AssistantTopBar(
                             if (micMuted) Icons.Default.MicOff
                             else Icons.Default.Mic,
                         contentDescription =
-                            if (micMuted) "Unmute mic"
-                            else "Mute mic",
+                            if (micMuted) stringResource(R.string.assistant_unmute_desc)
+                            else stringResource(R.string.assistant_mute_desc),
                         tint =
                             if (micMuted) {
                                 MaterialTheme.colorScheme.error
@@ -233,7 +235,7 @@ private fun ConversationDrawerContent(
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
-            "Conversations",
+            stringResource(R.string.assistant_drawer_title),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(
                 horizontal = 20.dp,
@@ -256,7 +258,7 @@ private fun ConversationDrawerContent(
                     tint = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    "New conversation",
+                    stringResource(R.string.assistant_new_conversation),
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -292,7 +294,7 @@ private fun IdleAssistant(modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            "Just a tap away",
+            stringResource(R.string.assistant_idle_hint),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -473,7 +475,7 @@ private fun StartConversationButton(onClick: () -> Unit) {
             ) {
                 Icon(
                     imageVector = Icons.Filled.Add,
-                    contentDescription = "New conversation",
+                    contentDescription = stringResource(R.string.assistant_new_conversation),
                 )
             }
         }
@@ -510,7 +512,7 @@ private fun LiveTranscript(
                     .background(Color(0xFF34C759)),
             )
             Text(
-                if (assistantRunning) "Live" else "Ended",
+                if (assistantRunning) stringResource(R.string.assistant_live) else stringResource(R.string.assistant_ended),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -525,8 +527,7 @@ private fun LiveTranscript(
             if (entries.isEmpty()) {
                 item {
                     Text(
-                        "The conversation will appear here when the " +
-                            "session starts.",
+                        stringResource(R.string.assistant_empty_transcript),
                         color =
                             MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -547,7 +548,7 @@ private fun LiveTranscript(
                     )
 
                     Text(
-                        "Cited Places (Google Maps)",
+                        stringResource(R.string.assistant_cited_places),
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }
@@ -569,13 +570,13 @@ private fun TranscriptLine(
 ) {
     val (label, weight) = when (entry.speaker) {
         TranscriptEntry.Speaker.USER ->
-            "You" to FontWeight.SemiBold
+            stringResource(R.string.transcript_you) to FontWeight.SemiBold
 
         TranscriptEntry.Speaker.ASSISTANT ->
-            "Assistant" to FontWeight.Normal
+            stringResource(R.string.common_assistant) to FontWeight.Normal
 
         TranscriptEntry.Speaker.SYSTEM ->
-            "System" to FontWeight.Light
+            stringResource(R.string.transcript_system) to FontWeight.Light
     }
 
     Column(
@@ -597,14 +598,14 @@ private fun TranscriptLine(
             if (bitmap != null) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "Captured photo",
+                    contentDescription = stringResource(R.string.captured_photo_desc),
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 500.dp),
                 )
             } else {
                 Text(
-                    "Captured photo could not be displayed.",
+                    stringResource(R.string.captured_photo_error),
                     color = MaterialTheme.colorScheme.error,
                 )
             }
