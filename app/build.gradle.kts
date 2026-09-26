@@ -89,7 +89,7 @@ android {
         // lintVital crashes on release builds (AGP lint bug in
         // NonNullableMutableLiveDataDetector); the check itself is
         // irrelevant here, so disable just that detector.
-        disable("NullSafeMutableLiveData")
+        disable += "NullSafeMutableLiveData"
     }
 
     sourceSets {
