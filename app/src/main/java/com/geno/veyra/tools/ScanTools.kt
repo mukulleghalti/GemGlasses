@@ -159,7 +159,7 @@ class OcrTool @Inject constructor(
         if (image == null) return errorResult(error)
 
         val recognizer =
-            TextRecognition.getClient(TextRecognizerOptions.DEFAULT)
+            TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         return try {
             val visionText = runCatching {
                 recognizer.process(image).await()
