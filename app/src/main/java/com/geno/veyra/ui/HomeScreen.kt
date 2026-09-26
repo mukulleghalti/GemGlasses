@@ -4,7 +4,9 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,9 +20,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,13 +34,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.ui.platform.LocalContext
 import com.geno.veyra.agent.AgentStatus
 import com.geno.veyra.glasses.ConnectionState
 import com.geno.veyra.glasses.GlassesDevice
@@ -44,6 +57,7 @@ import com.geno.veyra.glasses.RegistrationState
 fun HomeScreen(
     modifier: Modifier = Modifier,
     onCameraTestClick: () -> Unit = {},
+    onTranslateClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     viewModel: AgentViewModel = hiltViewModel(),
 ) {
@@ -93,228 +107,300 @@ fun HomeScreen(
             }
         }
 
+    val running =
+        status != AgentStatus.IDLE
+
+    val onAssistantClick: () -> Unit = {
+
+        if (running) {
+
+            viewModel.stopSession()
+
+        } else {
+
+            val granted =
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.RECORD_AUDIO,
+                ) == PackageManager.PERMISSION_GRANTED
+
+            if (granted) {
+
+                viewModel.startSession()
+
+            } else {
+
+                micLauncher.launch(
+                    Manifest.permission.RECORD_AUDIO
+                )
+            }
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
 
-        Text(
-            text = "Veyra",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-        )
-
-        Text(
-            text = "Gemini on your Ray-Ban",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        ApiKeyStatusRow(
-            connected = tokenTick && viewModel.hasLiveTokenNow(),
-            onClick = onSettingsClick,
+        BrandHeader(
+            apiKeyConnected =
+                tokenTick && viewModel.hasLiveTokenNow(),
+            onApiKeyClick = onSettingsClick,
         )
 
         GlassesCard(
             registration = registration,
             connectionState = connectionState,
             device = device,
+            onRegisterClick = viewModel::registerGlasses,
+            onConnectClick = viewModel::connectGlasses,
         )
 
-        Spacer(
-            modifier = Modifier.height(8.dp)
+        AssistantHero(
+            running = running,
+            status = status,
+            onClick = onAssistantClick,
         )
 
-        StatusDot(status)
-
-        val running =
-            status != AgentStatus.IDLE
-
-        Button(
-            onClick = {
-
-                if (running) {
-
-                    viewModel.stopSession()
-
-                } else {
-
-                    val granted =
-                        ContextCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.RECORD_AUDIO,
-                        ) == PackageManager.PERMISSION_GRANTED
-
-                    if (granted) {
-
-                        viewModel.startSession()
-
-                    } else {
-
-                        micLauncher.launch(
-                            Manifest.permission.RECORD_AUDIO
-                        )
-                    }
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor =
-                    if (running) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    },
-            ),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
 
-            Text(
-                if (running) {
-                    "Stop Assistant"
-                } else {
-                    "Start Assistant"
-                }
+            QuickTile(
+                title = "Camera Test",
+                subtitle = "Check glasses feed",
+                icon = Icons.Default.PhotoCamera,
+                onClick = onCameraTestClick,
+                modifier = Modifier.weight(1f),
             )
-        }
 
-        /*
-         * Mic mute now lives on the assistant (transcript) screen as an
-         * icon — this is where the user is while talking. Kept out of
-         * Home to reduce clutter.
-         */
-
-        /*
-         * ---------------------------------------------------------
-         * Camera Test
-         * ---------------------------------------------------------
-         *
-         * This is intentionally separate from the Assistant.
-         *
-         * CameraTestScreen does NOT start:
-         *
-         * - Gemini
-         * - MicStreamer
-         * - BluetoothAudioRouter
-         * - SCO
-         */
-        Button(
-            onClick = onCameraTestClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-        ) {
-
-            Text("📷 Camera Test")
-        }
-
-        /*
-         * ---------------------------------------------------------
-         * Registration / MWDAT DeviceSession connection
-         * ---------------------------------------------------------
-         *
-         * Registration and connection are different states.
-         *
-         * RegistrationState:
-         *
-         *   REGISTERED
-         *
-         * means the app is authorized/registered with Meta.
-         *
-         * ConnectionState:
-         *
-         *   CONNECTED
-         *
-         * means our MWDAT DeviceSession has actually started.
-         *
-         * The Bluetooth link is deliberately NOT used here.
-         */
-
-        when {
-
-            registration != RegistrationState.REGISTERED -> {
-
-                Button(
-                    onClick = viewModel::registerGlasses,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-
-                    Text("Register glasses")
-                }
-            }
-
-            connectionState == ConnectionState.CONNECTING -> {
-
-                Text(
-                    text = "Connecting to glasses…",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-
-            connectionState == ConnectionState.CONNECTED -> {
-
-                Text(
-                    text = "Glasses connected",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-
-            connectionState == ConnectionState.ERROR -> {
-
-                Button(
-                    onClick = viewModel::connectGlasses,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-
-                    Text("Retry connection")
-                }
-            }
-
-            else -> {
-
-                Button(
-                    onClick = viewModel::connectGlasses,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-
-                    Text("Connect glasses")
-                }
-            }
+            QuickTile(
+                title = "Translate",
+                subtitle = "Live translation",
+                icon = Icons.Default.Translate,
+                onClick = onTranslateClick,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
+
+/*
+ * ---------------------------------------------------------
+ * Brand header: V monogram + wordmark, API-key pill at right.
+ * ---------------------------------------------------------
+ */
+
+@Composable
+private fun BrandHeader(
+    apiKeyConnected: Boolean,
+    onApiKeyClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            Color(0xFF3B6CFF),
+                            Color(0xFF8B5CF6),
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+
+            // Drawn V mark. Fixed colors only — no @Composable
+            // theme reads inside a DrawScope.
+            Canvas(
+                modifier = Modifier.size(26.dp)
+            ) {
+
+                val strokeWidth =
+                    3.2.dp.toPx()
+
+                drawPath(
+                    path = Path().apply {
+
+                        moveTo(
+                            size.width * 0.20f,
+                            size.height * 0.16f,
+                        )
+
+                        lineTo(
+                            size.width * 0.50f,
+                            size.height * 0.84f,
+                        )
+
+                        lineTo(
+                            size.width * 0.80f,
+                            size.height * 0.16f,
+                        )
+                    },
+                    color = Color.White,
+                    style = Stroke(
+                        width = strokeWidth,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round,
+                    ),
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier.padding(start = 12.dp),
+        ) {
+
+            Text(
+                text = "Veyra",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold,
+            )
+
+            Text(
+                text = "Gemini for your glasses",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Spacer(
+            modifier = Modifier.weight(1f)
+        )
+
+        ApiKeyPill(
+            connected = apiKeyConnected,
+            onClick = onApiKeyClick,
+        )
+    }
+}
+
+/**
+ * Compact Gemini connectivity pill: green while we hold a live
+ * ephemeral token, red otherwise. Tapping opens Settings so a
+ * missing key is one tap away.
+ */
+@Composable
+private fun ApiKeyPill(
+    connected: Boolean,
+    onClick: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick)
+            .background(
+                if (connected) {
+                    colors.primaryContainer
+                } else {
+                    colors.errorContainer
+                },
+            )
+            .border(
+                1.dp,
+                if (connected) {
+                    colors.primary.copy(alpha = 0.35f)
+                } else {
+                    colors.error.copy(alpha = 0.35f)
+                },
+                RoundedCornerShape(999.dp),
+            )
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(
+                    if (connected) {
+                        Color(0xFF4CAF50)
+                    } else {
+                        Color(0xFFEF5350)
+                    },
+                ),
+        )
+
+        Text(
+            text = "API key",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color =
+                if (connected) {
+                    colors.onPrimaryContainer
+                } else {
+                    colors.onErrorContainer
+                },
+        )
+    }
+}
+
+/*
+ * ---------------------------------------------------------
+ * Glasses card: status plus the Register / Connect action.
+ *
+ * Registration and connection are different states.
+ *
+ * RegistrationState.REGISTERED means the app is
+ * authorized/registered with Meta (via the Meta app on
+ * first login).
+ *
+ * ConnectionState.CONNECTED means our MWDAT DeviceSession
+ * has actually started.
+ *
+ * The Bluetooth link is deliberately NOT used here.
+ * ---------------------------------------------------------
+ */
 
 @Composable
 private fun GlassesCard(
     registration: RegistrationState,
     connectionState: ConnectionState,
     device: GlassesDevice?,
+    onRegisterClick: () -> Unit,
+    onConnectClick: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
     ) {
 
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
 
-            Text(
-                text = "Glasses",
-                style = MaterialTheme.typography.labelLarge,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+
+                GlassesGlyph()
+
+                Text(
+                    text = "Glasses",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
 
             Text(
                 text = device?.name ?: "No device found",
                 style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(start = 34.dp),
             )
 
             Text(
@@ -337,53 +423,335 @@ private fun GlassesCard(
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 34.dp),
+            )
+
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
+
+            when {
+
+                registration != RegistrationState.REGISTERED -> {
+
+                    Button(
+                        onClick = onRegisterClick,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+
+                        Text("Register glasses")
+                    }
+
+                    Text(
+                        text =
+                            "Opens the Meta app to pair " +
+                                "& register",
+                        style = MaterialTheme.typography.labelSmall,
+                        color =
+                            MaterialTheme.colorScheme
+                                .onSurfaceVariant,
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally),
+                    )
+                }
+
+                connectionState == ConnectionState.CONNECTING -> {
+
+                    Text(
+                        text = "Connecting to glasses…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+
+                connectionState == ConnectionState.CONNECTED -> {
+
+                    Text(
+                        text = "Glasses connected",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+
+                connectionState == ConnectionState.ERROR -> {
+
+                    Button(
+                        onClick = onConnectClick,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+
+                        Text("Retry connection")
+                    }
+                }
+
+                else -> {
+
+                    Button(
+                        onClick = onConnectClick,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+
+                        Text("Connect glasses")
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Minimal line-drawn glasses glyph. Fixed colors only. */
+@Composable
+private fun GlassesGlyph(
+    modifier: Modifier = Modifier,
+) {
+    Canvas(
+        modifier = modifier.size(24.dp)
+    ) {
+
+        val strokeWidth =
+            2.2.dp.toPx()
+
+        val lineColor =
+            Color(0xFFB9C2FF)
+
+        val stroke =
+            Stroke(
+                width = strokeWidth,
+                cap = StrokeCap.Round,
+            )
+
+        val lensRadius =
+            size.width * 0.20f
+
+        val lensY =
+            size.height * 0.56f
+
+        // Left lens.
+        drawCircle(
+            color = lineColor,
+            radius = lensRadius,
+            center = Offset(
+                size.width * 0.22f,
+                lensY,
+            ),
+            style = stroke,
+        )
+
+        // Right lens.
+        drawCircle(
+            color = lineColor,
+            radius = lensRadius,
+            center = Offset(
+                size.width * 0.78f,
+                lensY,
+            ),
+            style = stroke,
+        )
+
+        // Bridge.
+        drawLine(
+            color = lineColor,
+            start = Offset(
+                size.width * 0.42f,
+                size.height * 0.46f,
+            ),
+            end = Offset(
+                size.width * 0.58f,
+                size.height * 0.46f,
+            ),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round,
+        )
+
+        // Left temple.
+        drawLine(
+            color = lineColor,
+            start = Offset(
+                size.width * 0.03f,
+                size.height * 0.46f,
+            ),
+            end = Offset(
+                size.width * 0.11f,
+                size.height * 0.28f,
+            ),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round,
+        )
+
+        // Right temple.
+        drawLine(
+            color = lineColor,
+            start = Offset(
+                size.width * 0.97f,
+                size.height * 0.46f,
+            ),
+            end = Offset(
+                size.width * 0.89f,
+                size.height * 0.28f,
+            ),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round,
+        )
+    }
+}
+
+/*
+ * ---------------------------------------------------------
+ * Assistant hero: the primary tap-to-talk surface.
+ * ---------------------------------------------------------
+ */
+
+@Composable
+private fun AssistantHero(
+    running: Boolean,
+    status: AgentStatus,
+    onClick: () -> Unit,
+) {
+    // Brand gradient at rest; warm red while a session is live
+    // so "Stop" reads as an active, stoppable state.
+    val gradient =
+        if (running) {
+
+            Brush.linearGradient(
+                listOf(
+                    Color(0xFFE05252),
+                    Color(0xFFB23A48),
+                )
+            )
+
+        } else {
+
+            Brush.linearGradient(
+                listOf(
+                    Color(0xFF3B6CFF),
+                    Color(0xFF7C5CFF),
+                    Color(0xFFA855F7),
+                )
+            )
+        }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(gradient)
+            .clickable(onClick = onClick)
+            .padding(20.dp),
+    ) {
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+
+                Text(
+                    text =
+                        if (running) {
+                            "Stop Assistant"
+                        } else {
+                            "Start Assistant"
+                        },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color.White,
+                )
+
+                Text(
+                    text =
+                        if (running) {
+                            status.label()
+                        } else {
+                            "Talk to Gemini through your glasses"
+                        },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.85f),
+                )
+            }
+
+            Icon(
+                imageVector = Icons.Default.Mic,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(30.dp),
             )
         }
     }
 }
 
+/*
+ * ---------------------------------------------------------
+ * Quick tiles: Camera Test / Translate.
+ * ---------------------------------------------------------
+ */
+
 @Composable
-private fun StatusDot(
-    status: AgentStatus,
+private fun QuickTile(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val (color, label) =
-        when (status) {
-
-            AgentStatus.IDLE ->
-                Color.Gray to "Stopped"
-
-            AgentStatus.CONNECTING ->
-                Color(0xFFF59E0B) to "Connecting…"
-
-            AgentStatus.LISTENING ->
-                Color(0xFF22C55E) to "Listening"
-
-            AgentStatus.RECONNECTING ->
-                Color(0xFFF59E0B) to "Reconnecting…"
-
-            AgentStatus.ERROR ->
-                Color(0xFFEF4444) to "Error"
-        }
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    Card(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
     ) {
 
-        Spacer(
-            modifier = Modifier
-                .size(16.dp)
-                .clip(CircleShape)
-                .background(color),
-        )
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
 
-        Text(
-            text = label,
-            color = color,
-            fontWeight = FontWeight.Medium,
-        )
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
+
+private fun AgentStatus.label(): String =
+    when (this) {
+
+        AgentStatus.IDLE ->
+            "Stopped"
+
+        AgentStatus.CONNECTING ->
+            "Connecting…"
+
+        AgentStatus.LISTENING ->
+            "Listening"
+
+        AgentStatus.RECONNECTING ->
+            "Reconnecting…"
+
+        AgentStatus.ERROR ->
+            "Error"
+    }
 
 private fun RegistrationState.label(): String =
     when (this) {
@@ -403,62 +771,3 @@ private fun RegistrationState.label(): String =
         RegistrationState.UNKNOWN ->
             "Status unknown"
     }
-
-
-/**
- * Lightweight Gemini connectivity light: a green dot while we hold a
- * live ephemeral token, red otherwise. Tapping it opens Settings so a
- * missing key is one tap away.
- */
-@Composable
-private fun ApiKeyStatusRow(
-    connected: Boolean,
-    onClick: () -> Unit,
-) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .background(
-                if (connected) {
-                    colors.primaryContainer
-                } else {
-                    colors.errorContainer
-                },
-            )
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(12.dp)
-                .clip(CircleShape)
-                .background(
-                    if (connected) {
-                        Color(0xFF2E7D32)
-                    } else {
-                        Color(0xFFC62828)
-                    },
-                ),
-        )
-        Text(
-            text =
-                if (connected) {
-                    "Gemini connected"
-                } else {
-                    "Gemini not connected — tap to add API key"
-                },
-            style = MaterialTheme.typography.bodyMedium,
-            color =
-                if (connected) {
-                    colors.onPrimaryContainer
-                } else {
-                    colors.onErrorContainer
-                },
-            modifier = Modifier.weight(1f),
-        )
-    }
-}

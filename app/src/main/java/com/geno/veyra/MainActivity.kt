@@ -457,6 +457,19 @@ private fun VeyraRoot() {
                     onCameraTestClick = {
                         navController.navigate("camera_test")
                     },
+                    onTranslateClick = {
+                        navController.navigate("translate") {
+                            popUpTo(
+                                navController.graph
+                                    .findStartDestination()
+                                    .id
+                            ) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                     onSettingsClick = {
                         navController.navigate("settings") {
                             popUpTo(
