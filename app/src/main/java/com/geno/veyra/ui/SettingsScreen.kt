@@ -4,32 +4,32 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,221 +46,523 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.weight
 import com.geno.veyra.settings.AudioOutput
 import com.geno.veyra.wakeword.WakeWordModelState
 
+/**
+ * Minimal settings: dense rows (title + current value + chevron) grouped
+ * under small section labels. Every choice lives in a dialog, so the
+ * screen itself stays a quiet list. Only the switch (barge-in) is inline.
+ */
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
     viewModel: AgentViewModel = hiltViewModel(),
 ) {
-    val context = LocalContext.current
     val prefs by viewModel.preferences.collectAsStateWithLifecycle()
+    val memories by viewModel.memories.collectAsStateWithLifecycle()
 
-    val micGranted = ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.RECORD_AUDIO,
-    ) == PackageManager.PERMISSION_GRANTED
-
+    var showVoiceDialog by remember { mutableStateOf(false) }
+    var showAudioDialog by remember { mutableStateOf(false) }
+    var showStopPhraseDialog by remember { mutableStateOf(false) }
+    var showWakeDialog by remember { mutableStateOf(false) }
+    var showMemoriesDialog by remember { mutableStateOf(false) }
+    var showApiKeyDialog by remember { mutableStateOf(false) }
     var advancedExpanded by remember { mutableStateOf(false) }
+
+    val selectedVoice = VOICES.firstOrNull { it.name == prefs.voiceName }
+    val voiceLabel = selectedVoice?.let {
+        "${it.name} · ${it.gender.label}"
+    } ?: prefs.voiceName
+    val stopLabel = STOP_PHRASES.firstOrNull {
+        it.first == prefs.stopPhrase
+    }?.second ?: prefs.stopPhrase
+    val wakePhraseLabel = WAKE_PHRASES.firstOrNull {
+        it.first == prefs.wakePhrase
+    }?.second ?: prefs.wakePhrase
+    val wakeSubtitle =
+        (if (prefs.wakeWordEnabled) "On" else "Off") +
+            " · $wakePhraseLabel"
+    val apiKeySet = viewModel.savedApiKey != null
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 24.dp),
     ) {
-        Text("Settings", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "Settings",
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(vertical = 12.dp),
+        )
 
-        Section(title = "Assistant") {
-            Setting(title = "Assistant Voice") {
-                var voiceMenuOpen by remember { mutableStateOf(false) }
+        SectionLabel("Assistant")
+        SettingRow(
+            title = "Voice",
+            value = voiceLabel,
+            onClick = { showVoiceDialog = true },
+        )
+        SettingRow(
+            title = "Audio output",
+            value = prefs.audioOutput.label,
+            onClick = { showAudioDialog = true },
+        )
+        SettingRow(
+            title = "Barge-in",
+            subtitle = "Talking over the assistant cuts it off",
+            trailing = {
+                Switch(
+                    checked = prefs.bargeInEnabled,
+                    onCheckedChange = { viewModel.setBargeInEnabled(it) },
+                )
+            },
+        )
+        SettingRow(
+            title = "Stop phrase",
+            value = stopLabel,
+            onClick = { showStopPhraseDialog = true },
+        )
 
-                val selectedVoice =
-                    VOICES.firstOrNull { it.name == prefs.voiceName }
+        SectionLabel("Wake-up")
+        SettingRow(
+            title = "Voice wake-up",
+            subtitle = wakeSubtitle,
+            onClick = { showWakeDialog = true },
+        )
 
-                Box {
-                    OutlinedTextField(
-                        value = selectedVoice?.let {
-                            "${it.name} · ${it.gender.label}"
-                        } ?: prefs.voiceName,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Voice") },
-                        trailingIcon = {
-                            Icon(
-                                imageVector = Icons.Filled.ArrowDropDown,
-                                contentDescription = null,
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
+        SectionLabel("Memory")
+        SettingRow(
+            title = "Memories",
+            value = "${memories.size} saved",
+            onClick = { showMemoriesDialog = true },
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { advancedExpanded = !advancedExpanded }
+                .padding(vertical = 13.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "ADVANCED",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp,
+                ),
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                if (advancedExpanded) "▾" else "▸",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        if (advancedExpanded) {
+            SettingRow(
+                title = "Gemini API key",
+                value = if (apiKeySet) "Set" else "Not set",
+                onClick = { showApiKeyDialog = true },
+            )
+        }
+
+        Text(
+            "Transcripts stay on this device and are never synced.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 20.dp),
+        )
+    }
+
+    if (showVoiceDialog) {
+        VoiceDialog(
+            current = prefs.voiceName,
+            onSelect = {
+                viewModel.setVoice(it)
+                showVoiceDialog = false
+            },
+            onDismiss = { showVoiceDialog = false },
+        )
+    }
+    if (showAudioDialog) {
+        AudioOutputDialog(
+            current = prefs.audioOutput,
+            onSelect = {
+                viewModel.setAudioOutput(it)
+                showAudioDialog = false
+            },
+            onDismiss = { showAudioDialog = false },
+        )
+    }
+    if (showStopPhraseDialog) {
+        StopPhraseDialog(
+            current = prefs.stopPhrase,
+            onSelect = {
+                viewModel.setStopPhrase(it)
+                showStopPhraseDialog = false
+            },
+            onDismiss = { showStopPhraseDialog = false },
+        )
+    }
+    if (showWakeDialog) {
+        WakeUpDialog(
+            viewModel = viewModel,
+            onDismiss = { showWakeDialog = false },
+        )
+    }
+    if (showMemoriesDialog) {
+        MemoriesDialog(
+            viewModel = viewModel,
+            onDismiss = { showMemoriesDialog = false },
+        )
+    }
+    if (showApiKeyDialog) {
+        ApiKeyDialog(
+            viewModel = viewModel,
+            onDismiss = { showApiKeyDialog = false },
+        )
+    }
+}
+
+@Composable
+private fun SectionLabel(title: String) {
+    Text(
+        title.uppercase(),
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.2.sp,
+        ),
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 16.dp, bottom = 2.dp),
+    )
+}
+
+/**
+ * One dense settings row: title (and optional subtitle) on the left,
+ * current value plus a chevron — or a custom trailing control such as
+ * a switch — on the right.
+ */
+@Composable
+private fun SettingRow(
+    title: String,
+    subtitle: String? = null,
+    value: String? = null,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    val rowModifier = Modifier
+        .fillMaxWidth()
+        .padding(vertical = 13.dp)
+    Column {
+        Row(
+            modifier =
+                if (onClick != null) {
+                    rowModifier.clickable(onClick = onClick)
+                } else {
+                    rowModifier
+                },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                if (subtitle != null) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    DropdownMenu(
-                        expanded = voiceMenuOpen,
-                        onDismissRequest = { voiceMenuOpen = false },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        VoiceGender.entries.forEach { gender ->
-                            Text(
-                                gender.label + " voices",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(
-                                    horizontal = 16.dp,
-                                    vertical = 6.dp,
-                                ),
-                            )
-                            VOICES
-                                .filter { it.gender == gender }
-                                .forEach { voice ->
-                                    DropdownMenuItem(
-                                        text = { Text(voice.name) },
-                                        onClick = {
-                                            viewModel.setVoice(voice.name)
-                                            voiceMenuOpen = false
-                                        },
-                                    )
+                }
+            }
+            if (value != null) {
+                Text(
+                    value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 6.dp),
+                )
+            }
+            when {
+                trailing != null -> trailing()
+                onClick != null -> Text(
+                    "›",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant.copy(
+                alpha = 0.5f,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun VoiceDialog(
+    current: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Assistant voice") },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 420.dp),
+            ) {
+                VoiceGender.entries.forEach { gender ->
+                    item {
+                        Text(
+                            gender.label + " voices",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(vertical = 6.dp),
+                        )
+                    }
+                    items(
+                        VOICES.filter { it.gender == gender },
+                    ) { voice ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onSelect(voice.name)
                                 }
+                                .padding(vertical = 10.dp),
+                            horizontalArrangement =
+                                Arrangement.SpaceBetween,
+                            verticalAlignment =
+                                Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                voice.name,
+                                style =
+                                    MaterialTheme.typography.bodyLarge,
+                            )
+                            RadioButton(
+                                selected = voice.name == current,
+                                onClick = { onSelect(voice.name) },
+                            )
                         }
                     }
-                    // A read-only field doesn't emit clicks itself; this overlay
-                    // turns the whole row into the menu toggle.
-                    Spacer(
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        },
+    )
+}
+
+@Composable
+private fun AudioOutputDialog(
+    current: AudioOutput,
+    onSelect: (AudioOutput) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Audio output") },
+        text = {
+            Column {
+                Text(
+                    "Glasses: voice plays through the glasses in high " +
+                        "quality and the phone's mic listens. Phone " +
+                        "speaker: voice plays on the phone and the " +
+                        "glasses' mic listens while they're connected.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                AudioOutput.entries.forEach { output ->
+                    Row(
                         modifier = Modifier
-                            .matchParentSize()
-                            .clickable { voiceMenuOpen = true },
-                    )
-                }
-                Text(
-                    "Voice names are just identifiers — every voice speaks " +
-                        "any language.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Setting(title = "Assistant audio output") {
-                ChipRow {
-                    AudioOutput.entries.forEach { output ->
-                        FilterChip(
-                            selected = prefs.audioOutput == output,
-                            onClick = { viewModel.setAudioOutput(output) },
-                            label = { Text(output.label) },
+                            .fillMaxWidth()
+                            .clickable { onSelect(output) }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            output.label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        RadioButton(
+                            selected = output == current,
+                            onClick = { onSelect(output) },
                         )
                     }
                 }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        },
+    )
+}
+
+@Composable
+private fun StopPhraseDialog(
+    current: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var custom by remember { mutableStateOf("") }
+    val isPreset = STOP_PHRASES.any { it.first == current }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Stop phrase") },
+        text = {
+            Column {
                 Text(
-                    "Glasses: voice plays through the glasses in high quality " +
-                        "and the phone's mic listens. Phone speaker: voice " +
-                        "plays on the phone and the glasses' mic listens " +
-                        "while they're connected.",
+                    "Saying this while the assistant is listening ends " +
+                        "the session.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
                 )
-            }
-
-            Setting(title = "Barge-in") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                STOP_PHRASES.forEach { (phrase, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(phrase) }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        RadioButton(
+                            selected = phrase == current,
+                            onClick = { onSelect(phrase) },
+                        )
+                    }
+                }
+                if (!isPreset) {
                     Text(
-                        text = "Talking over the assistant cuts it off",
-                        style = MaterialTheme.typography.bodyLarge,
+                        "Custom: “$current”",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 4.dp),
                     )
-                    Switch(
-                        checked = prefs.bargeInEnabled,
-                        onCheckedChange = { viewModel.setBargeInEnabled(it) },
-                    )
-                }
-                Text(
-                    "When on, talking over the assistant cuts it off so you " +
-                        "can interrupt. Turn off if it cuts out too easily.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Setting(title = "Stop phrase") {
-                Text(
-                    "Saying this while the assistant is listening ends the " +
-                        "session.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                ChipRow {
-                    STOP_PHRASES.forEach { (phrase, label) ->
-                        FilterChip(
-                            selected = prefs.stopPhrase == phrase,
-                            onClick = { viewModel.setStopPhrase(phrase) },
-                            label = { Text(label) },
-                        )
-                    }
-                }
-
-                var stopInput by remember(prefs.stopPhrase) {
-                    mutableStateOf(prefs.stopPhrase)
                 }
                 OutlinedTextField(
-                    value = stopInput,
-                    onValueChange = { stopInput = it },
-                    label = { Text("Custom stop phrase") },
-                    supportingText = {
-                        Text(
-                            "Type your own and press Done. Any wording works — " +
-                                "it's matched against the assistant's transcript.",
-                        )
-                    },
+                    value = custom,
+                    onValueChange = { custom = it },
+                    label = { Text("Custom phrase") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         imeAction = ImeAction.Done,
                     ),
                     keyboardActions = KeyboardActions(
                         onDone = {
-                            val phrase = stopInput.trim()
+                            val phrase = custom.trim()
                             if (phrase.isNotEmpty()) {
-                                viewModel.setStopPhrase(phrase)
+                                onSelect(phrase)
                             }
                         },
                     ),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
                 )
             }
-        }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val phrase = custom.trim()
+                    if (phrase.isNotEmpty()) {
+                        onSelect(phrase)
+                    } else {
+                        onDismiss()
+                    }
+                },
+            ) {
+                Text(if (custom.isBlank()) "Done" else "Save")
+            }
+        },
+    )
+}
 
-        Section(title = "Wake-up") {
-            Setting(title = "Voice wake-up") {
+@Composable
+private fun WakeUpDialog(
+    viewModel: AgentViewModel,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val prefs by viewModel.preferences.collectAsStateWithLifecycle()
+    val modelState by viewModel.wakeWordModelState
+        .collectAsStateWithLifecycle()
+    var custom by remember { mutableStateOf("") }
+
+    val micGranted = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.RECORD_AUDIO,
+    ) == PackageManager.PERMISSION_GRANTED
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Voice wake-up") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(
+                    rememberScrollState(),
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "Listen for wake word",
+                        "Listen for wake word",
                         style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
                     )
                     Switch(
                         checked = prefs.wakeWordEnabled,
-                        onCheckedChange = { viewModel.setWakeWordEnabled(it) },
+                        onCheckedChange = {
+                            viewModel.setWakeWordEnabled(it)
+                        },
                         enabled = micGranted,
                     )
                 }
 
                 if (!micGranted) {
                     Text(
-                        "Microphone permission is required. Grant it on the Home tab " +
-                            "by tapping \"Start Assistant\" once.",
+                        "Microphone permission is required. Grant it by " +
+                            "tapping the + button on the Assistant tab once.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
+                Text(
+                    "Wake phrase",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
                 ChipRow {
                     WAKE_PHRASES.forEach { (phrase, label) ->
                         FilterChip(
@@ -271,27 +573,17 @@ fun SettingsScreen(
                     }
                 }
 
-                var wakeInput by remember(prefs.wakePhrase) {
-                    mutableStateOf(prefs.wakePhrase)
-                }
                 OutlinedTextField(
-                    value = wakeInput,
-                    onValueChange = { wakeInput = it },
+                    value = custom,
+                    onValueChange = { custom = it },
                     label = { Text("Custom wake phrase") },
-                    supportingText = {
-                        Text(
-                            "Type your own and press Done. Only words the " +
-                                "offline voice model knows will trigger — " +
-                                "common English words are safest.",
-                        )
-                    },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         imeAction = ImeAction.Done,
                     ),
                     keyboardActions = KeyboardActions(
                         onDone = {
-                            val phrase = wakeInput.trim().lowercase()
+                            val phrase = custom.trim().lowercase()
                             if (phrase.isNotEmpty()) {
                                 viewModel.setWakePhrase(phrase)
                             }
@@ -299,11 +591,17 @@ fun SettingsScreen(
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Text(
+                    "Only words the offline voice model knows will " +
+                        "trigger — common English words are safest.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
-                val modelState by viewModel.wakeWordModelState.collectAsStateWithLifecycle()
                 val modelStatusText = when (val state = modelState) {
                     WakeWordModelState.NotDownloaded ->
-                        "Voice model downloads on first use (~40 MB, Wi-Fi recommended)."
+                        "Voice model downloads on first use (~40 MB, " +
+                            "Wi-Fi recommended)."
                     is WakeWordModelState.Downloading ->
                         if (state.progress < 0f) {
                             "Downloading voice model…"
@@ -333,40 +631,56 @@ fun SettingsScreen(
                     )
                 }
             }
-        }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        },
+    )
+}
 
-        Section(title = "Memory") {
-            Setting(title = "Memories") {
+@Composable
+private fun MemoriesDialog(
+    viewModel: AgentViewModel,
+    onDismiss: () -> Unit,
+) {
+    val memories by viewModel.memories.collectAsStateWithLifecycle()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Memories") },
+        text = {
+            if (memories.isEmpty()) {
                 Text(
-                    "Things you've asked the assistant to remember. Say " +
-                        "\"remember this ...\" in a session to add one, or ask " +
-                        "it what it remembers.",
-                    style = MaterialTheme.typography.bodySmall,
+                    "Nothing saved yet. Say “remember this …” in a " +
+                        "session to add one.",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-
-                val memories by viewModel.memories.collectAsStateWithLifecycle()
-
-                if (memories.isEmpty()) {
-                    Text(
-                        "Nothing saved yet.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    memories.forEach { memory ->
+            } else {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 400.dp),
+                ) {
+                    items(
+                        memories,
+                        key = { it.id },
+                    ) { memory ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement =
+                                Arrangement.SpaceBetween,
+                            verticalAlignment =
+                                Alignment.CenterVertically,
                         ) {
                             Text(
                                 memory.text,
-                                style = MaterialTheme.typography.bodyMedium,
+                                style =
+                                    MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.weight(1f),
                             )
                             TextButton(
-                                onClick = { viewModel.deleteMemory(memory.id) },
+                                onClick = {
+                                    viewModel.deleteMemory(memory.id)
+                                },
                             ) {
                                 Text("Delete")
                             }
@@ -374,20 +688,34 @@ fun SettingsScreen(
                     }
                 }
             }
-        }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        },
+    )
+}
 
-        Section(
-            title = "Advanced",
-            collapsed = !advancedExpanded,
-            onToggleCollapse = { advancedExpanded = !advancedExpanded },
-        ) {
-            Setting(title = "Gemini API key") {
-                val apiKeyState by viewModel.apiKeyState.collectAsStateWithLifecycle()
-                var keyInput by remember {
-                    mutableStateOf(viewModel.savedApiKey.orEmpty())
-                }
-                var passwordVisible by remember { mutableStateOf(false) }
+@Composable
+private fun ApiKeyDialog(
+    viewModel: AgentViewModel,
+    onDismiss: () -> Unit,
+) {
+    val apiKeyState by viewModel.apiKeyState.collectAsStateWithLifecycle()
+    var keyInput by remember {
+        mutableStateOf(viewModel.savedApiKey.orEmpty())
+    }
+    var passwordVisible by remember { mutableStateOf(false) }
 
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Gemini API key") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(
+                    rememberScrollState(),
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 OutlinedTextField(
                     value = keyInput,
                     onValueChange = { keyInput = it },
@@ -401,7 +729,9 @@ fun SettingsScreen(
                         },
                     trailingIcon = {
                         IconButton(
-                            onClick = { passwordVisible = !passwordVisible },
+                            onClick = {
+                                passwordVisible = !passwordVisible
+                            },
                         ) {
                             Icon(
                                 imageVector =
@@ -439,7 +769,8 @@ fun SettingsScreen(
                     Button(
                         onClick = { viewModel.saveApiKey(keyInput) },
                         enabled = keyInput.isNotBlank() &&
-                            apiKeyState != AgentViewModel.ApiKeyState.Checking,
+                            apiKeyState !=
+                            AgentViewModel.ApiKeyState.Checking,
                     ) {
                         Text("Save & test")
                     }
@@ -487,73 +818,11 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        }
-
-        Text(
-            "Privacy: transcripts stay on this device and are never synced. " +
-                "Your Gemini API key is stored encrypted on this phone and " +
-                "sent only to Google — the app mints its own short-lived " +
-                "tokens, no server in the middle.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun Setting(title: String, content: @Composable () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
-        content()
-    }
-}
-
-/**
- * A labeled group of settings. The Advanced group starts collapsed and
- * toggles open on tap, since its contents are touched once and rarely
- * revisited.
- */
-@Composable
-private fun Section(
-    title: String,
-    collapsed: Boolean = false,
-    onToggleCollapse: (() -> Unit)? = null,
-    content: @Composable () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        if (onToggleCollapse != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onToggleCollapse),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    if (collapsed) "▸" else "▾",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        } else {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        if (!collapsed) {
-            content()
-        }
-    }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        },
+    )
 }
 
 /**
