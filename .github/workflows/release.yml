@@ -1,0 +1,78 @@
+name: Build-Release-APK
+
+# Shareable builds only: this workflow runs solely on the Muse_release
+# branch. Push (merge) a final build there when it is ready to share; the
+# resulting signed, non-debuggable APK is the one to distribute.
+on:
+  push:
+    branches:
+      - Muse_release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: gradle
+
+      - name: Write local.properties
+        shell: bash
+        env:
+          META_APP_ID: ${{ secrets.META_APP_ID }}
+          META_CLIENT_TOKEN: ${{ secrets.META_CLIENT_TOKEN }}
+        run: |
+          set -e
+
+          test -n "$META_APP_ID"
+          test -n "$META_CLIENT_TOKEN"
+
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "META_APPLICATION_ID=$META_APP_ID" >> local.properties
+          echo "META_CLIENT_TOKEN=$META_CLIENT_TOKEN" >> local.properties
+
+          echo "local.properties created."
+
+      - name: Decode release keystore
+        shell: bash
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          set -e
+
+          test -n "$RELEASE_KEYSTORE_BASE64"
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/veyra-release.p12"
+
+          echo "Keystore decoded."
+
+      - name: Prepare Gradle
+        shell: bash
+        run: |
+          set -e
+          chmod +x gradlew
+
+      - name: Build signed release APK
+        shell: bash
+        run: |
+          set -e
+          ./gradlew assembleRelease --no-daemon
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+          RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/veyra-release.p12
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: veyra-release-apk
+          path: app/build/outputs/apk/release/*.apk

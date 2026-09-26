@@ -25,7 +25,9 @@ android {
         applicationId = "com.geno.veyra"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
+        // Release branch: every CI build gets a unique, increasing
+        // versionCode so public APKs update cleanly over each other.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -36,8 +38,28 @@ android {
         manifestPlaceholders["metaClientToken"] = secret("META_CLIENT_TOKEN", "")
     }
 
+    signingConfigs {
+        create("release") {
+            // Release-branch CI only: PKCS12 keystore decoded from the
+            // RELEASE_KEYSTORE_BASE64 repo secret. See
+            // .github/workflows/release.yml.
+            storeType = "PKCS12"
+            storeFile = file(System.getenv("RELEASE_KEYSTORE_PATH") ?: "")
+            storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("RELEASE_KEY_ALIAS")
+            keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
+            // Signed on CI from the RELEASE_KEYSTORE_* secrets (release
+            // branch only). Without them this builds an unsigned APK.
+            if (!System.getenv("RELEASE_KEYSTORE_PATH").isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+            // Never debuggable: this is the shareable build.
+            isDebuggable = false
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
