@@ -73,6 +73,14 @@ class AgentController @Inject constructor(
     val status: StateFlow<AgentStatus> = _status
 
     /**
+     * Why the last connection attempt failed (server's reason when one
+     * was captured). Set alongside [AgentStatus.ERROR]; null otherwise.
+     * Surfaced in the Assistant UI next to the retry button.
+     */
+    private val _connectionError = MutableStateFlow<String?>(null)
+    val connectionError: StateFlow<String?> = _connectionError
+
+    /**
      * Phrase that ends the session when heard in the user's transcript.
      * Refreshed from settings every time the assistant starts.
      */
@@ -109,6 +117,7 @@ class AgentController @Inject constructor(
         pendingInitialText = initialText
 
         _status.value = AgentStatus.CONNECTING
+        _connectionError.value = null
         visionBridge.delegate = this
         micMute.reset()
 
@@ -159,6 +168,7 @@ class AgentController @Inject constructor(
                         webSearch = prefs.webSearchEnabled,
                         qrScan = prefs.qrScanEnabled,
                         ocr = prefs.ocrEnabled,
+                        smartHome = prefs.smartHomeEnabled,
                     ),
                     model = prefs.liveModel,
                 ),
@@ -187,6 +197,7 @@ class AgentController @Inject constructor(
 
         visionBridge.delegate = null
         _status.value = AgentStatus.IDLE
+        _connectionError.value = null
         micMute.reset()
     }
 
@@ -308,6 +319,16 @@ class AgentController @Inject constructor(
                     if (event.error != null) {
                         _status.value = AgentStatus.RECONNECTING
                     }
+                }
+
+                is SessionEvent.ConnectionFailed -> {
+                    /*
+                     * Setup never completed and the keeper stopped
+                     * retrying. Surface the reason in the UI with an
+                     * explicit retry instead of hanging on connecting.
+                     */
+                    _connectionError.value = event.detail
+                    _status.value = AgentStatus.ERROR
                 }
             }
         }

@@ -37,6 +37,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DrawerValue
@@ -50,13 +52,16 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -168,6 +173,10 @@ fun AssistantScreen(
                 LiveTranscript(
                     modifier = Modifier.padding(innerPadding),
                     viewModel = viewModel,
+                    onRetry = {
+                        viewModel.stopSession()
+                        startConversation()
+                    },
                 )
             } else {
                 IdleAssistant(
@@ -491,11 +500,33 @@ private fun StartConversationButton(onClick: () -> Unit) {
 private fun LiveTranscript(
     modifier: Modifier = Modifier,
     viewModel: AgentViewModel = hiltViewModel(),
+    onRetry: () -> Unit,
 ) {
     val entries by viewModel.transcript.collectAsStateWithLifecycle()
     val places by viewModel.places.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
+    val connectionError by viewModel.connectionError.collectAsStateWithLifecycle()
     val assistantRunning = status != AgentStatus.IDLE
+    val failed = status == AgentStatus.ERROR
+
+    /*
+     * Popup, shown once per failure: the user gets the reason
+     * immediately instead of staring at a "connecting" screen.
+     * Dismissing leaves the inline error card in place; a new
+     * failure re-arms the popup.
+     */
+    var dialogDismissed by remember { mutableStateOf(false) }
+    LaunchedEffect(connectionError) { dialogDismissed = false }
+    if (failed && !dialogDismissed) {
+        ConnectionFailedDialog(
+            detail = connectionError,
+            onRetry = {
+                dialogDismissed = true
+                onRetry()
+            },
+            onDismiss = { dialogDismissed = true },
+        )
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         Row(
@@ -509,12 +540,26 @@ private fun LiveTranscript(
                 modifier = Modifier
                     .size(10.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF34C759)),
+                    .background(
+                        if (failed) MaterialTheme.colorScheme.error
+                        else Color(0xFF34C759)
+                    ),
             )
             Text(
-                if (assistantRunning) stringResource(R.string.assistant_live) else stringResource(R.string.assistant_ended),
+                text = when {
+                    failed -> stringResource(R.string.assistant_connection_failed)
+                    assistantRunning -> stringResource(R.string.assistant_live)
+                    else -> stringResource(R.string.assistant_ended)
+                },
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
+            )
+        }
+
+        if (failed) {
+            ConnectionErrorCard(
+                detail = connectionError,
+                onRetry = onRetry,
             )
         }
 
@@ -562,6 +607,100 @@ private fun LiveTranscript(
             }
         }
     }
+}
+
+/**
+ * Shown when the assistant connection failed instead of hanging on
+ * "connecting". Displays the server's reason when one was captured,
+ * with an explicit retry.
+ */
+@Composable
+private fun ConnectionErrorCard(
+    detail: String?,
+    onRetry: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(R.string.assistant_connection_failed_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            Text(
+                detail?.takeIf { it.isNotBlank() }
+                    ?: stringResource(
+                        R.string.assistant_connection_failed_generic
+                    ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            Button(onClick = onRetry) {
+                Text(stringResource(R.string.assistant_retry))
+            }
+        }
+    }
+}
+
+/**
+ * Popup shown once per connection failure. Quota rejections — the
+ * common free-tier case — get specific guidance; anything else shows
+ * the server's reason when one was captured.
+ */
+@Composable
+private fun ConnectionFailedDialog(
+    detail: String?,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val message = when {
+        isQuotaFailure(detail) ->
+            stringResource(R.string.assistant_connection_failed_quota)
+
+        !detail.isNullOrBlank() -> detail
+        else ->
+            stringResource(R.string.assistant_connection_failed_generic)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                stringResource(
+                    R.string.assistant_connection_failed_dialog_title
+                ),
+            )
+        },
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(onClick = onRetry) {
+                Text(stringResource(R.string.assistant_retry))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.assistant_dismiss))
+            }
+        },
+    )
+}
+
+/** True when the setup failure looks like an API quota rejection. */
+private fun isQuotaFailure(detail: String?): Boolean {
+    if (detail.isNullOrBlank()) return false
+    val d = detail.lowercase()
+    return d.contains("quota") ||
+        d.contains("429") ||
+        d.contains("resource_exhausted") ||
+        d.contains("rate limit")
 }
 
 @Composable

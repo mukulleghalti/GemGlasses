@@ -21,6 +21,7 @@ enum class ToolGate {
     ALWAYS,
     QR_SCAN,
     OCR,
+    SMART_HOME,
 }
 
 /**

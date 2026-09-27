@@ -28,7 +28,7 @@ android {
         // Release branch: every CI build gets a unique, increasing
         // versionCode so public APKs update cleanly over each other.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
-        versionName = "0.1.0"
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // === Existing fields ===
@@ -38,7 +38,17 @@ android {
         manifestPlaceholders["metaClientToken"] = secret("META_CLIENT_TOKEN", "")
     }
 
+    // Shared debug keystore (committed on purpose — debug keys are not
+    // secret). CI runners generate a throwaway debug key per run, which
+    // would change the app's SHA-1 every build and break the Google Home
+    // OAuth client pinning. This keeps the debug SHA-1 stable.
     signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         create("release") {
             // Release-branch CI only: PKCS12 keystore decoded from the
             // RELEASE_KEYSTORE_BASE64 repo secret. See
@@ -125,6 +135,9 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
 
     implementation("com.google.android.gms:play-services-location:21.3.0")
+    // Google Home APIs for Android (device listing + control via Play Services).
+    implementation("com.google.android.gms:play-services-home:17.1.0")
+    implementation("com.google.android.gms:play-services-home-types:17.1.0")
     // ML Kit thin clients (models download via Play Services): QR/barcode + OCR.
     implementation(libs.play.services.mlkit.barcode.scanning)
     implementation(libs.play.services.mlkit.text.recognition)

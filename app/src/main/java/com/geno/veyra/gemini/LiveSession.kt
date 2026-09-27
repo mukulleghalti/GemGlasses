@@ -565,6 +565,35 @@ class LiveSession(
 
         /*
          * ---------------------------------------------------------------
+         * SERVER ERROR
+         * ---------------------------------------------------------------
+         *
+         * The server can reject the session outright (quota exhausted,
+         * invalid key, ...) instead of completing setup. Surface it as
+         * a terminal event so the UI can show the reason instead of
+         * hanging on "connecting". Errors arriving after setup are
+         * unexpected; log them and keep the session alive.
+         */
+        msg.error?.let { serverError ->
+
+            val detail = serverError.message?.takeIf { it.isNotBlank() }
+
+            if (!setupComplete) {
+                Log.e(
+                    TAG,
+                    "🔴 Gemini server error before setupComplete: $detail",
+                )
+                return listOf(SessionEvent.ConnectionFailed(detail))
+            }
+
+            Log.w(
+                TAG,
+                "⚠️ Gemini server error mid-session (ignored): $detail",
+            )
+        }
+
+        /*
+         * ---------------------------------------------------------------
          * SETUP COMPLETE
          * ---------------------------------------------------------------
          */

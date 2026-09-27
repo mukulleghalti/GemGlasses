@@ -39,6 +39,7 @@ import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.geno.veyra.glasses.CameraPermission
 import com.geno.veyra.glasses.GlassesManager
+import com.geno.veyra.smarthome.SmartHomeController
 import com.geno.veyra.ui.AssistantScreen
 import com.geno.veyra.ui.CameraSettingsScreen
 import com.geno.veyra.ui.CameraTestScreen
@@ -71,6 +72,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var glassesManager: GlassesManager
+
+    @Inject
+    lateinit var smartHomeController: SmartHomeController
 
     /*
      * ---------------------------------------------------------
@@ -194,6 +198,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         glassesManager.setActivity(this)
+
+        // Register with the Google Home client for the permission result.
+        // Must happen here (before STARTED) — registering later, e.g. when
+        // the user taps "Connect Google Home", crashes the Activity Result API.
+        smartHomeController.registerForPermissions(this)
 
         glassesManager.setCameraPermissionRequester {
             requestMetaCameraPermission()

@@ -62,6 +62,13 @@
     <string name="assistant_live">En direct</string>
     <string name="assistant_ended">Terminée</string>
     <string name="assistant_empty_transcript">La conversation apparaîtra ici quand la session commencera.</string>
+    <string name="assistant_connection_failed">Connexion échouée</string>
+    <string name="assistant_connection_failed_title">Impossible de se connecter à l’assistant</string>
+    <string name="assistant_connection_failed_generic">L’assistant n’a pas répondu. C’est souvent un problème de quota ou de clé API — vérifiez les deux, puis réessayez.</string>
+    <string name="assistant_connection_failed_dialog_title">Connexion impossible</string>
+    <string name="assistant_connection_failed_quota">La clé API n’a plus de quota, l’assistant ne peut pas démarrer. C’est fréquent avec les clés gratuites — la recherche web et les longues sessions consomment du quota supplémentaire. Essayez de désactiver la recherche web dans les réglages IA ou utilisez une clé API payante.</string>
+    <string name="assistant_dismiss">Ignorer</string>
+    <string name="assistant_retry">Réessayer</string>
     <string name="assistant_cited_places">Lieux cités (Google Maps)</string>
     <string name="transcript_you">Vous</string>
     <string name="transcript_system">Système</string>
@@ -119,6 +126,11 @@
     <string name="settings_qr_scan_sub">Laisser l\'assistant scanner les codes QR et barres</string>
     <string name="settings_ocr">OCR</string>
     <string name="settings_ocr_sub">Laisser l\'assistant lire le texte qu\'il voit</string>
+    <string name="settings_smart_home">Maison connectée</string>
+    <string name="settings_smart_home_sub">Permettre à l\'assistant de contrôler les appareils Google Home</string>
+    <string name="settings_connect_home">Connecter Google Home</string>
+    <string name="settings_home_connected">Connecté</string>
+    <string name="settings_home_not_connected">Non connecté</string>
     <string name="settings_api_key">Clé API Gemini</string>
     <string name="settings_api_key_set">Configurée</string>
     <string name="settings_api_key_not_set">Non configurée</string>
