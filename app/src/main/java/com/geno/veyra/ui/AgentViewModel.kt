@@ -2,6 +2,7 @@ package com.geno.veyra.ui
 
 import android.app.Application
 import android.util.Log
+import androidx.activity.ComponentActivity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geno.veyra.agent.AgentController
@@ -21,6 +22,7 @@ import com.geno.veyra.settings.GeminiKeyRepository
 import com.geno.veyra.settings.Memory
 import com.geno.veyra.settings.MemoryRepository
 import com.geno.veyra.settings.SettingsRepository
+import com.geno.veyra.smarthome.SmartHomeController
 import com.geno.veyra.state.CitedPlace
 import com.geno.veyra.state.ConversationStore
 import com.geno.veyra.state.TranscriptEntry
@@ -54,6 +56,7 @@ class AgentViewModel @Inject constructor(
     private val tokenProvider: TokenProvider,
     private val micMute: MicMuteController,
     private val memoryRepository: MemoryRepository,
+    private val smartHome: SmartHomeController,
 ) : AndroidViewModel(application) {
 
     val status: StateFlow<AgentStatus> =
@@ -271,6 +274,21 @@ class AgentViewModel @Inject constructor(
         viewModelScope.launch {
             settings.setOcrEnabled(enabled)
         }
+    }
+
+    fun setSmartHomeEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setSmartHomeEnabled(enabled)
+        }
+    }
+
+    /** True once the user has granted Google Home permissions. */
+    val smartHomeConnected: StateFlow<Boolean> =
+        smartHome.isConnected().stateInDefault(false)
+
+    /** Starts the Google Home account + permission flow. */
+    fun connectGoogleHome(activity: ComponentActivity) {
+        smartHome.connect(activity)
     }
 
     fun setLiveModel(modelId: String) {

@@ -119,6 +119,11 @@
     <string name="settings_qr_scan_sub">Permitir que o assistente leia códigos QR e de barras</string>
     <string name="settings_ocr">OCR</string>
     <string name="settings_ocr_sub">Permitir que o assistente leia o texto que ele vê</string>
+    <string name="settings_smart_home">Casa inteligente</string>
+    <string name="settings_smart_home_sub">Permitir ao assistente controlar dispositivos do Google Home</string>
+    <string name="settings_connect_home">Conectar o Google Home</string>
+    <string name="settings_home_connected">Conectado</string>
+    <string name="settings_home_not_connected">Não conectado</string>
     <string name="settings_api_key">Chave de API do Gemini</string>
     <string name="settings_api_key_set">Configurada</string>
     <string name="settings_api_key_not_set">Não configurada</string>

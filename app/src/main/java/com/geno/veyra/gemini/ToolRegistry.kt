@@ -20,6 +20,7 @@ data class ToolFlags(
     val webSearch: Boolean = false,
     val qrScan: Boolean = false,
     val ocr: Boolean = false,
+    val smartHome: Boolean = false,
 )
 
 /**
@@ -45,6 +46,7 @@ class ToolRegistry @Inject constructor(
                         ToolGate.ALWAYS -> true
                         ToolGate.QR_SCAN -> flags.qrScan
                         ToolGate.OCR -> flags.ocr
+                        ToolGate.SMART_HOME -> flags.smartHome
                     }
                 }
                 .map { it.declaration }

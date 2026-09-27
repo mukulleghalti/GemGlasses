@@ -159,6 +159,7 @@ class AgentController @Inject constructor(
                         webSearch = prefs.webSearchEnabled,
                         qrScan = prefs.qrScanEnabled,
                         ocr = prefs.ocrEnabled,
+                        smartHome = prefs.smartHomeEnabled,
                     ),
                     model = prefs.liveModel,
                 ),

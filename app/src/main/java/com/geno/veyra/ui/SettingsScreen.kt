@@ -3,6 +3,7 @@ package com.geno.veyra.ui
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -103,6 +104,7 @@ fun SettingsScreen(
     val appLanguageTag by viewModel.appLanguage.collectAsStateWithLifecycle()
     val appLanguage = AppLanguage.fromTag(appLanguageTag)
     val activity = LocalContext.current as? Activity
+    val smartHomeConnected by viewModel.smartHomeConnected.collectAsStateWithLifecycle()
 
     Column(
         modifier = modifier
@@ -217,6 +219,32 @@ fun SettingsScreen(
                 )
             },
         )
+        SettingRow(
+            title = stringResource(R.string.settings_smart_home),
+            subtitle = stringResource(R.string.settings_smart_home_sub),
+            trailing = {
+                Switch(
+                    checked = prefs.smartHomeEnabled,
+                    onCheckedChange = { viewModel.setSmartHomeEnabled(it) },
+                )
+            },
+        )
+        if (prefs.smartHomeEnabled) {
+            val componentActivity = LocalContext.current as? ComponentActivity
+            SettingRow(
+                title = stringResource(R.string.settings_connect_home),
+                value = stringResource(
+                    if (smartHomeConnected) {
+                        R.string.settings_home_connected
+                    } else {
+                        R.string.settings_home_not_connected
+                    },
+                ),
+                onClick = {
+                    componentActivity?.let { viewModel.connectGoogleHome(it) }
+                },
+            )
+        }
 
         Row(
             modifier = Modifier

@@ -111,6 +111,7 @@ data class AgentPreferences(
     val autoHistoryTitles: Boolean,
     val qrScanEnabled: Boolean,
     val ocrEnabled: Boolean,
+    val smartHomeEnabled: Boolean,
     val liveModel: String,
 ) {
     /** Built here so the persona text stays in one place. */
@@ -143,6 +144,17 @@ data class AgentPreferences(
                         "what some text says, call read_text.",
                 )
             }
+            if (smartHomeEnabled) {
+                append(
+                    "\n\nSmart home is enabled: when the user asks to " +
+                        "control home devices (lights, switches, plugs), " +
+                        "call list_home_devices to find the right device, " +
+                        "then control_home_device. Match device names " +
+                        "carefully and ask for clarification when several " +
+                        "devices match. Never unlock doors or disarm " +
+                        "security devices.",
+                )
+            }
         }
 
     private fun currentDateTime(): String =
@@ -167,6 +179,7 @@ data class AgentPreferences(
             autoHistoryTitles = true,
             qrScanEnabled = false,
             ocrEnabled = false,
+            smartHomeEnabled = false,
             liveModel = DEFAULT_LIVE_MODEL,
         )
 
@@ -305,6 +318,9 @@ class SettingsRepository @Inject constructor(
     private val ocrEnabledKey =
         booleanPreferencesKey("ocr_enabled")
 
+    private val smartHomeEnabledKey =
+        booleanPreferencesKey("smart_home_enabled")
+
     private val liveModelKey =
         stringPreferencesKey("live_model")
 
@@ -395,6 +411,10 @@ class SettingsRepository @Inject constructor(
                 ocrEnabled =
                     prefs[ocrEnabledKey]
                         ?: AgentPreferences.DEFAULT.ocrEnabled,
+
+                smartHomeEnabled =
+                    prefs[smartHomeEnabledKey]
+                        ?: AgentPreferences.DEFAULT.smartHomeEnabled,
 
                 liveModel =
                     prefs[liveModelKey]
@@ -526,6 +546,14 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[ocrEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setSmartHomeEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[smartHomeEnabledKey] = enabled
         }
     }
 

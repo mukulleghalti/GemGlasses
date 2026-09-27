@@ -96,6 +96,9 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
 
     implementation("com.google.android.gms:play-services-location:21.3.0")
+    // Google Home APIs for Android (device listing + control via Play Services).
+    implementation("com.google.android.gms:play-services-home:17.1.0")
+    implementation("com.google.android.gms:play-services-home-types:17.1.0")
     // ML Kit thin clients (models download via Play Services): QR/barcode + OCR.
     implementation(libs.play.services.mlkit.barcode.scanning)
     implementation(libs.play.services.mlkit.text.recognition)

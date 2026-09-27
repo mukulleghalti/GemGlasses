@@ -79,6 +79,38 @@ class ToolRegistryTest {
     }
 
     @Test
+    fun `asLiveTools gates smart home tools behind the smartHome flag`() {
+        val registry = ToolRegistry(
+            setOf(
+                FakeTool("always_on") { buildJsonObject { } },
+                FakeTool(
+                    "list_home_devices",
+                    { buildJsonObject { } },
+                    gate = ToolGate.SMART_HOME,
+                ),
+                FakeTool(
+                    "control_home_device",
+                    { buildJsonObject { } },
+                    gate = ToolGate.SMART_HOME,
+                ),
+            ),
+        )
+
+        val off = registry.asLiveTools(ToolFlags())
+            .single().functionDeclarations!!
+            .map { it.name }.toSet()
+        assertEquals(setOf("always_on"), off)
+
+        val on = registry.asLiveTools(ToolFlags(smartHome = true))
+            .single().functionDeclarations!!
+            .map { it.name }.toSet()
+        assertEquals(
+            setOf("always_on", "list_home_devices", "control_home_device"),
+            on,
+        )
+    }
+
+    @Test
     fun `dispatch routes to the matching tool and preserves call id`() = runTest {
         val registry = ToolRegistry(
             setOf(FakeTool("start_navigation") { buildJsonObject { put("status", "started") } }),
