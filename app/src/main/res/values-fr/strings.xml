@@ -109,7 +109,7 @@
     <string name="settings_barge_in">Interruption</string>
     <string name="settings_barge_in_sub">Parler pendant que l\'assistant parle l\'interrompt</string>
     <string name="settings_session_beep">Bip de session</string>
-    <string name="settings_session_beep_sub">Émet un bip court quand l'assistant démarre et s'arrête</string>
+    <string name="settings_session_beep_sub">Émet un bip court quand l\'assistant démarre et s\'arrête</string>
     <string name="settings_stop_phrase">Phrase d\'arrêt</string>
     <string name="settings_voice_wakeup">Activation vocale</string>
     <string name="settings_wake_on">Activé</string>

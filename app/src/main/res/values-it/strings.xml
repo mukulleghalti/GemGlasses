@@ -109,7 +109,7 @@
     <string name="settings_barge_in">Interruzione vocale</string>
     <string name="settings_barge_in_sub">Parlare sopra l\'assistente lo interrompe</string>
     <string name="settings_session_beep">Segnale acustico</string>
-    <string name="settings_session_beep_sub">Riproduce un breve segnale quando l'assistente si avvia e si ferma</string>
+    <string name="settings_session_beep_sub">Riproduce un breve segnale quando l\'assistente si avvia e si ferma</string>
     <string name="settings_stop_phrase">Frase di stop</string>
     <string name="settings_voice_wakeup">Attivazione vocale</string>
     <string name="settings_wake_on">Attivo</string>
