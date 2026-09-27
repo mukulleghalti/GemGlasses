@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.geno.veyra.R
 import com.geno.veyra.openai.DEFAULT_OPENAI_VOICE_MODEL
+import com.geno.veyra.openai.OPENAI_VOICE_MODELS
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -437,6 +438,12 @@ class SettingsRepository @Inject constructor(
 
                 chatGptModel =
                     prefs[chatGptModelKey]
+                        // Drop IDs retired from OPENAI_VOICE_MODELS
+                        // (e.g. gpt-4o-realtime-preview after the 2.1 update)
+                        // so a stale stored pick never reaches the API.
+                        ?.takeIf { id ->
+                            OPENAI_VOICE_MODELS.any { it.id == id }
+                        }
                         ?: AgentPreferences.DEFAULT.chatGptModel,
             )
         }

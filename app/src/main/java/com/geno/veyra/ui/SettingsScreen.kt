@@ -1063,8 +1063,8 @@ private fun ProviderDialog(
 }
 
 /**
- * Picks the OpenAI voice model used once the ChatGPT live-voice client
- * lands. Mirrors [ModelDialog]; no subtitles — the model IDs are
+ * Picks the OpenAI Realtime voice model used by the ChatGPT provider.
+ * Mirrors [ModelDialog]; no subtitles — the model IDs are
  * self-explanatory and product names stay untranslated.
  */
 private fun ChatGptModelDialog(
