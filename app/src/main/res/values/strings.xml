@@ -108,6 +108,8 @@
     <string name="settings_audio_output">Audio output</string>
     <string name="settings_barge_in">Barge-in</string>
     <string name="settings_barge_in_sub">Talking over the assistant cuts it off</string>
+    <string name="settings_session_beep">Session beep</string>
+    <string name="settings_session_beep_sub">Play a short beep when the assistant starts and stops</string>
     <string name="settings_stop_phrase">Stop phrase</string>
     <string name="settings_voice_wakeup">Voice wake-up</string>
     <string name="settings_wake_on">On</string>

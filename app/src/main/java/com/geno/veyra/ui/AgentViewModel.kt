@@ -236,6 +236,12 @@ class AgentViewModel @Inject constructor(
         }
     }
 
+    fun setSessionBeepEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setSessionBeepEnabled(enabled)
+        }
+    }
+
     /**
      * Persists the app UI language. Callers should recreate the activity
      * afterwards so the new locale applies immediately.

@@ -108,6 +108,8 @@
     <string name="settings_audio_output">Saída de áudio</string>
     <string name="settings_barge_in">Interrupção</string>
     <string name="settings_barge_in_sub">Falar enquanto o assistente fala o interrompe</string>
+    <string name="settings_session_beep">Bipe de sessão</string>
+    <string name="settings_session_beep_sub">Toca um bipe curto quando o assistente inicia e para</string>
     <string name="settings_stop_phrase">Frase de parada</string>
     <string name="settings_voice_wakeup">Ativação por voz</string>
     <string name="settings_wake_on">Ativado</string>

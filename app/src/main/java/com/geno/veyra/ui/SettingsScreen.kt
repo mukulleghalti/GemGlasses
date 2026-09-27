@@ -158,6 +158,16 @@ fun SettingsScreen(
             },
         )
         SettingRow(
+            title = stringResource(R.string.settings_session_beep),
+            subtitle = stringResource(R.string.settings_session_beep_sub),
+            trailing = {
+                Switch(
+                    checked = prefs.sessionBeepEnabled,
+                    onCheckedChange = { viewModel.setSessionBeepEnabled(it) },
+                )
+            },
+        )
+        SettingRow(
             title = stringResource(R.string.settings_stop_phrase),
             value = stopLabel,
             onClick = { showStopPhraseDialog = true },

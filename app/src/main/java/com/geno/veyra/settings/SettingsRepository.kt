@@ -109,6 +109,7 @@ data class AgentPreferences(
     val stopPhrase: String,
     val audioOutput: AudioOutput,
     val bargeInEnabled: Boolean,
+    val sessionBeepEnabled: Boolean,
     val webSearchEnabled: Boolean,
     val autoHistoryTitles: Boolean,
     val qrScanEnabled: Boolean,
@@ -184,6 +185,7 @@ data class AgentPreferences(
             stopPhrase = DEFAULT_STOP_PHRASE,
             audioOutput = AudioOutput.GLASSES,
             bargeInEnabled = true,
+            sessionBeepEnabled = true,
             webSearchEnabled = false,
             autoHistoryTitles = true,
             qrScanEnabled = false,
@@ -350,6 +352,9 @@ class SettingsRepository @Inject constructor(
     private val bargeInEnabledKey =
         booleanPreferencesKey("barge_in_enabled")
 
+    private val sessionBeepEnabledKey =
+        booleanPreferencesKey("session_beep_enabled")
+
     private val webSearchEnabledKey =
         booleanPreferencesKey("web_search_enabled")
 
@@ -445,6 +450,10 @@ class SettingsRepository @Inject constructor(
                 bargeInEnabled =
                     prefs[bargeInEnabledKey]
                         ?: AgentPreferences.DEFAULT.bargeInEnabled,
+
+                sessionBeepEnabled =
+                    prefs[sessionBeepEnabledKey]
+                        ?: AgentPreferences.DEFAULT.sessionBeepEnabled,
 
                 webSearchEnabled =
                     prefs[webSearchEnabledKey]
@@ -571,6 +580,14 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[bargeInEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setSessionBeepEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[sessionBeepEnabledKey] = enabled
         }
     }
 

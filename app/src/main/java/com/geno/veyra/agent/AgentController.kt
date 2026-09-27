@@ -118,6 +118,21 @@ class AgentController @Inject constructor(
     private var sessionLanguage: String = "en-US"
 
     /**
+     * Whether the session start/stop blips are enabled, refreshed from
+     * settings every time the assistant starts.
+     */
+    @Volatile
+    private var sessionBeepEnabled: Boolean = true
+
+    /**
+     * True once the session has gone live (Ready). The stop blip only
+     * plays if the session actually started — tapping stop while still
+     * connecting stays silent.
+     */
+    @Volatile
+    private var beepArmed: Boolean = false
+
+    /**
      * First user message to send once the session is ready (the wake
      * phrase on the wake-word path). Cleared after it's sent.
      */
@@ -148,6 +163,8 @@ class AgentController @Inject constructor(
             stopPhrase = prefs.stopPhrase
             bargeInEnabled = prefs.bargeInEnabled
             sessionLanguage = prefs.languageCode
+            sessionBeepEnabled = prefs.sessionBeepEnabled
+            beepArmed = false
 
             /*
              * The voice backend comes from the AI provider picker in
@@ -219,6 +236,14 @@ class AgentController @Inject constructor(
     }
 
     fun stop() {
+        // Stop blip first, before the speaker and audio route are torn down.
+        if (beepArmed) {
+            beepArmed = false
+            if (sessionBeepEnabled) {
+                SessionBeep.stopped()
+            }
+        }
+
         // Persist this session's transcript before anything is torn down.
         archive.saveSession(conversation.entries.value)
 
@@ -277,6 +302,10 @@ class AgentController @Inject constructor(
 
                 is SessionEvent.Ready -> {
                     _status.value = AgentStatus.LISTENING
+                    beepArmed = true
+                    if (sessionBeepEnabled) {
+                        SessionBeep.started()
+                    }
 
                     /*
                      * Wake-word path: feed the wake phrase to the assistant
