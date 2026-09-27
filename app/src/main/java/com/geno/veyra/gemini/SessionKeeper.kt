@@ -2,6 +2,7 @@ package com.geno.veyra.gemini
 
 import android.util.Log
 import com.geno.veyra.gemini.protocol.FunctionResponse
+import com.geno.veyra.openai.DEFAULT_OPENAI_VOICE_MODEL
 import com.geno.veyra.settings.DEFAULT_LIVE_MODEL
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -24,6 +25,11 @@ data class SessionConfig(
     val languageCode: String,
     /** Live model id chosen in AI Settings (Gemini Model). */
     val model: String = DEFAULT_LIVE_MODEL,
+    /**
+     * Realtime model id chosen in AI Settings (ChatGPT Model). Only read
+     * by the OpenAI keeper; the Gemini keeper ignores it.
+     */
+    val openAiModel: String = DEFAULT_OPENAI_VOICE_MODEL,
     /**
      * Whether talking over the assistant cuts it off. When false the
      * session is created with activityHandling=NO_INTERRUPTION, so the
@@ -55,14 +61,14 @@ class SessionKeeper @Inject constructor(
     private val json: Json,
     private val tokenProvider: TokenProvider,
     private val toolRegistry: ToolRegistry,
-) {
+) : VoiceSessionKeeper {
 
     private val _events =
         MutableSharedFlow<SessionEvent>(
             extraBufferCapacity = 256,
         )
 
-    val events: SharedFlow<SessionEvent> =
+    override val events: SharedFlow<SessionEvent> =
         _events.asSharedFlow()
 
     @Volatile
@@ -82,7 +88,7 @@ class SessionKeeper @Inject constructor(
     /**
      * Start the Live session manager.
      */
-    fun start(
+    override fun start(
         scope: CoroutineScope,
         config: SessionConfig,
     ) {
@@ -107,7 +113,7 @@ class SessionKeeper @Inject constructor(
     /**
      * Stop the Live session completely.
      */
-    fun stop() {
+    override fun stop() {
 
         Log.i(
             TAG,
@@ -131,7 +137,7 @@ class SessionKeeper @Inject constructor(
      *
      * LiveSession itself queues the data until setupComplete.
      */
-    fun sendAudio(
+    override fun sendAudio(
         pcm: ByteArray,
     ) {
         current?.sendAudio(pcm)
@@ -142,7 +148,7 @@ class SessionKeeper @Inject constructor(
      *
      * LiveSession itself queues the data until setupComplete.
      */
-    fun sendFrame(
+    override fun sendFrame(
         jpeg: ByteArray,
     ) {
         current?.sendFrame(jpeg)
@@ -151,7 +157,7 @@ class SessionKeeper @Inject constructor(
     /**
      * Forward function responses.
      */
-    fun sendToolResponses(
+    override fun sendToolResponses(
         responses: List<FunctionResponse>,
     ) {
         current?.sendToolResponses(responses)
@@ -160,7 +166,7 @@ class SessionKeeper @Inject constructor(
     /**
      * Forward user text.
      */
-    fun sendText(
+    override fun sendText(
         text: String,
     ) {
         current?.sendText(text)

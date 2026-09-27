@@ -5,6 +5,7 @@ import com.geno.veyra.gemini.protocol.FunctionCall
 import com.geno.veyra.gemini.protocol.FunctionResponse
 import com.geno.veyra.gemini.protocol.GoogleSearch
 import com.geno.veyra.gemini.protocol.Tool
+import com.geno.veyra.openai.realtime.OpenAiFunctionTool
 import com.geno.veyra.tools.AgentTool
 import com.geno.veyra.tools.ToolGate
 import kotlinx.serialization.json.buildJsonObject
@@ -59,6 +60,33 @@ class ToolRegistry @Inject constructor(
                 add(Tool(googleSearch = GoogleSearch()))
             }
         }
+
+    /**
+     * The `tools` array sent in the Realtime `session.update`. Same
+     * toggle gating as [asLiveTools]; the `parameters` JSON Schema
+     * passes through verbatim.
+     *
+     * Note: the Realtime API offers no server-side web-search tool, so
+     * [ToolFlags.webSearch] is intentionally ignored here — unlike
+     * [asLiveTools], which adds native Google Search.
+     */
+    fun asOpenAiTools(flags: ToolFlags): List<OpenAiFunctionTool> =
+        byName.values
+            .filter { tool ->
+                when (tool.gate) {
+                    ToolGate.ALWAYS -> true
+                    ToolGate.QR_SCAN -> flags.qrScan
+                    ToolGate.OCR -> flags.ocr
+                    ToolGate.SMART_HOME -> flags.smartHome
+                }
+            }
+            .map { tool ->
+                OpenAiFunctionTool(
+                    name = tool.declaration.name,
+                    description = tool.declaration.description,
+                    parameters = tool.declaration.parameters,
+                )
+            }
 
     /** Runs one function call and packages the response for the socket. */
     suspend fun dispatch(call: FunctionCall): FunctionResponse {

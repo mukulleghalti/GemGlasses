@@ -57,9 +57,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno.veyra.R
 import com.geno.veyra.settings.AppLanguage
+import com.geno.veyra.settings.AiProvider
 import com.geno.veyra.settings.AudioOutput
 import com.geno.veyra.settings.LIVE_MODELS
 import com.geno.veyra.settings.LocaleHelper
+import com.geno.veyra.openai.OPENAI_VOICE_MODELS
 import com.geno.veyra.wakeword.WakeWordModelState
 
 /**
@@ -82,6 +84,9 @@ fun SettingsScreen(
     var showMemoriesDialog by remember { mutableStateOf(false) }
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var showModelDialog by remember { mutableStateOf(false) }
+    var showProviderDialog by remember { mutableStateOf(false) }
+    var showChatGptKeyDialog by remember { mutableStateOf(false) }
+    var showChatGptModelDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var advancedExpanded by remember { mutableStateOf(false) }
 
@@ -100,6 +105,7 @@ fun SettingsScreen(
             " · $wakePhraseLabel"
     val apiKeySet = viewModel.savedApiKey != null
     val apiKeyState by viewModel.apiKeyState.collectAsStateWithLifecycle()
+    val openAiKeySet = viewModel.savedOpenAiKey != null
     val appLanguageTag by viewModel.appLanguage.collectAsStateWithLifecycle()
     val appLanguage = AppLanguage.fromTag(appLanguageTag)
     val activity = LocalContext.current as? Activity
@@ -173,6 +179,28 @@ fun SettingsScreen(
 
         SectionLabel(stringResource(R.string.settings_section_ai))
         SettingRow(
+            title = stringResource(R.string.settings_ai_provider),
+            value = stringResource(
+                if (prefs.aiProvider == AiProvider.OPENAI) {
+                    R.string.settings_provider_chatgpt
+                } else {
+                    R.string.settings_provider_gemini
+                },
+            ),
+            onClick = { showProviderDialog = true },
+        )
+        if (prefs.aiProvider == AiProvider.OPENAI) {
+            SettingRow(
+                title = stringResource(R.string.settings_chatgpt_key),
+                value = if (openAiKeySet) {
+                    stringResource(R.string.settings_api_key_set)
+                } else {
+                    stringResource(R.string.settings_api_key_not_set)
+                },
+                onClick = { showChatGptKeyDialog = true },
+            )
+        }
+        SettingRow(
             title = stringResource(R.string.settings_web_search),
             subtitle = stringResource(R.string.settings_web_search_sub),
             trailing = {
@@ -182,12 +210,22 @@ fun SettingsScreen(
                 )
             },
         )
-        SettingRow(
-            title = stringResource(R.string.settings_gemini_model),
-            value = LIVE_MODELS.firstOrNull { it.id == prefs.liveModel }
-                ?.label ?: prefs.liveModel,
-            onClick = { showModelDialog = true },
-        )
+        if (prefs.aiProvider == AiProvider.OPENAI) {
+            SettingRow(
+                title = stringResource(R.string.settings_chatgpt_model),
+                value = OPENAI_VOICE_MODELS.firstOrNull {
+                    it.id == prefs.chatGptModel
+                }?.label ?: prefs.chatGptModel,
+                onClick = { showChatGptModelDialog = true },
+            )
+        } else {
+            SettingRow(
+                title = stringResource(R.string.settings_gemini_model),
+                value = LIVE_MODELS.firstOrNull { it.id == prefs.liveModel }
+                    ?.label ?: prefs.liveModel,
+                onClick = { showModelDialog = true },
+            )
+        }
         SettingRow(
             title = stringResource(R.string.settings_auto_titles),
             subtitle = stringResource(R.string.settings_auto_titles_sub),
@@ -319,6 +357,26 @@ fun SettingsScreen(
             onDismiss = { showModelDialog = false },
         )
     }
+    if (showProviderDialog) {
+        ProviderDialog(
+            current = prefs.aiProvider,
+            onSelect = {
+                viewModel.setAiProvider(it)
+                showProviderDialog = false
+            },
+            onDismiss = { showProviderDialog = false },
+        )
+    }
+    if (showChatGptModelDialog) {
+        ChatGptModelDialog(
+            current = prefs.chatGptModel,
+            onSelect = {
+                viewModel.setChatGptModel(it)
+                showChatGptModelDialog = false
+            },
+            onDismiss = { showChatGptModelDialog = false },
+        )
+    }
     if (showVoiceDialog) {
         VoiceDialog(
             current = prefs.voiceName,
@@ -365,6 +423,12 @@ fun SettingsScreen(
         ApiKeyDialog(
             viewModel = viewModel,
             onDismiss = { showApiKeyDialog = false },
+        )
+    }
+    if (showChatGptKeyDialog) {
+        ChatGptKeyDialog(
+            viewModel = viewModel,
+            onDismiss = { showChatGptKeyDialog = false },
         )
     }
 }
@@ -922,6 +986,258 @@ private fun MemoriesDialog(
                         }
                     }
                 }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
+        },
+    )
+}
+
+@Composable
+/**
+ * Picks which AI backend powers the assistant: Gemini (Google) or
+ * ChatGPT (OpenAI). Product names are intentionally not translated.
+ */
+private fun ProviderDialog(
+    current: AiProvider,
+    onSelect: (AiProvider) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val options = listOf(
+        Triple(
+            AiProvider.GEMINI,
+            R.string.settings_provider_gemini,
+            R.string.settings_provider_gemini_sub,
+        ),
+        Triple(
+            AiProvider.OPENAI,
+            R.string.settings_provider_chatgpt,
+            R.string.settings_provider_chatgpt_sub,
+        ),
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_ai_provider)) },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 420.dp),
+            ) {
+                items(options) { (provider, labelRes, subRes) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(provider) }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween,
+                        verticalAlignment =
+                            Alignment.CenterVertically,
+                    ) {
+                        Column {
+                            Text(
+                                stringResource(labelRes),
+                                style =
+                                    MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                stringResource(subRes),
+                                style =
+                                    MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme
+                                    .onSurfaceVariant,
+                            )
+                        }
+                        RadioButton(
+                            selected = provider == current,
+                            onClick = { onSelect(provider) },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
+        },
+    )
+}
+
+/**
+ * Picks the OpenAI Realtime voice model used by the ChatGPT provider.
+ * Mirrors [ModelDialog]; no subtitles — the model IDs are
+ * self-explanatory and product names stay untranslated.
+ */
+@Composable
+private fun ChatGptModelDialog(
+    current: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_chatgpt_model)) },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 420.dp),
+            ) {
+                items(OPENAI_VOICE_MODELS) { model ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(model.id) }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween,
+                        verticalAlignment =
+                            Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            model.label,
+                            style =
+                                MaterialTheme.typography.bodyLarge,
+                        )
+                        RadioButton(
+                            selected = model.id == current,
+                            onClick = { onSelect(model.id) },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
+        },
+    )
+}
+
+/**
+ * Manages the user's own OpenAI API key. Mirrors [ApiKeyDialog]:
+ * the key is stored verbatim and verified against OpenAI's /v1/models
+ * endpoint on save, so a typo surfaces immediately.
+ */
+@Composable
+private fun ChatGptKeyDialog(
+    viewModel: AgentViewModel,
+    onDismiss: () -> Unit,
+) {
+    val openAiKeyState by viewModel.openAiKeyState.collectAsStateWithLifecycle()
+    var keyInput by remember {
+        mutableStateOf(viewModel.savedOpenAiKey.orEmpty())
+    }
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_chatgpt_key_dialog_title)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(
+                    rememberScrollState(),
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedTextField(
+                    value = keyInput,
+                    onValueChange = { keyInput = it },
+                    label = { Text(stringResource(R.string.settings_apikey_label)) },
+                    singleLine = true,
+                    visualTransformation =
+                        if (passwordVisible) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                passwordVisible = !passwordVisible
+                            },
+                        ) {
+                            Icon(
+                                imageVector =
+                                    if (passwordVisible) {
+                                        Icons.Filled.VisibilityOff
+                                    } else {
+                                        Icons.Filled.Visibility
+                                    },
+                                contentDescription =
+                                    if (passwordVisible) {
+                                        stringResource(R.string.settings_apikey_hide)
+                                    } else {
+                                        stringResource(R.string.settings_apikey_show)
+                                    },
+                            )
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (keyInput.isNotBlank()) {
+                                viewModel.saveOpenAiKey(keyInput)
+                            }
+                        },
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Button(
+                        onClick = { viewModel.saveOpenAiKey(keyInput) },
+                        enabled = keyInput.isNotBlank() &&
+                            openAiKeyState !=
+                            AgentViewModel.ApiKeyState.Checking,
+                    ) {
+                        Text(stringResource(R.string.settings_apikey_save_test))
+                    }
+                    if (viewModel.savedOpenAiKey != null) {
+                        TextButton(
+                            onClick = {
+                                viewModel.clearOpenAiKey()
+                                keyInput = ""
+                            },
+                        ) {
+                            Text(stringResource(R.string.settings_apikey_remove))
+                        }
+                    }
+                }
+
+                val statusText = when (val state = openAiKeyState) {
+                    AgentViewModel.ApiKeyState.Unchecked ->
+                        stringResource(R.string.settings_apikey_unchecked)
+                    AgentViewModel.ApiKeyState.Checking ->
+                        stringResource(R.string.settings_chatgpt_key_checking)
+                    AgentViewModel.ApiKeyState.Valid ->
+                        stringResource(R.string.settings_apikey_valid)
+                    is AgentViewModel.ApiKeyState.Invalid ->
+                        stringResource(
+                        R.string.settings_apikey_invalid,
+                        state.message
+                            ?: stringResource(R.string.settings_conn_fallback),
+                    )
+                    AgentViewModel.ApiKeyState.Missing ->
+                        stringResource(R.string.settings_apikey_missing)
+                }
+                val statusColor =
+                    if (openAiKeyState is AgentViewModel.ApiKeyState.Invalid) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                Text(
+                    statusText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = statusColor,
+                )
+                Text(
+                    stringResource(R.string.settings_chatgpt_key_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         },
         confirmButton = {

@@ -13,6 +13,9 @@ import com.geno.veyra.gemini.SessionConfig
 import com.geno.veyra.gemini.SessionEvent
 import com.geno.veyra.gemini.SessionKeeper
 import com.geno.veyra.gemini.ToolFlags
+import com.geno.veyra.gemini.VoiceSessionKeeper
+import com.geno.veyra.openai.realtime.RealtimeSessionKeeper
+import com.geno.veyra.settings.AiProvider
 import com.geno.veyra.gemini.ToolRegistry
 import com.geno.veyra.glasses.ConnectionState
 import com.geno.veyra.glasses.GlassesCameraSource
@@ -43,7 +46,8 @@ enum class AgentStatus { IDLE, CONNECTING, LISTENING, RECONNECTING, ERROR }
 
 /**
  * The conductor. Owns the running assistant session: it routes Bluetooth audio,
- * opens playback, starts the [SessionKeeper], pumps the mic into the socket,
+ * opens playback, starts the provider's [VoiceSessionKeeper] (Gemini or
+ * ChatGPT), pumps the mic into the socket,
  * and reacts to every [SessionEvent] — playing audio, updating the transcript,
  * flushing on barge-in, and dispatching tool calls. It also serves vision bursts
  * requested by the `capture_vision` tool.
@@ -51,6 +55,7 @@ enum class AgentStatus { IDLE, CONNECTING, LISTENING, RECONNECTING, ERROR }
 @Singleton
 class AgentController @Inject constructor(
     private val sessionKeeper: SessionKeeper,
+    private val realtimeKeeper: RealtimeSessionKeeper,
     private val toolRegistry: ToolRegistry,
     private val micStreamer: MicStreamer,
     private val speaker: SpeakerSink,
@@ -68,6 +73,14 @@ class AgentController @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob())
     private var eventJob: Job? = null
     private var micJob: Job? = null
+
+    /**
+     * The keeper for the running session — [sessionKeeper] (Gemini) or
+     * [realtimeKeeper] (ChatGPT), chosen from the AI provider in
+     * Settings each time the assistant starts. Null when idle.
+     */
+    @Volatile
+    private var activeKeeper: VoiceSessionKeeper? = null
 
     private val _status = MutableStateFlow(AgentStatus.IDLE)
     val status: StateFlow<AgentStatus> = _status
@@ -128,6 +141,21 @@ class AgentController @Inject constructor(
             bargeInEnabled = prefs.bargeInEnabled
 
             /*
+             * The voice backend comes from the AI provider picker in
+             * Settings. Both keepers speak the same SessionEvent
+             * language, so everything below is provider-agnostic — the
+             * wake-word path lands here too.
+             */
+            val keeper: VoiceSessionKeeper =
+                if (prefs.aiProvider == AiProvider.OPENAI) {
+                    Log.i(TAG, "Starting assistant with ChatGPT (OpenAI Realtime)")
+                    realtimeKeeper
+                } else {
+                    sessionKeeper
+                }
+            activeKeeper = keeper
+
+            /*
              * Playback is always the high-quality music channel (A2DP):
              * the assistant's voice goes to the glasses while they're
              * connected, and falls back to the phone speaker when they
@@ -155,9 +183,9 @@ class AgentController @Inject constructor(
                     },
             )
 
-            launch { collectEvents() }
+            launch { collectEvents(keeper) }
 
-            sessionKeeper.start(
+            keeper.start(
                 scope,
                 SessionConfig(
                     systemInstruction = prefs.systemInstruction,
@@ -171,12 +199,13 @@ class AgentController @Inject constructor(
                         smartHome = prefs.smartHomeEnabled,
                     ),
                     model = prefs.liveModel,
+                    openAiModel = prefs.chatGptModel,
                 ),
             )
-        }
 
-        micJob = scope.launch {
-            pumpMic()
+            micJob = scope.launch {
+                pumpMic(keeper)
+            }
         }
     }
 
@@ -184,7 +213,8 @@ class AgentController @Inject constructor(
         // Persist this session's transcript before anything is torn down.
         archive.saveSession(conversation.entries.value)
 
-        sessionKeeper.stop()
+        activeKeeper?.stop()
+        activeKeeper = null
 
         scope.coroutineContext.cancelChildren()
 
@@ -224,15 +254,15 @@ class AgentController @Inject constructor(
                     speaker = TranscriptEntry.Speaker.USER,
                 )
 
-                sessionKeeper.sendFrame(jpeg)
+                activeKeeper?.sendFrame(jpeg)
             }
 
             conversation.note("Vision off")
         }
     }
 
-    private suspend fun collectEvents() {
-        sessionKeeper.events.collect { event ->
+    private suspend fun collectEvents(keeper: VoiceSessionKeeper) {
+        keeper.events.collect { event ->
 
             when (event) {
 
@@ -251,7 +281,7 @@ class AgentController @Inject constructor(
                             text,
                             TranscriptEntry.Speaker.USER,
                         )
-                        sessionKeeper.sendText(text)
+                        keeper.sendText(text)
                         Log.i(
                             TAG,
                             "Sent initial user text: \"$text\"",
@@ -297,7 +327,7 @@ class AgentController @Inject constructor(
                 }
 
                 is SessionEvent.ToolInvocation -> {
-                    dispatchTools(event)
+                    dispatchTools(event, keeper)
                 }
 
                 is SessionEvent.ToolCancelled -> {
@@ -359,18 +389,19 @@ class AgentController @Inject constructor(
 
     private fun dispatchTools(
         event: SessionEvent.ToolInvocation,
+        keeper: VoiceSessionKeeper,
     ) {
         scope.launch {
             val responses = event.calls.map {
                 toolRegistry.dispatch(it)
             }
 
-            sessionKeeper.sendToolResponses(responses)
+            keeper.sendToolResponses(responses)
         }
     }
 
     @SuppressLint("MissingPermission")
-    private suspend fun pumpMic() {
+    private suspend fun pumpMic(keeper: VoiceSessionKeeper) {
         micStreamer.stream().collect { chunk ->
             /*
              * Half-duplex when barge-in is off: while the assistant is
@@ -383,7 +414,7 @@ class AgentController @Inject constructor(
             if (!bargeInEnabled && speaker.isPlaying()) return@collect
             // Mic mute: drop outgoing audio without tearing the session down.
             if (micMute.muted.value) return@collect
-            sessionKeeper.sendAudio(chunk)
+            keeper.sendAudio(chunk)
         }
     }
 

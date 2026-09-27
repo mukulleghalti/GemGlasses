@@ -120,6 +120,17 @@
     <string name="settings_web_search">Ricerca Web</string>
     <string name="settings_web_search_sub">Consenti all\'assistente di accedere a informazioni online aggiornate</string>
     <string name="settings_gemini_model">Modello Gemini</string>
+    <string name="settings_ai_provider">Provider IA</string>
+    <string name="settings_provider_gemini">Gemini</string>
+    <string name="settings_provider_gemini_sub">Google</string>
+    <string name="settings_provider_chatgpt">ChatGPT</string>
+    <string name="settings_provider_chatgpt_sub">OpenAI</string>
+    <string name="settings_chatgpt_key">Chiave API di ChatGPT</string>
+    <string name="settings_chatgpt_key_dialog_title">Chiave API di ChatGPT</string>
+    <string name="settings_chatgpt_key_note">Crea una chiave su platform.openai.com. Viene archiviata cifrata su questo telefono e inviata solo a OpenAI.</string>
+    <string name="settings_chatgpt_key_checking">Verifica della chiave con OpenAI…</string>
+    <string name="settings_chatgpt_model">Modello ChatGPT</string>
+    <string name="error_openai_key_missing">Chiave API OpenAI mancante — aggiungila in Impostazioni → IA per usare la voce di ChatGPT.</string>
     <string name="settings_auto_titles">Titoli automatici</string>
     <string name="settings_auto_titles_sub">Genera titoli brevi per le conversazioni passate</string>
     <string name="settings_qr_scan">Scansione QR</string>
