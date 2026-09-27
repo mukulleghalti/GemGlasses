@@ -1067,6 +1067,7 @@ private fun ProviderDialog(
  * Mirrors [ModelDialog]; no subtitles — the model IDs are
  * self-explanatory and product names stay untranslated.
  */
+@Composable
 private fun ChatGptModelDialog(
     current: String,
     onSelect: (String) -> Unit,
@@ -1114,6 +1115,7 @@ private fun ChatGptModelDialog(
  * the key is stored verbatim and verified against OpenAI's /v1/models
  * endpoint on save, so a typo surfaces immediately.
  */
+@Composable
 private fun ChatGptKeyDialog(
     viewModel: AgentViewModel,
     onDismiss: () -> Unit,
