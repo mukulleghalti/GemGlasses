@@ -240,6 +240,7 @@
     <string name="camera_status_video_saved_no_audio">Vídeo salvo (sem áudio)</string>
     <string name="camera_status_rec_stopped">Gravação parada</string>
     <string name="camera_error_permission">Conceda a permissão de câmera dos óculos Meta para usar o teste de câmera</string>
+    <string name="camera_grant">Permitir</string>
     <string name="camera_error_jpeg">Foto capturada, mas não foi possível decodificar o JPEG</string>
     <string name="camera_error_no_video">Nenhum arquivo de vídeo foi criado</string>
     <string name="camera_error_recorder">Erro de quadro do gravador: %1$s</string>

@@ -240,6 +240,7 @@
     <string name="camera_status_video_saved_no_audio">Video guardado (sin audio)</string>
     <string name="camera_status_rec_stopped">Grabación detenida</string>
     <string name="camera_error_permission">Concede el permiso de cámara de las gafas Meta para usar la prueba de cámara</string>
+    <string name="camera_grant">Permitir</string>
     <string name="camera_error_jpeg">Foto capturada pero no se pudo decodificar el JPEG</string>
     <string name="camera_error_no_video">No se creó ningún archivo de video</string>
     <string name="camera_error_recorder">Error de fotograma del grabador: %1$s</string>

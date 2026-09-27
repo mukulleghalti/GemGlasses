@@ -240,6 +240,7 @@
     <string name="camera_status_video_saved_no_audio">Video saved (no audio)</string>
     <string name="camera_status_rec_stopped">Recording stopped</string>
     <string name="camera_error_permission">Grant the Meta glasses camera permission to use Camera Test</string>
+    <string name="camera_grant">Grant</string>
     <string name="camera_error_jpeg">Photo captured but could not decode JPEG</string>
     <string name="camera_error_no_video">No video file was created</string>
     <string name="camera_error_recorder">Recorder frame error: %1$s</string>

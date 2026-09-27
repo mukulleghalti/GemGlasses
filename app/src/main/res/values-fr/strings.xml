@@ -240,6 +240,7 @@
     <string name="camera_status_video_saved_no_audio">Vidéo enregistrée (sans audio)</string>
     <string name="camera_status_rec_stopped">Enregistrement arrêté</string>
     <string name="camera_error_permission">Accordez l\'autorisation caméra des lunettes Meta pour utiliser le test caméra</string>
+    <string name="camera_grant">Autoriser</string>
     <string name="camera_error_jpeg">Photo capturée mais décodage JPEG impossible</string>
     <string name="camera_error_no_video">Aucun fichier vidéo n\'a été créé</string>
     <string name="camera_error_recorder">Erreur d\'image de l\'enregistreur : %1$s</string>

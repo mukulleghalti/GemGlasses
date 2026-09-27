@@ -240,6 +240,7 @@
     <string name="camera_status_video_saved_no_audio">Video gespeichert (ohne Ton)</string>
     <string name="camera_status_rec_stopped">Aufnahme gestoppt</string>
     <string name="camera_error_permission">Erteile die Kameraberechtigung der Meta-Brille, um den Kameratest zu nutzen</string>
+    <string name="camera_grant">Erlauben</string>
     <string name="camera_error_jpeg">Foto aufgenommen, aber JPEG konnte nicht dekodiert werden</string>
     <string name="camera_error_no_video">Es wurde keine Videodatei erstellt</string>
     <string name="camera_error_recorder">Recorder-Frame-Fehler: %1$s</string>

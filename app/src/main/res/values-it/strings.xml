@@ -240,6 +240,7 @@
     <string name="camera_status_video_saved_no_audio">Video salvato (senza audio)</string>
     <string name="camera_status_rec_stopped">Registrazione arrestata</string>
     <string name="camera_error_permission">Concedi l\'autorizzazione alla fotocamera degli occhiali Meta per usare il Test fotocamera</string>
+    <string name="camera_grant">Consenti</string>
     <string name="camera_error_jpeg">Foto acquisita ma impossibile decodificare il JPEG</string>
     <string name="camera_error_no_video">Nessun file video creato</string>
     <string name="camera_error_recorder">Errore frame del registratore: %1$s</string>
