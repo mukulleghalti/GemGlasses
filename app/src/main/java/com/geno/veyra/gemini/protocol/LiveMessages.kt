@@ -164,6 +164,14 @@ data class ServerMessage(
     val goAway: GoAway? = null,
     val sessionResumptionUpdate: SessionResumptionUpdate? = null,
     val usageMetadata: JsonObject? = null,
+    /** Explicit server-side rejection (quota, invalid key, ...). */
+    val error: ServerError? = null,
+)
+
+/** Error payload the server may send instead of setupComplete. */
+@Serializable
+data class ServerError(
+    val message: String? = null,
 )
 
 @Serializable

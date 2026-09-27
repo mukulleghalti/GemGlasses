@@ -38,4 +38,16 @@ sealed interface SessionEvent {
 
     /** The socket closed (cleanly or with [error]). */
     data class Closed(val error: Throwable?) : SessionEvent
+
+    /**
+     * The server refused the session before setup completed (for
+     * example an explicit error payload, a quota rejection, or the
+     * setup watchdog expiring). [detail] carries the server's reason
+     * when one was captured; null means no reason was given.
+     *
+     * This is terminal for the current attempt: SessionKeeper stops
+     * retrying and the UI surfaces it instead of hanging on
+     * "connecting" forever.
+     */
+    data class ConnectionFailed(val detail: String?) : SessionEvent
 }

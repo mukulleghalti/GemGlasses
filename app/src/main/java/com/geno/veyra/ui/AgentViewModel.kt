@@ -62,6 +62,10 @@ class AgentViewModel @Inject constructor(
     val status: StateFlow<AgentStatus> =
         controller.status
 
+    /** Why the last assistant connection attempt failed, if it did. */
+    val connectionError: StateFlow<String?> =
+        controller.connectionError
+
     /** True while the assistant's mic is muted (session still alive). */
     val micMuted: StateFlow<Boolean> =
         micMute.muted

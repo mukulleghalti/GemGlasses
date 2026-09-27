@@ -62,6 +62,13 @@
     <string name="assistant_live">Live</string>
     <string name="assistant_ended">Ended</string>
     <string name="assistant_empty_transcript">The conversation will appear here when the session starts.</string>
+    <string name="assistant_connection_failed">Connection failed</string>
+    <string name="assistant_connection_failed_title">Couldn’t connect to the assistant</string>
+    <string name="assistant_connection_failed_generic">The assistant didn’t respond. This is often a quota or API key issue — check both, then try again.</string>
+    <string name="assistant_connection_failed_dialog_title">Couldn’t connect</string>
+    <string name="assistant_connection_failed_quota">The API key is out of quota, so the assistant can’t start. This is common on free-tier keys — Web Search and long sessions burn extra quota. Try turning off Web Search in AI Settings, or switch to a paid API key.</string>
+    <string name="assistant_dismiss">Dismiss</string>
+    <string name="assistant_retry">Retry</string>
     <string name="assistant_cited_places">Cited Places (Google Maps)</string>
     <string name="transcript_you">You</string>
     <string name="transcript_system">System</string>

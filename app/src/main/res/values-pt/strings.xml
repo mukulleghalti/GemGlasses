@@ -62,6 +62,13 @@
     <string name="assistant_live">Ao vivo</string>
     <string name="assistant_ended">Encerrada</string>
     <string name="assistant_empty_transcript">A conversa aparecerá aqui quando a sessão começar.</string>
+    <string name="assistant_connection_failed">Conexão falhou</string>
+    <string name="assistant_connection_failed_title">Não foi possível conectar ao assistente</string>
+    <string name="assistant_connection_failed_generic">O assistente não respondeu. Geralmente é um problema de cota ou de chave de API — verifique ambos e tente novamente.</string>
+    <string name="assistant_connection_failed_dialog_title">Não foi possível conectar</string>
+    <string name="assistant_connection_failed_quota">A chave de API esgotou a cota e o assistente não pode iniciar. É comum nas chaves gratuitas — a pesquisa web e as sessões longas consomem cota extra. Tente desativar a pesquisa web nas configurações de IA ou use uma chave de API paga.</string>
+    <string name="assistant_dismiss">Dispensar</string>
+    <string name="assistant_retry">Tentar novamente</string>
     <string name="assistant_cited_places">Lugares citados (Google Maps)</string>
     <string name="transcript_you">Você</string>
     <string name="transcript_system">Sistema</string>

@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.activity.ComponentActivity
 import com.google.home.ConsentScreenOptions
-import com.google.home.Device
+import com.google.home.HomeDevice
 import com.google.home.DeviceType
 import com.google.home.DeviceTypeFactory
 import com.google.home.FactoryRegistry
@@ -125,7 +125,7 @@ class SmartHomeController @Inject constructor(
                     consentScreenOptions = ConsentScreenOptions(
                         structureId = null,
                         allowedStructureIds = emptyList(),
-                        isAllowStructureChange = true,
+                        isAllowStructureChange = false,
                     ),
                 )
                 Log.i(TAG, "requestPermissions result: ${result.status}")
@@ -154,7 +154,7 @@ class SmartHomeController @Inject constructor(
     }
 
     private suspend fun describeDevice(
-        device: Device,
+        device: HomeDevice,
         structureName: String,
     ): HomeDeviceInfo {
         val types = device.types().first()
@@ -249,7 +249,7 @@ class SmartHomeController @Inject constructor(
         return runCatching {
             trait.moveToLevelWithOnOff(
                 level = level,
-                transitionTime = null,
+                transitionTime = 0u,
                 optionsMask = LevelControlTrait.OptionsBitmap(),
                 optionsOverride = LevelControlTrait.OptionsBitmap(),
             )

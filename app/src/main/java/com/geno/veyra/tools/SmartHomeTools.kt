@@ -5,7 +5,6 @@ import com.geno.veyra.smarthome.HomeDeviceInfo
 import com.geno.veyra.smarthome.SmartHomeController
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -76,7 +75,7 @@ class ListHomeDevicesTool @Inject constructor(
             put(
                 "devices",
                 buildJsonArray {
-                    devices.forEach { addJsonObject { it.toJson() } }
+                    devices.forEach { add(it.toJson()) }
                 },
             )
         }

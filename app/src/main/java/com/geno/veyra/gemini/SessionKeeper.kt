@@ -5,6 +5,7 @@ import com.geno.veyra.gemini.protocol.FunctionResponse
 import com.geno.veyra.settings.DEFAULT_LIVE_MODEL
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -277,116 +278,198 @@ class SessionKeeper @Inject constructor(
             )
 
             var reconnectNow = false
+            var readySeen = false
+            var setupFailed = false
+            var failureDetail: String? = null
 
             try {
 
-                /*
-                 * collect() remains active while the WebSocket is alive.
-                 */
-                session.connect().collect { event ->
+                coroutineScope {
 
-                    Log.d(
-                        TAG,
-                        "Event received: $event"
-                    )
-
-                    when (event) {
-
-                        /*
-                         * ------------------------------------------------
-                         * READY
-                         * ------------------------------------------------
-                         */
-                        is SessionEvent.Ready -> {
-
-                            Log.i(
+                    /*
+                     * Setup watchdog: the server must acknowledge setup
+                     * (Ready) within the timeout, otherwise this attempt
+                     * is dead. Failing loudly here is what keeps the UI
+                     * from hanging on "connecting" forever when the
+                     * server silently rejects setup (quota exhausted,
+                     * invalid key, ...).
+                     */
+                    val watchdog = launch {
+                        delay(SETUP_TIMEOUT_MS)
+                        if (!readySeen) {
+                            setupFailed = true
+                            Log.e(
                                 TAG,
-                                "🟢 Session Event: Ready"
+                                "🔴 Setup timed out after " +
+                                    "${SETUP_TIMEOUT_MS}ms without Ready",
                             )
-
-                            /*
-                             * Successful connection means reset the
-                             * exponential backoff.
-                             */
-                            backoffMs =
-                                INITIAL_BACKOFF_MS
-
-                            _events.emit(event)
-                        }
-
-                        /*
-                         * ------------------------------------------------
-                         * GOING AWAY
-                         * ------------------------------------------------
-                         *
-                         * Gemini is telling us the current connection
-                         * will be terminated.
-                         *
-                         * Because session resumption is enabled, reconnect
-                         * using the latest handle.
-                         */
-                        is SessionEvent.GoingAway -> {
-
-                            Log.w(
-                                TAG,
-                                "⚠️ Session Event: GoingAway " +
-                                    "timeLeft=${event.timeLeft}"
+                            _events.emit(
+                                SessionEvent.ConnectionFailed(
+                                    failureDetail
+                                )
                             )
-
-                            reconnectNow = true
-
-                            _events.emit(event)
-
-                            /*
-                             * Closing the socket causes connect() to finish,
-                             * after which runLoop creates the next session.
-                             */
                             session.close()
                         }
+                    }
+
+                    try {
 
                         /*
-                         * ------------------------------------------------
-                         * CLOSED
-                         * ------------------------------------------------
-                         *
-                         * We don't immediately forward Closed to the UI
-                         * because most closures here are part of an
-                         * automatic reconnect.
+                         * collect() remains active while the WebSocket
+                         * is alive.
                          */
-                        is SessionEvent.Closed -> {
+                        session.connect().collect { event ->
 
-                            if (event.error != null) {
+                            Log.d(
+                                TAG,
+                                "Event received: $event"
+                            )
 
-                                Log.e(
-                                    TAG,
-                                    "🔴 LiveSession CLOSED: " +
-                                        event.error.message,
-                                    event.error,
-                                )
+                            when (event) {
 
-                            } else {
+                                /*
+                                 * ------------------------------------------------
+                                 * READY
+                                 * ------------------------------------------------
+                                 */
+                                is SessionEvent.Ready -> {
 
-                                Log.i(
-                                    TAG,
-                                    "🔴 LiveSession closed cleanly"
-                                )
+                                    readySeen = true
+                                    watchdog.cancel()
+
+                                    Log.i(
+                                        TAG,
+                                        "🟢 Session Event: Ready"
+                                    )
+
+                                    /*
+                                     * Successful connection means reset the
+                                     * exponential backoff.
+                                     */
+                                    backoffMs =
+                                        INITIAL_BACKOFF_MS
+
+                                    _events.emit(event)
+                                }
+
+                                /*
+                                 * ------------------------------------------------
+                                 * GOING AWAY
+                                 * ------------------------------------------------
+                                 *
+                                 * Gemini is telling us the current connection
+                                 * will be terminated.
+                                 *
+                                 * Because session resumption is enabled, reconnect
+                                 * using the latest handle.
+                                 */
+                                is SessionEvent.GoingAway -> {
+
+                                    Log.w(
+                                        TAG,
+                                        "⚠️ Session Event: GoingAway " +
+                                            "timeLeft=${event.timeLeft}"
+                                    )
+
+                                    reconnectNow = true
+
+                                    _events.emit(event)
+
+                                    /*
+                                     * Closing the socket causes connect() to finish,
+                                     * after which runLoop creates the next session.
+                                     */
+                                    session.close()
+                                }
+
+                                /*
+                                 * ------------------------------------------------
+                                 * CLOSED
+                                 * ------------------------------------------------
+                                 *
+                                 * We don't immediately forward Closed to the UI
+                                 * because most closures here are part of an
+                                 * automatic reconnect.
+                                 */
+                                is SessionEvent.Closed -> {
+
+                                    if (!readySeen) {
+                                        /*
+                                         * The socket died before setup
+                                         * completed. Keep the reason for
+                                         * the failure message.
+                                         */
+                                        failureDetail =
+                                            event.error?.message
+                                                ?: failureDetail
+                                    }
+
+                                    if (event.error != null) {
+
+                                        Log.e(
+                                            TAG,
+                                            "🔴 LiveSession CLOSED: " +
+                                                event.error.message,
+                                            event.error,
+                                        )
+
+                                    } else {
+
+                                        Log.i(
+                                            TAG,
+                                            "🔴 LiveSession closed cleanly"
+                                        )
+                                    }
+
+                                    /*
+                                     * Do not emit this here.
+                                     *
+                                     * The SessionKeeper owns the reconnect logic.
+                                     */
+                                }
+
+                                /*
+                                 * ------------------------------------------------
+                                 * CONNECTION FAILED
+                                 * ------------------------------------------------
+                                 *
+                                 * The server explicitly rejected setup
+                                 * (error payload instead of
+                                 * setupComplete). Terminal for this
+                                 * attempt: surface it and stop retrying
+                                 * rather than looping silently.
+                                 */
+                                is SessionEvent.ConnectionFailed -> {
+
+                                    setupFailed = true
+
+                                    failureDetail =
+                                        event.detail ?: failureDetail
+
+                                    Log.e(
+                                        TAG,
+                                        "🔴 Server rejected setup: " +
+                                            failureDetail,
+                                    )
+
+                                    _events.emit(event)
+
+                                    session.close()
+                                }
+
+                                /*
+                                 * ------------------------------------------------
+                                 * ALL NORMAL EVENTS
+                                 * ------------------------------------------------
+                                 */
+                                else -> {
+                                    _events.emit(event)
+                                }
                             }
-
-                            /*
-                             * Do not emit this here.
-                             *
-                             * The SessionKeeper owns the reconnect logic.
-                             */
                         }
 
-                        /*
-                         * ------------------------------------------------
-                         * ALL NORMAL EVENTS
-                         * ------------------------------------------------
-                         */
-                        else -> {
-                            _events.emit(event)
-                        }
+                    } finally {
+                        watchdog.cancel()
                     }
                 }
 
@@ -402,6 +485,25 @@ class SessionKeeper @Inject constructor(
                     e,
                 )
 
+                /*
+                 * The socket died with an error before setup completed
+                 * (this is where quota rejections land: the server kills
+                 * the socket instead of sending setupComplete). Treat it
+                 * as a setup failure rather than a mid-session drop, but
+                 * never report it when the keeper itself was stopped.
+                 */
+                if (
+                    !readySeen &&
+                    !setupFailed &&
+                    kotlinx.coroutines.currentCoroutineContext().isActive
+                ) {
+                    setupFailed = true
+                    failureDetail = e.message ?: failureDetail
+                    _events.emit(
+                        SessionEvent.ConnectionFailed(failureDetail)
+                    )
+                }
+
             } finally {
 
                 /*
@@ -415,6 +517,19 @@ class SessionKeeper @Inject constructor(
                  * Make sure the old socket cannot remain alive.
                  */
                 session.close()
+            }
+
+            /*
+             * A failed setup is terminal for this start(): the user saw
+             * the reason, and silent retry loops would just burn quota.
+             * The UI offers an explicit retry.
+             */
+            if (setupFailed) {
+                Log.i(
+                    TAG,
+                    "Setup failed; not retrying automatically"
+                )
+                break
             }
 
             /*
@@ -478,5 +593,12 @@ class SessionKeeper @Inject constructor(
         const val INITIAL_BACKOFF_MS = 500L
 
         const val MAX_BACKOFF_MS = 8_000L
+
+        /**
+         * How long to wait for setupComplete (Ready) before declaring
+         * the attempt dead. Without this, a silently rejected setup
+         * (quota, invalid key) leaves the UI on "connecting" forever.
+         */
+        const val SETUP_TIMEOUT_MS = 20_000L
     }
 }
