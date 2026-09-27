@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -84,7 +85,7 @@ class VoskWakeWordEngine @Inject constructor(
      * Recomputes [modelState] for the current app language. Call when
      * Settings opens — the cached model may belong to another language.
      */
-    fun refreshModelState() {
+    override fun refreshModelState() {
         val dir = modelDirFor(resolveLanguage())
         _modelState.value =
             if (isModelReady(dir)) {
@@ -192,25 +193,32 @@ class VoskWakeWordEngine @Inject constructor(
                         val recognizer = Recognizer(model, SAMPLE_RATE_HZ)
                         try {
                             withTimeoutOrNull(timeoutMs) {
-                                micStreamer.stream().collect { chunk ->
-                                    ensureActive()
-                                    recognizer.acceptWaveForm(chunk, chunk.size)
-                                    val partial =
-                                        runCatching {
-                                            JSONObject(
-                                                recognizer.partialResult,
-                                            ).optString("partial")
-                                        }.getOrDefault("")
-                                    if (partial.isNotBlank()) {
-                                        onPartial(partial)
+                                micStreamer.stream()
+                                    .takeWhile { !matched }
+                                    .collect { chunk ->
+                                        ensureActive()
+                                        recognizer.acceptWaveForm(
+                                            chunk,
+                                            chunk.size,
+                                        )
+                                        val partial =
+                                            runCatching {
+                                                JSONObject(
+                                                    recognizer.partialResult,
+                                                ).optString("partial")
+                                            }.getOrDefault("")
+                                        if (partial.isNotBlank()) {
+                                            onPartial(partial)
+                                        }
+                                        if (
+                                            pattern.containsMatchIn(partial)
+                                        ) {
+                                            matched = true
+                                            // Heard enough — takeWhile stops
+                                            // the stream so the verdict lands
+                                            // quickly.
+                                        }
                                     }
-                                    if (pattern.containsMatchIn(partial)) {
-                                        matched = true
-                                        // Heard enough — stop early so the
-                                        // verdict lands quickly.
-                                        return@withTimeoutOrNull
-                                    }
-                                }
                             }
                         } finally {
                             recognizer.close()
