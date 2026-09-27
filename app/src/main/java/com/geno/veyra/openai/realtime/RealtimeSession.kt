@@ -32,14 +32,20 @@ import java.util.concurrent.ConcurrentLinkedQueue
  * the app (transcript UI, speaker, tool dispatch) needs no
  * provider-specific code.
  *
- * Protocol notes:
+ * Protocol notes (GA shape, verified 2026-09-27):
  * - Auth is the plain API key in the `Authorization` header; there is
- *   no ephemeral-token dance like Gemini's.
- * - The first client message is `session.update`; the session is ready
- *   once the server answers `session.updated`.
+ *   no ephemeral-token dance like Gemini's. Do NOT send
+ *   `OpenAI-Beta: realtime=v1` — OpenAI retired the beta interface on
+ *   2026-05-12 and the header now hard-closes the socket
+ *   (`beta_api_shape_disabled`).
+ * - The first client message is `session.update` with the nested GA
+ *   session object (`type: "realtime"`, `output_modalities`,
+ *   `audio.input`/`audio.output`); the session is ready once the
+ *   server answers `session.updated`.
  * - Mic audio is 24 kHz PCM16 (`input_audio_buffer.append`); Veyra
  *   captures at 16 kHz, so [AudioResampler] upsamples every chunk.
- *   Assistant audio arrives as 24 kHz PCM16 — exactly what
+ *   Assistant audio arrives as 24 kHz PCM16
+ *   (`response.output_audio.delta`) — exactly what
  *   [com.geno.veyra.audio.AudioSpec.OUTPUT_SAMPLE_RATE] expects.
  * - Server-side VAD (`turn_detection`) handles barge-in: speech start
  *   surfaces as [SessionEvent.Interrupted] and the server auto-cancels
@@ -92,7 +98,10 @@ class RealtimeSession(
         val request = Request.Builder()
             .url(url)
             .addHeader("Authorization", "Bearer $apiKey")
-            .addHeader("OpenAI-Beta", "realtime=v1")
+            // NOTE: no OpenAI-Beta header. OpenAI retired the beta
+            // Realtime interface on 2026-05-12; sending
+            // `OpenAI-Beta: realtime=v1` now hard-closes the socket
+            // with `invalid_request_error.beta_api_shape_disabled`.
             .build()
 
         val listener = object : WebSocketListener() {
@@ -323,8 +332,12 @@ class RealtimeSession(
     }
 
     /**
-     * The first message on the socket: voice, audio formats, server VAD,
-     * transcription, instructions, and the function tools.
+     * The first message on the socket: GA-shaped session config with
+     * the nested `audio.input` / `audio.output` objects.
+     *
+     * `output_modalities` is audio-only: the assistant transcript the
+     * UI shows comes from the `response.output_audio_transcript.delta`
+     * captions, so a separate text modality would only burn tokens.
      */
     private fun buildSessionUpdate(): JsonObject =
         buildJsonObject {
@@ -332,30 +345,65 @@ class RealtimeSession(
             put(
                 "session",
                 buildJsonObject {
-                    put(
-                        "modalities",
-                        buildJsonArray {
-                            add("text")
-                            add("audio")
-                        }
-                    )
+                    put("type", "realtime")
+                    put("model", model)
                     put("instructions", instructions)
-                    put("voice", VOICE)
-                    put("input_audio_format", "pcm16")
-                    put("output_audio_format", "pcm16")
                     put(
-                        "input_audio_transcription",
-                        buildJsonObject {
-                            put("model", TRANSCRIPTION_MODEL)
-                        }
+                        "output_modalities",
+                        buildJsonArray { add("audio") }
                     )
                     put(
-                        "turn_detection",
+                        "audio",
                         buildJsonObject {
-                            put("type", "server_vad")
-                            put("threshold", 0.5)
-                            put("prefix_padding_ms", 300)
-                            put("silence_duration_ms", 700)
+                            put(
+                                "input",
+                                buildJsonObject {
+                                    put(
+                                        "format",
+                                        buildJsonObject {
+                                            put("type", "audio/pcm")
+                                            put("rate", 24000)
+                                        }
+                                    )
+                                    put(
+                                        "transcription",
+                                        buildJsonObject {
+                                            put(
+                                                "model",
+                                                TRANSCRIPTION_MODEL
+                                            )
+                                        }
+                                    )
+                                    put(
+                                        "turn_detection",
+                                        buildJsonObject {
+                                            put("type", "server_vad")
+                                            put("threshold", 0.5)
+                                            put(
+                                                "prefix_padding_ms",
+                                                300
+                                            )
+                                            put(
+                                                "silence_duration_ms",
+                                                700
+                                            )
+                                        }
+                                    )
+                                }
+                            )
+                            put(
+                                "output",
+                                buildJsonObject {
+                                    put(
+                                        "format",
+                                        buildJsonObject {
+                                            put("type", "audio/pcm")
+                                            put("rate", 24000)
+                                        }
+                                    )
+                                    put("voice", VOICE)
+                                }
+                            )
                         }
                     )
                     put(
@@ -430,8 +478,11 @@ class RealtimeSession(
             }
 
             /*
-             * Incremental assistant transcript.
+             * Incremental assistant transcript. GA name is
+             * `response.output_audio_transcript.delta`; the beta
+             * `response.audio_transcript.delta` is kept as an alias.
              */
+            "response.output_audio_transcript.delta",
             "response.audio_transcript.delta" -> {
                 root.string("delta")
                     ?.takeIf { it.isNotBlank() }
@@ -447,8 +498,11 @@ class RealtimeSession(
             }
 
             /*
-             * Assistant audio (24 kHz PCM16 — matches the speaker).
+             * Assistant audio (24 kHz PCM16 — matches the speaker). GA
+             * name is `response.output_audio.delta`; the beta
+             * `response.audio.delta` is kept as an alias.
              */
+            "response.output_audio.delta",
             "response.audio.delta" -> {
                 root.string("delta")
                     ?.let { b64 ->
