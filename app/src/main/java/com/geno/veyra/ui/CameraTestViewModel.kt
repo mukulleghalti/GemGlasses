@@ -4,7 +4,7 @@ import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.geno.veyra.glasses.real.RealGlassesBackend
+import com.geno.veyra.glasses.GlassesBackend
 import com.geno.veyra.glasses.CameraPermission
 import com.geno.veyra.settings.CameraResolution
 import com.geno.veyra.settings.SettingsRepository
@@ -67,7 +67,7 @@ data class CameraTestUiState(
 
 @HiltViewModel
 class CameraTestViewModel @Inject constructor(
-    private val backend: RealGlassesBackend,
+    private val backend: GlassesBackend,
     private val settings: SettingsRepository,
     private val videoRecorder: CameraVideoRecorder,
 ) : ViewModel() {
