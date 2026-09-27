@@ -245,6 +245,7 @@ enum class AppLanguage(val tag: String?) {
     PORTUGUESE("pt"),
     FRENCH("fr"),
     ITALIAN("it"),
+    GERMAN("de"),
     ;
 
     companion object {
@@ -264,6 +265,7 @@ private val SPEECH_TAGS =
         "pt" to "pt-BR",
         "fr" to "fr-FR",
         "it" to "it-IT",
+        "de" to "de-DE",
     )
 
 /**
@@ -286,6 +288,7 @@ fun speechDirective(baseLanguage: String): String =
         "pt" -> "Fale português por padrão, a menos que o usuário peça outro idioma."
         "fr" -> "Parlez français par défaut, sauf si l'utilisateur demande une autre langue."
         "it" -> "Parla italiano per impostazione predefinita, a meno che l'utente non chieda un'altra lingua."
+        "de" -> "Sprich standardmäßig Deutsch, es sei denn, der Nutzer bittet um eine andere Sprache."
         else -> "Speak English by default unless the user asks for another language."
     }
 

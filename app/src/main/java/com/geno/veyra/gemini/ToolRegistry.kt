@@ -126,6 +126,7 @@ class ToolRegistry @Inject constructor(
             "pt" -> "Ferramenta desconhecida"
             "fr" -> "Outil inconnu"
             "it" -> "Strumento sconosciuto"
+            "de" -> "Unbekanntes Tool"
             else -> "Unknown tool"
         }
 
@@ -135,6 +136,7 @@ class ToolRegistry @Inject constructor(
             "pt" -> "Falha ao executar a ferramenta"
             "fr" -> "Échec de l'exécution de l'outil"
             "it" -> "Impossibile eseguire lo strumento"
+            "de" -> "Tool-Ausführung fehlgeschlagen"
             else -> "Tool execution failed"
         }
 
