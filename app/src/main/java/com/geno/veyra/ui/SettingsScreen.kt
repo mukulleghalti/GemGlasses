@@ -999,7 +999,6 @@ private fun MemoriesDialog(
  * Picks which AI backend powers the assistant: Gemini (Google) or
  * ChatGPT (OpenAI). Product names are intentionally not translated.
  */
-@Composable
 private fun ProviderDialog(
     current: AiProvider,
     onSelect: (AiProvider) -> Unit,
