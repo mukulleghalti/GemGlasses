@@ -232,6 +232,7 @@ enum class AppLanguage(val tag: String?) {
     SPANISH("es"),
     PORTUGUESE("pt"),
     FRENCH("fr"),
+    ITALIAN("it"),
     ;
 
     companion object {
