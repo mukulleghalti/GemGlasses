@@ -1,6 +1,7 @@
 package com.geno.veyra.smarthome
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import androidx.activity.ComponentActivity
 import com.google.home.ConsentScreenOptions
@@ -40,6 +41,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -152,14 +154,37 @@ class SmartHomeController @Inject constructor(
                     ),
                 )
                 Log.i(TAG, "requestPermissions result: ${result.status}")
-                // Refresh the cached state so the Settings row updates.
-                permissionsState.value =
-                    runCatching { homeClient.hasPermissions().first() }
-                        .getOrNull()
+                // The grant can take a moment to propagate inside Play
+                // Services after the flow returns, so settle the cached
+                // state with a short poll instead of trusting the very
+                // first emission.
+                refreshPermissions()
             } catch (e: HomeException) {
                 Log.e(TAG, "requestPermissions failed", e)
             }
         }
+    }
+
+    /**
+     * Re-reads the Home permission state, polling briefly until it reports
+     * GRANTED. A single hasPermissions().first() immediately after
+     * requestPermissions can return a stale NOT_GRANTED (or throw) while
+     * Play Services is still propagating the grant, which left the
+     * Settings row stuck on "Not connected" even though the flow returned
+     * SUCCESS.
+     */
+    private suspend fun refreshPermissions() {
+        var state: PermissionsState? = null
+        val deadline =
+            SystemClock.elapsedRealtime() + PERMISSION_SETTLE_TIMEOUT_MS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            state = runCatching { getClient().hasPermissions().first() }
+                .getOrNull()
+            if (state == PermissionsState.GRANTED) break
+            delay(PERMISSION_POLL_INTERVAL_MS)
+        }
+        permissionsState.value = state
+        Log.i(TAG, "permissions refreshed: $state")
     }
 
     /** Lists every device across all structures the user granted access to. */
@@ -313,6 +338,8 @@ class SmartHomeController @Inject constructor(
     private companion object {
         const val TAG = "SmartHomeController"
         const val STRUCTURE_TIMEOUT_MS = 10_000L
+        const val PERMISSION_SETTLE_TIMEOUT_MS = 10_000L
+        const val PERMISSION_POLL_INTERVAL_MS = 1_000L
 
         val SUPPORTED_DEVICE_TYPES: List<DeviceTypeFactory<out DeviceType>> = listOf(
             OnOffLightDevice,
