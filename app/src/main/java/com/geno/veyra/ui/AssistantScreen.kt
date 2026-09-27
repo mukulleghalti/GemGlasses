@@ -131,8 +131,6 @@ fun AssistantScreen(
         }
     }
 
-    ChatGptComingSoonNotice(viewModel = viewModel)
-
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -788,31 +786,3 @@ private fun PlaceCard(
     }
 }
 
-/**
- * "Coming soon" notice shown when the user tries to start the assistant
- * with the ChatGPT provider selected. Shared by [AssistantScreen] and
- * [HomeScreen] — both call `viewModel.startSession()`, and each observes
- * the flag on its own [AgentViewModel] instance.
- */
-@Composable
-fun ChatGptComingSoonNotice(
-    viewModel: AgentViewModel = hiltViewModel(),
-) {
-    val visible by viewModel.chatGptNoticeVisible.collectAsStateWithLifecycle()
-    if (visible) {
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissChatGptNotice() },
-            title = {
-                Text(stringResource(R.string.settings_chatgpt_coming_soon_title))
-            },
-            text = {
-                Text(stringResource(R.string.settings_chatgpt_coming_soon_message))
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.dismissChatGptNotice() }) {
-                    Text(stringResource(R.string.common_done))
-                }
-            },
-        )
-    }
-}

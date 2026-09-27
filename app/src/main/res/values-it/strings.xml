@@ -130,8 +130,7 @@
     <string name="settings_chatgpt_key_note">Crea una chiave su platform.openai.com. Viene archiviata cifrata su questo telefono e inviata solo a OpenAI.</string>
     <string name="settings_chatgpt_key_checking">Verifica della chiave con OpenAI…</string>
     <string name="settings_chatgpt_model">Modello ChatGPT</string>
-    <string name="settings_chatgpt_coming_soon_title">Prossimamente</string>
-    <string name="settings_chatgpt_coming_soon_message">La voce di ChatGPT non è ancora disponibile — il client vocale in tempo reale è ancora in sviluppo. Riporta il provider IA su Gemini per continuare a usare l\'assistente.</string>
+    <string name="error_openai_key_missing">Chiave API OpenAI mancante — aggiungila in Impostazioni → IA per usare la voce di ChatGPT.</string>
     <string name="settings_auto_titles">Titoli automatici</string>
     <string name="settings_auto_titles_sub">Genera titoli brevi per le conversazioni passate</string>
     <string name="settings_qr_scan">Scansione QR</string>

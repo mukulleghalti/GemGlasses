@@ -5,9 +5,7 @@ package com.geno.veyra.openai
  * the ChatGPT provider is selected.
  *
  * These are the Realtime API models — OpenAI's counterpart to Gemini
- * Live. The live-voice client that consumes them is the next build;
- * this list exists so the picker, preferences, and mockups are already
- * shaped around the real model IDs.
+ * Live — consumed by `com.geno.veyra.openai.realtime.RealtimeSession`.
  */
 data class OpenAiVoiceModel(
     val id: String,

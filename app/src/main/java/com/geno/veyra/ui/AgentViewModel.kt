@@ -116,33 +116,14 @@ class AgentViewModel @Inject constructor(
         wakeWordEngine.modelState
 
     /**
-     * Visible when the user tried to start the assistant while the
-     * ChatGPT provider is selected, whose live-voice client hasn't been
-     * built yet. The UI shows a "coming soon" notice instead of starting
-     * a session that would go nowhere. A StateFlow (not a one-shot
-     * event) so both the Home and Assistant screens can surface it.
-     */
-    private val _chatGptNoticeVisible = MutableStateFlow(false)
-    val chatGptNoticeVisible: StateFlow<Boolean> = _chatGptNoticeVisible
-
-    fun dismissChatGptNotice() {
-        _chatGptNoticeVisible.value = false
-    }
-
-    /**
      * Starts the assistant.
      *
-     * Caller must have RECORD_AUDIO permission.
+     * Caller must have RECORD_AUDIO permission. The AI provider chosen
+     * in Settings (Gemini or ChatGPT) is resolved inside
+     * [AgentController] — this is the same path the wake-word service
+     * uses, so both triggers stay identical.
      */
     fun startSession() {
-        // ChatGPT live voice is scaffolding-only for now: the provider,
-        // key, and model picker are real, but the Realtime session client
-        // is the next build. Say so instead of starting a dead session.
-        if (preferences.value.aiProvider == AiProvider.OPENAI) {
-            _chatGptNoticeVisible.value = true
-            return
-        }
-        // Same path the wake-word service uses; keep both identical.
         assistantStarter.start()
     }
 

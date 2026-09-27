@@ -140,8 +140,6 @@ fun HomeScreen(
         }
     }
 
-    ChatGptComingSoonNotice(viewModel = viewModel)
-
     Column(
         modifier = modifier
             .fillMaxSize()

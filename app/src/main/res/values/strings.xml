@@ -130,8 +130,7 @@
     <string name="settings_chatgpt_key_note">Create a key at platform.openai.com. It\'s stored encrypted on this phone and sent only to OpenAI.</string>
     <string name="settings_chatgpt_key_checking">Verifying key with OpenAI…</string>
     <string name="settings_chatgpt_model">ChatGPT model</string>
-    <string name="settings_chatgpt_coming_soon_title">Coming soon</string>
-    <string name="settings_chatgpt_coming_soon_message">ChatGPT voice isn\'t available yet — the live-voice client is still being built. Switch the AI provider back to Gemini to keep using the assistant.</string>
+    <string name="error_openai_key_missing">OpenAI API key is missing — add it in Settings → AI to use ChatGPT voice.</string>
     <string name="settings_auto_titles">Auto History Titles</string>
     <string name="settings_auto_titles_sub">Generate short titles for past conversations</string>
     <string name="settings_qr_scan">QR Bar Scan</string>
