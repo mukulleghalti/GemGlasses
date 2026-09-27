@@ -75,6 +75,33 @@ class VoskWakeWordEngine @Inject constructor(
     private var activePattern: Regex? = null
     private var lastEmitMs = 0L
 
+    private data class ModelSpec(
+        val dirName: String,
+    ) {
+        val url: String
+            get() = "https://alphacephei.com/vosk/models/$dirName.zip"
+    }
+
+    /**
+     * One small (~40 MB) on-device model per supported app language, from
+     * the official Vosk model list (all Apache 2.0, built for Android).
+     * Downloaded on demand the first time the language is used for wake
+     * words.
+     *
+     * Declared before the init block: init calls refreshModelState(),
+     * which reads this map, and Kotlin initializes properties in
+     * declaration order.
+     */
+    private val MODEL_SPECS =
+        mapOf(
+            "en" to ModelSpec("vosk-model-small-en-us-0.15"),
+            "de" to ModelSpec("vosk-model-small-de-0.15"),
+            "fr" to ModelSpec("vosk-model-small-fr-0.22"),
+            "es" to ModelSpec("vosk-model-small-es-0.42"),
+            "pt" to ModelSpec("vosk-model-small-pt-0.3"),
+            "it" to ModelSpec("vosk-model-small-it-0.22"),
+        )
+
     init {
         // Surface a cached model immediately so Settings can show "ready"
         // without waiting for the first start().
@@ -392,29 +419,6 @@ class VoskWakeWordEngine @Inject constructor(
         val body = words.joinToString("\\s+") { Regex.escape(it) }
         return Regex("\\b$body\\b", RegexOption.IGNORE_CASE)
     }
-
-    private data class ModelSpec(
-        val dirName: String,
-    ) {
-        val url: String
-            get() = "https://alphacephei.com/vosk/models/$dirName.zip"
-    }
-
-    /**
-     * One small (~40 MB) on-device model per supported app language, from
-     * the official Vosk model list (all Apache 2.0, built for Android).
-     * Downloaded on demand the first time the language is used for wake
-     * words.
-     */
-    private val MODEL_SPECS =
-        mapOf(
-            "en" to ModelSpec("vosk-model-small-en-us-0.15"),
-            "de" to ModelSpec("vosk-model-small-de-0.15"),
-            "fr" to ModelSpec("vosk-model-small-fr-0.22"),
-            "es" to ModelSpec("vosk-model-small-es-0.42"),
-            "pt" to ModelSpec("vosk-model-small-pt-0.3"),
-            "it" to ModelSpec("vosk-model-small-it-0.22"),
-        )
 
     private companion object {
         const val TAG = "VoskWakeWordEngine"
