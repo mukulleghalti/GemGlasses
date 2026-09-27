@@ -175,6 +175,13 @@
     <string name="settings_wake_phrase_label">Frase chiave</string>
     <string name="settings_wake_custom_label">Frase chiave personalizzata</string>
     <string name="settings_wake_vocab_note">Solo le parole conosciute dal modello vocale offline attiveranno l\'assistente — le parole inglesi comuni sono le più sicure.</string>
+    <string name="settings_wake_test">Prova la frase</string>
+    <string name="settings_wake_test_listen">Pronuncia la tua frase di attivazione…</string>
+    <string name="settings_wake_test_hearing">Sento: %1$s</string>
+    <string name="settings_wake_test_passed">Si attiverebbe — questa frase funziona.</string>
+    <string name="settings_wake_test_failed">Nessuna attivazione (sentito: “%1$s”). Prova parole semplici e comuni.</string>
+    <string name="settings_wake_use_phrase">Usa questa frase</string>
+    <string name="settings_wake_use_anyway">Usa comunque</string>
     <string name="settings_wake_model_download">Il modello vocale viene scaricato al primo utilizzo (~40 MB, consigliato Wi-Fi).</string>
     <string name="settings_wake_model_downloading">Download del modello vocale…</string>
     <string name="settings_wake_model_downloading_pct">Download del modello vocale… %1$d%%</string>

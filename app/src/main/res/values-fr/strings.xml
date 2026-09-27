@@ -175,6 +175,13 @@
     <string name="settings_wake_phrase_label">Phrase d\'activation</string>
     <string name="settings_wake_custom_label">Phrase d\'activation personnalisée</string>
     <string name="settings_wake_vocab_note">Seuls les mots connus du modèle vocal hors ligne déclencheront — les mots anglais courants sont les plus sûrs.</string>
+    <string name="settings_wake_test">Tester la phrase</string>
+    <string name="settings_wake_test_listen">Dites votre phrase de réveil maintenant…</string>
+    <string name="settings_wake_test_hearing">Entendu : %1$s</string>
+    <string name="settings_wake_test_passed">Se déclencherait — cette phrase fonctionne.</string>
+    <string name="settings_wake_test_failed">Pas de déclenchement (entendu : “%1$s”). Essayez des mots simples et courants.</string>
+    <string name="settings_wake_use_phrase">Utiliser cette phrase</string>
+    <string name="settings_wake_use_anyway">Utiliser quand même</string>
     <string name="settings_wake_model_download">Le modèle vocal se télécharge à la première utilisation (~40 Mo, Wi-Fi recommandé).</string>
     <string name="settings_wake_model_downloading">Téléchargement du modèle vocal…</string>
     <string name="settings_wake_model_downloading_pct">Téléchargement du modèle vocal… %1$d%%</string>

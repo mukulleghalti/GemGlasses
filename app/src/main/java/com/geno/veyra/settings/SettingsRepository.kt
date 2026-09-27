@@ -269,14 +269,37 @@ private val SPEECH_TAGS =
     )
 
 /**
+ * Base language for language-dependent features (wake-word model, spoken
+ * language), resolved from the picker's stored BCP-47 tag or the system
+ * locale. Anything we don't cover falls back to "en".
+ */
+fun wakeBaseLanguage(appTag: String?): String {
+    val base = appTag ?: Locale.getDefault().language
+    return if (base in SPEECH_TAGS) base else "en"
+}
+
+/**
  * Resolves the assistant's spoken language from the UI language picker.
  * `appTag` is the picker's stored BCP-47 tag, or null for "follow the
  * system language". Anything we don't cover falls back to en-US.
  */
-fun sessionSpeechTag(appTag: String?): String {
-    val base = appTag ?: Locale.getDefault().language
-    return SPEECH_TAGS[base] ?: "en-US"
-}
+fun sessionSpeechTag(appTag: String?): String =
+    SPEECH_TAGS[wakeBaseLanguage(appTag)] ?: "en-US"
+
+/**
+ * Default wake phrase per language. ASCII-only on purpose: Vosk decodes
+ * unaccented lowercase, and the matcher's word-boundary regex is
+ * ASCII-based, so accented defaults would never match.
+ */
+fun defaultWakePhrase(baseLanguage: String): String =
+    when (baseLanguage) {
+        "es" -> "hola gafas"
+        "pt" -> "ola oculos"
+        "fr" -> "salut lunettes"
+        "it" -> "ciao occhiali"
+        "de" -> "hallo brille"
+        else -> "hey glasses"
+    }
 
 /**
  * The language directive appended to the system instruction, written in
@@ -439,7 +462,9 @@ class SettingsRepository @Inject constructor(
 
                 wakePhrase =
                     prefs[wakePhraseKey]
-                        ?: AgentPreferences.DEFAULT.wakePhrase,
+                        ?: defaultWakePhrase(
+                            wakeBaseLanguage(prefs[appLanguageKey]),
+                        ),
 
                 stopPhrase =
                     prefs[stopPhraseKey]
@@ -559,6 +584,16 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[wakePhraseKey] = phrase
+        }
+    }
+
+    /**
+     * Drops the custom wake phrase so the per-language default applies
+     * again.
+     */
+    suspend fun clearWakePhrase() {
+        context.dataStore.edit {
+            it.remove(wakePhraseKey)
         }
     }
 

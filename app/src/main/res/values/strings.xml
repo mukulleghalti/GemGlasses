@@ -175,6 +175,13 @@
     <string name="settings_wake_phrase_label">Wake phrase</string>
     <string name="settings_wake_custom_label">Custom wake phrase</string>
     <string name="settings_wake_vocab_note">Only words the offline voice model knows will trigger — common English words are safest.</string>
+    <string name="settings_wake_test">Test phrase</string>
+    <string name="settings_wake_test_listen">Say your wake phrase now…</string>
+    <string name="settings_wake_test_hearing">Hearing: %1$s</string>
+    <string name="settings_wake_test_passed">Would trigger — this phrase works.</string>
+    <string name="settings_wake_test_failed">Didn’t trigger (heard “%1$s”). Try simpler, common words.</string>
+    <string name="settings_wake_use_phrase">Use this phrase</string>
+    <string name="settings_wake_use_anyway">Use anyway</string>
     <string name="settings_wake_model_download">Voice model downloads on first use (~40 MB, Wi-Fi recommended).</string>
     <string name="settings_wake_model_downloading">Downloading voice model…</string>
     <string name="settings_wake_model_downloading_pct">Downloading voice model… %1$d%%</string>

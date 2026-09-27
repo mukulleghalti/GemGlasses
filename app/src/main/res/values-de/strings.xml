@@ -175,6 +175,13 @@
     <string name="settings_wake_phrase_label">Aktivierungswort</string>
     <string name="settings_wake_custom_label">Eigenes Aktivierungswort</string>
     <string name="settings_wake_vocab_note">Nur Wörter, die das Offline-Sprachmodell kennt, lösen aus — gängige englische Wörter sind am sichersten.</string>
+    <string name="settings_wake_test">Phrase testen</string>
+    <string name="settings_wake_test_listen">Sprich jetzt deine Aktivierungsphrase…</string>
+    <string name="settings_wake_test_hearing">Gehört: %1$s</string>
+    <string name="settings_wake_test_passed">Würde auslösen — diese Phrase funktioniert.</string>
+    <string name="settings_wake_test_failed">Nicht ausgelöst (gehört: “%1$s”). Versuche einfachere, gängige Wörter.</string>
+    <string name="settings_wake_use_phrase">Diese Phrase verwenden</string>
+    <string name="settings_wake_use_anyway">Trotzdem verwenden</string>
     <string name="settings_wake_model_download">Das Sprachmodell wird bei der ersten Nutzung heruntergeladen (~40 MB, WLAN empfohlen).</string>
     <string name="settings_wake_model_downloading">Sprachmodell wird heruntergeladen…</string>
     <string name="settings_wake_model_downloading_pct">Sprachmodell wird heruntergeladen… %1$d%%</string>

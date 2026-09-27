@@ -175,6 +175,13 @@
     <string name="settings_wake_phrase_label">Frase de ativação</string>
     <string name="settings_wake_custom_label">Frase de ativação personalizada</string>
     <string name="settings_wake_vocab_note">Só serão detectadas palavras que o modelo de voz off-line conheça — palavras comuns em inglês são as mais seguras.</string>
+    <string name="settings_wake_test">Testar frase</string>
+    <string name="settings_wake_test_listen">Diga sua frase de ativação agora…</string>
+    <string name="settings_wake_test_hearing">Ouvindo: %1$s</string>
+    <string name="settings_wake_test_passed">Ativaria — esta frase funciona.</string>
+    <string name="settings_wake_test_failed">Não ativou (ouvi “%1$s”). Tente palavras mais simples e comuns.</string>
+    <string name="settings_wake_use_phrase">Usar esta frase</string>
+    <string name="settings_wake_use_anyway">Usar mesmo assim</string>
     <string name="settings_wake_model_download">O modelo de voz é baixado no primeiro uso (~40 MB, Wi-Fi recomendado).</string>
     <string name="settings_wake_model_downloading">Baixando modelo de voz…</string>
     <string name="settings_wake_model_downloading_pct">Baixando modelo de voz… %1$d%%</string>
