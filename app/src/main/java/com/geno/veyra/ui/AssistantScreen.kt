@@ -108,6 +108,18 @@ fun AssistantScreen(
     )
     val scope = rememberCoroutineScope()
 
+    /*
+     * The drawer content stays composed while closed, so the history
+     * ViewModel's init-time load goes stale. Refresh every time the
+     * drawer opens so newly archived sessions appear.
+     */
+    val historyViewModel: ConversationHistoryViewModel = hiltViewModel()
+    LaunchedEffect(drawerState.currentValue) {
+        if (drawerState.currentValue == DrawerValue.Open) {
+            historyViewModel.refresh()
+        }
+    }
+
     val micLauncher =
         rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission(),
@@ -143,6 +155,7 @@ fun AssistantScreen(
                         scope.launch { drawerState.close() }
                         startConversation()
                     },
+                    historyViewModel = historyViewModel,
                 )
             }
         },
@@ -241,6 +254,7 @@ private fun AssistantTopBar(
 private fun ConversationDrawerContent(
     canStartNew: Boolean,
     onNewConversation: () -> Unit,
+    historyViewModel: ConversationHistoryViewModel,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
@@ -279,6 +293,7 @@ private fun ConversationDrawerContent(
             ConversationHistoryScreen(
                 onBack = {},
                 compact = true,
+                viewModel = historyViewModel,
             )
         }
     }
