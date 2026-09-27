@@ -13,12 +13,15 @@ import com.geno.veyra.glasses.GlassesDevice
 import com.geno.veyra.glasses.GlassesManager
 import com.geno.veyra.glasses.RegistrationState
 import com.geno.veyra.glasses.ConnectionState
+import com.geno.veyra.openai.OpenAiConnectionCheck
 import com.geno.veyra.service.AgentForegroundService
 import com.geno.veyra.service.AssistantStarter
 import com.geno.veyra.settings.AgentPreferences
+import com.geno.veyra.settings.AiProvider
 import com.geno.veyra.settings.AppLocaleStore
 import com.geno.veyra.settings.AudioOutput
 import com.geno.veyra.settings.GeminiKeyRepository
+import com.geno.veyra.settings.OpenAiKeyRepository
 import com.geno.veyra.settings.Memory
 import com.geno.veyra.settings.MemoryRepository
 import com.geno.veyra.settings.SettingsRepository
@@ -54,6 +57,8 @@ class AgentViewModel @Inject constructor(
     private val wakeWordEngine: WakeWordEngine,
     private val keyRepository: GeminiKeyRepository,
     private val tokenProvider: TokenProvider,
+    private val openAiKeyRepository: OpenAiKeyRepository,
+    private val openAiConnectionCheck: OpenAiConnectionCheck,
     private val micMute: MicMuteController,
     private val memoryRepository: MemoryRepository,
     private val smartHome: SmartHomeController,
@@ -111,11 +116,32 @@ class AgentViewModel @Inject constructor(
         wakeWordEngine.modelState
 
     /**
+     * Visible when the user tried to start the assistant while the
+     * ChatGPT provider is selected, whose live-voice client hasn't been
+     * built yet. The UI shows a "coming soon" notice instead of starting
+     * a session that would go nowhere. A StateFlow (not a one-shot
+     * event) so both the Home and Assistant screens can surface it.
+     */
+    private val _chatGptNoticeVisible = MutableStateFlow(false)
+    val chatGptNoticeVisible: StateFlow<Boolean> = _chatGptNoticeVisible
+
+    fun dismissChatGptNotice() {
+        _chatGptNoticeVisible.value = false
+    }
+
+    /**
      * Starts the assistant.
      *
      * Caller must have RECORD_AUDIO permission.
      */
     fun startSession() {
+        // ChatGPT live voice is scaffolding-only for now: the provider,
+        // key, and model picker are real, but the Realtime session client
+        // is the next build. Say so instead of starting a dead session.
+        if (preferences.value.aiProvider == AiProvider.OPENAI) {
+            _chatGptNoticeVisible.value = true
+            return
+        }
         // Same path the wake-word service uses; keep both identical.
         assistantStarter.start()
     }
@@ -301,6 +327,18 @@ class AgentViewModel @Inject constructor(
         }
     }
 
+    fun setAiProvider(provider: AiProvider) {
+        viewModelScope.launch {
+            settings.setAiProvider(provider)
+        }
+    }
+
+    fun setChatGptModel(modelId: String) {
+        viewModelScope.launch {
+            settings.setChatGptModel(modelId)
+        }
+    }
+
     // --- Gemini API key --------------------------------------------------
 
     /** Status of the saved API key, as last verified against Google. */
@@ -371,6 +409,45 @@ class AgentViewModel @Inject constructor(
                 ApiKeyState.Invalid(e.message)
             }
         }
+    }
+
+    // --- ChatGPT (OpenAI) API key ------------------------------------------
+
+    /**
+     * Status of the saved OpenAI key, verified against OpenAI's API.
+     * Mirrors [ApiKeyState]; a separate flow so the Gemini and ChatGPT
+     * key states never get mixed up in the UI.
+     */
+    private val _openAiKeyState = MutableStateFlow<ApiKeyState>(
+        if (openAiKeyRepository.hasKey()) ApiKeyState.Unchecked else ApiKeyState.Missing,
+    )
+    val openAiKeyState: StateFlow<ApiKeyState> = _openAiKeyState
+
+    /** The saved OpenAI key, for prefilling the Settings field. */
+    val savedOpenAiKey: String?
+        get() = openAiKeyRepository.getKey()
+
+    /**
+     * Saves the key verbatim (no format checks) and immediately verifies
+     * it against OpenAI's /v1/models endpoint, so a typo surfaces right
+     * away instead of at the next session start.
+     */
+    fun saveOpenAiKey(key: String) {
+        viewModelScope.launch {
+            openAiKeyRepository.saveKey(key)
+            _openAiKeyState.value = ApiKeyState.Checking
+            _openAiKeyState.value = try {
+                openAiConnectionCheck.verifyKey(key)
+                ApiKeyState.Valid
+            } catch (e: Exception) {
+                ApiKeyState.Invalid(e.message)
+            }
+        }
+    }
+
+    fun clearOpenAiKey() {
+        openAiKeyRepository.clearKey()
+        _openAiKeyState.value = ApiKeyState.Missing
     }
 
     /**
