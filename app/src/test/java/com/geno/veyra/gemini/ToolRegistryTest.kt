@@ -137,4 +137,19 @@ class ToolRegistryTest {
         val response = registry.dispatch(FunctionCall(name = "boom"))
         assertEquals("error", response.response["status"]?.jsonPrimitive?.content)
     }
+
+    @Test
+    fun `unknown tool error message follows the session language`() = runTest {
+        val registry = ToolRegistry(emptySet())
+        val es = registry.dispatch(FunctionCall(name = "inexistente"), "es-ES")
+        assertEquals(
+            "Herramienta desconocida: inexistente",
+            es.response["message"]?.jsonPrimitive?.content,
+        )
+        val en = registry.dispatch(FunctionCall(name = "inexistente"), "en-US")
+        assertEquals(
+            "Unknown tool: inexistente",
+            en.response["message"]?.jsonPrimitive?.content,
+        )
+    }
 }

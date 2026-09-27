@@ -180,15 +180,6 @@ class AgentViewModel @Inject constructor(
     }
 
     /**
-     * Changes the assistant language.
-     */
-    fun setLanguage(code: String) {
-        viewModelScope.launch {
-            settings.setLanguage(code)
-        }
-    }
-
-    /**
      * Changes the Gemini voice.
      */
     fun setVoice(voice: String) {

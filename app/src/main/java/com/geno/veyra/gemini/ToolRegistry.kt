@@ -89,26 +89,54 @@ class ToolRegistry @Inject constructor(
                 )
             }
 
-    /** Runs one function call and packages the response for the socket. */
-    suspend fun dispatch(call: FunctionCall): FunctionResponse {
+    /**
+     * Runs one function call and packages the response for the socket.
+     * Error messages follow the assistant's spoken [languageCode] so the
+     * model can relay them in the user's language.
+     */
+    suspend fun dispatch(
+        call: FunctionCall,
+        languageCode: String = "en-US",
+    ): FunctionResponse {
         val tool = byName[call.name]
         val response = if (tool == null) {
             Log.w(TAG, "Unknown tool requested: ${call.name}")
             buildJsonObject {
                 put("status", "error")
-                put("message", "Ferramenta desconhecida: ${call.name}")
+                put("message", "${unknownToolLabel(languageCode)}: ${call.name}")
             }
         } else {
             runCatching { tool.execute(call.args) }.getOrElse { e ->
                 Log.e(TAG, "Tool ${call.name} failed", e)
                 buildJsonObject {
                     put("status", "error")
-                    put("message", e.message ?: "Falha ao executar a ferramenta")
+                    put(
+                        "message",
+                        e.message ?: toolFailureLabel(languageCode),
+                    )
                 }
             }
         }
         return FunctionResponse(id = call.id, name = call.name, response = response)
     }
+
+    private fun unknownToolLabel(languageCode: String): String =
+        when (languageCode.substringBefore('-')) {
+            "es" -> "Herramienta desconocida"
+            "pt" -> "Ferramenta desconhecida"
+            "fr" -> "Outil inconnu"
+            "it" -> "Strumento sconosciuto"
+            else -> "Unknown tool"
+        }
+
+    private fun toolFailureLabel(languageCode: String): String =
+        when (languageCode.substringBefore('-')) {
+            "es" -> "No se pudo ejecutar la herramienta"
+            "pt" -> "Falha ao executar a ferramenta"
+            "fr" -> "Échec de l'exécution de l'outil"
+            "it" -> "Impossibile eseguire lo strumento"
+            else -> "Tool execution failed"
+        }
 
     private companion object {
         const val TAG = "ToolRegistry"

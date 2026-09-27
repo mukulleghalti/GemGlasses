@@ -110,6 +110,14 @@ class AgentController @Inject constructor(
     private var bargeInEnabled: Boolean = true
 
     /**
+     * Spoken-language tag for the running session, refreshed from settings
+     * every time the assistant starts. Used for tool error messages so the
+     * model can relay them in the user's language.
+     */
+    @Volatile
+    private var sessionLanguage: String = "en-US"
+
+    /**
      * First user message to send once the session is ready (the wake
      * phrase on the wake-word path). Cleared after it's sent.
      */
@@ -139,6 +147,7 @@ class AgentController @Inject constructor(
 
             stopPhrase = prefs.stopPhrase
             bargeInEnabled = prefs.bargeInEnabled
+            sessionLanguage = prefs.languageCode
 
             /*
              * The voice backend comes from the AI provider picker in
@@ -393,7 +402,7 @@ class AgentController @Inject constructor(
     ) {
         scope.launch {
             val responses = event.calls.map {
-                toolRegistry.dispatch(it)
+                toolRegistry.dispatch(it, sessionLanguage)
             }
 
             keeper.sendToolResponses(responses)

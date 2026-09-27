@@ -122,6 +122,11 @@ data class AgentPreferences(
     val systemInstruction: String
         get() = buildString {
             append(DEFAULT_SYSTEM_INSTRUCTION)
+            // Spoken language follows the UI language picker (never a
+            // hardcoded "speak English"); derived from languageCode so the
+            // prompt, the TTS voice, and tool messages stay in one language.
+            append("\n\n")
+            append(speechDirective(languageCode.substringBefore('-')))
             append("\n\nCurrent date and time: ")
             append(currentDateTime())
             append(
@@ -203,7 +208,6 @@ data class AgentPreferences(
         val DEFAULT_SYSTEM_INSTRUCTION = """
             You are a personal voice assistant that speaks through the user's glasses.
             Have a natural conversation and keep responses short, usually 1 to 3 sentences.
-            Speak English by default unless the user asks for another language.
             
             Use tools when appropriate:
             - To see what the user is looking at, use capture_vision.
@@ -248,6 +252,42 @@ enum class AppLanguage(val tag: String?) {
 }
 
 /**
+ * Spoken-language tag per picker language, as BCP-47 full tags for the
+ * Live API's speech config.
+ */
+private val SPEECH_TAGS =
+    mapOf(
+        "en" to "en-US",
+        "es" to "es-ES",
+        "pt" to "pt-BR",
+        "fr" to "fr-FR",
+        "it" to "it-IT",
+    )
+
+/**
+ * Resolves the assistant's spoken language from the UI language picker.
+ * `appTag` is the picker's stored BCP-47 tag, or null for "follow the
+ * system language". Anything we don't cover falls back to en-US.
+ */
+fun sessionSpeechTag(appTag: String?): String {
+    val base = appTag ?: Locale.getDefault().language
+    return SPEECH_TAGS[base] ?: "en-US"
+}
+
+/**
+ * The language directive appended to the system instruction, written in
+ * the target language itself.
+ */
+fun speechDirective(baseLanguage: String): String =
+    when (baseLanguage) {
+        "es" -> "Habla español por defecto, a menos que el usuario pida otro idioma."
+        "pt" -> "Fale português por padrão, a menos que o usuário peça outro idioma."
+        "fr" -> "Parlez français par défaut, sauf si l'utilisateur demande une autre langue."
+        "it" -> "Parla italiano per impostazione predefinita, a meno che l'utente non chieda un'altra lingua."
+        else -> "Speak English by default unless the user asks for another language."
+    }
+
+/**
  * Synchronous SharedPreferences cache of the chosen app language.
  *
  * DataStore reads are asynchronous, but `MainActivity.attachBaseContext`
@@ -282,9 +322,6 @@ object AppLocaleStore {
 class SettingsRepository @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-
-    private val langKey =
-        stringPreferencesKey("language_code")
 
     private val appLanguageKey =
         stringPreferencesKey("app_language")
@@ -371,9 +408,9 @@ class SettingsRepository @Inject constructor(
         context.dataStore.data.map { prefs ->
 
             AgentPreferences(
-                languageCode =
-                    prefs[langKey]
-                        ?: AgentPreferences.DEFAULT.languageCode,
+                // Spoken language follows the UI language picker; the old
+                // standalone language_code key had no UI and stayed "en".
+                languageCode = sessionSpeechTag(prefs[appLanguageKey]),
 
                 voiceName =
                     prefs[voiceKey]
@@ -451,16 +488,10 @@ class SettingsRepository @Inject constructor(
     suspend fun snapshot(): AgentPreferences =
         preferences.first()
 
-    suspend fun setLanguage(code: String) {
-        context.dataStore.edit {
-            it[langKey] = code
-        }
-    }
-
     /**
      * App UI language as a BCP-47 tag, or `null` for the system language.
-     * Separate from [AgentPreferences.languageCode], which controls the
-     * assistant's spoken language.
+     * This is also the source of truth for [AgentPreferences.languageCode],
+     * the assistant's spoken language.
      */
     val appLanguage: Flow<String?> =
         context.dataStore.data.map { prefs ->
