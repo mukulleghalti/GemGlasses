@@ -108,16 +108,28 @@ class SmartHomeController @Inject constructor(
     }
 
     /**
-     * Starts the Google Home permission flow. Must be called from the UI
-     * thread with the host activity; shows the account picker, the OAuth
-     * consent screen, and the Home device-permission dialog.
+     * Registers the host activity for the Home permission result. Must be
+     * called from the activity's `onCreate` — the Activity Result API
+     * throws if registration happens after the activity is STARTED, so
+     * this cannot be done lazily when the user taps "Connect".
+     * Re-registers if the activity instance changed (e.g. after recreate()).
      */
-    fun connect(activity: ComponentActivity) {
+    fun registerForPermissions(activity: ComponentActivity) {
         val homeClient = getClient()
         if (registeredActivity !== activity) {
             homeClient.registerActivityResultCallerForPermissions(activity)
             registeredActivity = activity
         }
+    }
+
+    /**
+     * Starts the Google Home permission flow: the account picker, the OAuth
+     * consent screen, and the Home device-permission dialog. The activity
+     * must have been registered via [registerForPermissions] first
+     * (done in MainActivity.onCreate).
+     */
+    fun connect() {
+        val homeClient = getClient()
         scope.launch {
             try {
                 val result = homeClient.requestPermissions(

@@ -3,7 +3,6 @@ package com.geno.veyra.ui
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -230,7 +229,6 @@ fun SettingsScreen(
             },
         )
         if (prefs.smartHomeEnabled) {
-            val componentActivity = LocalContext.current as? ComponentActivity
             SettingRow(
                 title = stringResource(R.string.settings_connect_home),
                 value = stringResource(
@@ -241,7 +239,7 @@ fun SettingsScreen(
                     },
                 ),
                 onClick = {
-                    componentActivity?.let { viewModel.connectGoogleHome(it) }
+                    viewModel.connectGoogleHome()
                 },
             )
         }

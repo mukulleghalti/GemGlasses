@@ -291,8 +291,8 @@ class AgentViewModel @Inject constructor(
         smartHome.isConnected().stateInDefault(false)
 
     /** Starts the Google Home account + permission flow. */
-    fun connectGoogleHome(activity: ComponentActivity) {
-        smartHome.connect(activity)
+    fun connectGoogleHome() {
+        smartHome.connect()
     }
 
     fun setLiveModel(modelId: String) {
