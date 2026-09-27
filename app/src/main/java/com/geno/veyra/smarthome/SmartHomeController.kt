@@ -42,7 +42,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -78,6 +78,22 @@ class SmartHomeController @Inject constructor(
     private var client: HomeClient? = null
     private var registeredActivity: ComponentActivity? = null
 
+    /**
+     * Cached Home permission state. Seeded from [HomeClient.hasPermissions]
+     * at startup and refreshed every time [connect] finishes, so the
+     * Settings "Connected" row flips without reopening the screen.
+     * (Collecting hasPermissions() once at startup goes stale — the UI
+     * would otherwise stay on "Not connected" forever after a grant.)
+     */
+    private val permissionsState = MutableStateFlow<PermissionsState?>(null)
+
+    init {
+        scope.launch {
+            permissionsState.value =
+                runCatching { getClient().hasPermissions().first() }.getOrNull()
+        }
+    }
+
     private fun getClient(): HomeClient {
         return client ?: run {
             val registry = FactoryRegistry(
@@ -95,17 +111,12 @@ class SmartHomeController @Inject constructor(
     }
 
     /**
-     * Emits true when the user has granted Google Home permissions.
-     * Emits false when the client can't even be built or permissions fail.
+     * Emits true once the user has granted Google Home permissions.
+     * Backed by the cached [permissionsState], refreshed after every
+     * [connect] call.
      */
-    fun isConnected(): Flow<Boolean> {
-        return try {
-            getClient().hasPermissions().map { it == PermissionsState.GRANTED }
-        } catch (e: Exception) {
-            Log.w(TAG, "hasPermissions failed", e)
-            flowOf(false)
-        }
-    }
+    fun isConnected(): Flow<Boolean> =
+        permissionsState.map { it == PermissionsState.GRANTED }
 
     /**
      * Registers the host activity for the Home permission result. Must be
@@ -141,6 +152,10 @@ class SmartHomeController @Inject constructor(
                     ),
                 )
                 Log.i(TAG, "requestPermissions result: ${result.status}")
+                // Refresh the cached state so the Settings row updates.
+                permissionsState.value =
+                    runCatching { homeClient.hasPermissions().first() }
+                        .getOrNull()
             } catch (e: HomeException) {
                 Log.e(TAG, "requestPermissions failed", e)
             }
