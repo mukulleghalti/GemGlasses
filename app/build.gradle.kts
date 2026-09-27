@@ -36,6 +36,19 @@ android {
         manifestPlaceholders["metaClientToken"] = secret("META_CLIENT_TOKEN", "")
     }
 
+    // Shared debug keystore (committed on purpose — debug keys are not
+    // secret). CI runners generate a throwaway debug key per run, which
+    // would change the app's SHA-1 every build and break the Google Home
+    // OAuth client pinning. This keeps the debug SHA-1 stable.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
