@@ -417,7 +417,6 @@ class RealtimeSession(
                         )
                     )
                     put("tool_choice", "auto")
-                    put("temperature", 0.8)
                 }
             )
         }
