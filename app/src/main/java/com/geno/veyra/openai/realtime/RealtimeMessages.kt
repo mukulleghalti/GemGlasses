@@ -14,7 +14,10 @@ import kotlinx.serialization.json.JsonElement
  */
 @Serializable
 data class OpenAiFunctionTool(
-    val type: String = "function",
+    // No default value on purpose: the shared Json instance uses
+    // encodeDefaults = false, which would silently drop `type` from the
+    // session.update payload and OpenAI rejects tools without it.
+    val type: String,
     val name: String,
     val description: String,
     val parameters: JsonElement? = null,

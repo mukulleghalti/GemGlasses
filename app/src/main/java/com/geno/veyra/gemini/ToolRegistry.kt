@@ -82,6 +82,7 @@ class ToolRegistry @Inject constructor(
             }
             .map { tool ->
                 OpenAiFunctionTool(
+                    type = "function",
                     name = tool.declaration.name,
                     description = tool.declaration.description,
                     parameters = tool.declaration.parameters,
