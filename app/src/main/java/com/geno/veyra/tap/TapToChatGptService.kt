@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -75,8 +76,14 @@ class TapToChatGptService : Service() {
             // Framework MediaSession delivers media-button events via the
             // PendingIntent set here, NOT via Callback.onMediaButtonEvent.
             // Point it at our manifest receiver so taps actually arrive.
-            val receiverIntent =
-                Intent(Intent.ACTION_MEDIA_BUTTON).setPackage(packageName)
+            // Use an explicit component: package-scoped intents can fail
+            // to resolve through the manifest filter.
+            val receiverIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
+                component = ComponentName(
+                    this@TapToChatGptService,
+                    TapMediaButtonReceiver::class.java,
+                )
+            }
             val pi = PendingIntent.getBroadcast(
                 this,
                 0,
