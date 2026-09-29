@@ -72,6 +72,18 @@ class TapToChatGptService : Service() {
                     return handleMediaButton(mediaButtonEvent)
                 }
             })
+            // Framework MediaSession delivers media-button events via the
+            // PendingIntent set here, NOT via Callback.onMediaButtonEvent.
+            // Point it at our manifest receiver so taps actually arrive.
+            val receiverIntent =
+                Intent(Intent.ACTION_MEDIA_BUTTON).setPackage(packageName)
+            val pi = PendingIntent.getBroadcast(
+                this,
+                0,
+                receiverIntent,
+                PendingIntent.FLAG_IMMUTABLE,
+            )
+            session.setMediaButtonReceiver(pi)
             // Claim media-button handling so taps route here.
             session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS)
             // Publish a PLAYING playback state: the system only routes
