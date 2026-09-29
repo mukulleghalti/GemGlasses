@@ -1,6 +1,9 @@
 package com.geno.veyra.ui
 
 import android.app.Application
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.AndroidViewModel
@@ -302,6 +305,27 @@ class AgentViewModel @Inject constructor(
     fun setTapToChatGptEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settings.setTapToChatGptEnabled(enabled)
+        }
+    }
+
+    /**
+     * Opens the system assistant picker. Android does not let apps change
+     * the default assistant programmatically (system-guarded setting), so
+     * this deep-links the user straight to the picker instead: one tap,
+     * choose ChatGPT, done. Falls back to the default-apps screen on OEM
+     * skins that hide the voice-input settings page.
+     */
+    fun openDefaultAssistantSettings(context: Context) {
+        val voiceInput =
+            Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val defaultApps =
+            Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (voiceInput.resolveActivity(context.packageManager) != null) {
+            context.startActivity(voiceInput)
+        } else {
+            context.startActivity(defaultApps)
         }
     }
 
