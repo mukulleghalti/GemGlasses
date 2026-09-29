@@ -25,17 +25,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -50,6 +46,10 @@ import com.geno.veyra.glasses.GlassesManager
 import com.geno.veyra.smarthome.SmartHomeController
 import com.geno.veyra.ui.AssistantScreen
 import com.geno.veyra.ui.AgentViewModel
+import com.geno.veyra.agent.AgentStatus
+import com.geno.veyra.settings.SettingsRepository
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import com.geno.veyra.ui.CameraSettingsScreen
 import com.geno.veyra.ui.CameraTestScreen
 import com.geno.veyra.ui.HomeScreen
@@ -85,8 +85,60 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var smartHomeController: SmartHomeController
 
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
+
+    /**
+     * Tracks whether the app is coming from the background (or a fresh
+     * launch). True initially so the first onResume counts as a launch.
+     */
+    private var wasInBackground = true
+
     override fun onResume() {
         super.onResume()
+        if (wasInBackground) {
+            wasInBackground = false
+            maybeAutoStartAssistant()
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Rotation isn't "background" — don't auto-start after it.
+        if (!isChangingConfigurations) {
+            wasInBackground = true
+        }
+    }
+
+    /**
+     * Starts the assistant when the app is opened and the user enabled
+     * "Start assistant on launch". Fires on cold launch and when the app
+     * is foregrounded from the background (e.g. via a phone-button
+     * shortcut or a Samsung Routine) — but never for in-app navigation,
+     * which doesn't pause the Activity. No-op when the mic permission
+     * isn't granted or a session is already running.
+     */
+    private fun maybeAutoStartAssistant() {
+        lifecycleScope.launch {
+            val enabled =
+                settingsRepository.preferences.first().startAssistantOnLaunch
+            if (!enabled) return@launch
+
+            val micGranted =
+                ContextCompat.checkSelfPermission(
+                    this@MainActivity,
+                    Manifest.permission.RECORD_AUDIO,
+                ) == PackageManager.PERMISSION_GRANTED
+            if (!micGranted) return@launch
+
+            val viewModel =
+                ViewModelProvider(
+                    this@MainActivity,
+                )[AgentViewModel::class.java]
+            if (viewModel.status.value == AgentStatus.IDLE) {
+                viewModel.startSession()
+            }
+        }
     }
 
     /*
@@ -210,10 +262,6 @@ class MainActivity : ComponentActivity() {
     ) {
         super.onCreate(savedInstanceState)
 
-        // Cold start = fresh launch (not a rotation, not returning from
-        // recents). Only then may the assistant auto-start.
-        val isColdStart = savedInstanceState == null
-
         glassesManager.setActivity(this)
 
         // Register with the Google Home client for the permission result.
@@ -238,7 +286,7 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background,
                 ) {
 
-                    VeyraRoot(autoStartAssistant = isColdStart)
+                    VeyraRoot()
                 }
             }
         }
@@ -367,42 +415,10 @@ private data class BottomNavItem(
 )
 
 @Composable
-private fun VeyraRoot(
-    autoStartAssistant: Boolean = false,
-) {
-
-    val context = LocalContext.current
-    val viewModel: AgentViewModel = hiltViewModel()
-    val prefs by viewModel.preferences.collectAsStateWithLifecycle()
+private fun VeyraRoot() {
 
     val navController =
         rememberNavController()
-
-    // Auto-start the assistant on cold launch when the user enabled
-    // "Start assistant on launch". Fires once: returning from recents
-    // doesn't recreate the Activity, so it won't re-trigger. Stays on
-    // Home — the session runs in the ViewModel, and the user can tap
-    // the Assistant tab for the transcript. If the mic permission isn't
-    // granted, we stay on Home — the normal Start Assistant flow there
-    // handles the permission request.
-    var autoStartDone by remember { mutableStateOf(false) }
-    LaunchedEffect(prefs.startAssistantOnLaunch) {
-        if (
-            autoStartAssistant &&
-                !autoStartDone &&
-                prefs.startAssistantOnLaunch
-        ) {
-            autoStartDone = true
-            val micGranted =
-                ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.RECORD_AUDIO,
-                ) == PackageManager.PERMISSION_GRANTED
-            if (micGranted) {
-                viewModel.startSession()
-            }
-        }
-    }
 
     val items =
         listOf(
