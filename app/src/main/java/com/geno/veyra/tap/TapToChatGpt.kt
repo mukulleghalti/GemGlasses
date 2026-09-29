@@ -17,10 +17,14 @@ import com.geno.veyra.R
  * in voice mode, so the user's own account (free tier or Plus) and its
  * own rate limits apply. Nothing for Veyra to rate-limit.
  *
- * The launch goes through [Intent.ACTION_VOICE_COMMAND], which Android
- * routes to the default assistant app. The user sets ChatGPT as the
+ * The launch goes through [Intent.ACTION_ASSIST], the framework's
+ * "invoke my assistant" intent: Android intercepts it and routes it to
+ * the default assistant's voice service. The user sets ChatGPT as the
  * default assistant (Settings → Apps → Default apps → Digital assistant),
- * exactly as Chachan's setup instructs.
+ * exactly as Chachan's setup instructs. (ACTION_VOICE_COMMAND was tried
+ * first, but it is a legacy plain intent that goes through normal
+ * activity resolution — it showed an app chooser that didn't even list
+ * ChatGPT — instead of the framework's assistant routing.)
  */
 object TapToChatGpt {
 
@@ -50,10 +54,10 @@ object TapToChatGpt {
         }
         runCatching {
             context.startActivity(
-                Intent(Intent.ACTION_VOICE_COMMAND)
+                Intent(Intent.ACTION_ASSIST)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
-            Log.i(TAG, "ACTION_VOICE_COMMAND fired")
+            Log.i(TAG, "ACTION_ASSIST fired")
         }.onFailure { e ->
             // Never fail silently: a missing default assistant (or any
             // other launch problem) must be visible, not just a log line.
