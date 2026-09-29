@@ -113,6 +113,7 @@ fun SettingsScreen(
     val appLanguageTag by viewModel.appLanguage.collectAsStateWithLifecycle()
     val appLanguage = AppLanguage.fromTag(appLanguageTag)
     val activity = LocalContext.current as? Activity
+    val appContext = LocalContext.current.applicationContext
     val smartHomeConnected by viewModel.smartHomeConnected.collectAsStateWithLifecycle()
 
     Column(
@@ -170,6 +171,21 @@ fun SettingsScreen(
                     onCheckedChange = { viewModel.setSessionBeepEnabled(it) },
                 )
             },
+        )
+        SettingRow(
+            title = stringResource(R.string.settings_voice_chatgpt),
+            subtitle = stringResource(R.string.settings_voice_chatgpt_sub),
+            trailing = {
+                Switch(
+                    checked = prefs.voiceChatGptEnabled,
+                    onCheckedChange = { viewModel.setVoiceChatGptEnabled(it) },
+                )
+            },
+        )
+        SettingRow(
+            title = stringResource(R.string.settings_default_assistant),
+            subtitle = stringResource(R.string.settings_default_assistant_sub),
+            onClick = { viewModel.openDefaultAssistantSettings(appContext) },
         )
         SettingRow(
             title = stringResource(R.string.settings_stop_phrase),

@@ -76,6 +76,10 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var smartHomeController: SmartHomeController
 
+    override fun onResume() {
+        super.onResume()
+    }
+
     /*
      * ---------------------------------------------------------
      * Bluetooth permissions

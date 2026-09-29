@@ -2,7 +2,10 @@ package com.geno.veyra.agent
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
 import android.media.AudioAttributes
+import android.net.Uri
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import com.geno.veyra.audio.BluetoothAudioRouter
@@ -29,6 +32,7 @@ import com.geno.veyra.state.TranscriptEntry
 import com.geno.veyra.tools.VisionBridge
 import com.geno.veyra.tools.VisionController
 import com.geno.veyra.translate.TranslateController
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -54,6 +58,7 @@ enum class AgentStatus { IDLE, CONNECTING, LISTENING, RECONNECTING, ERROR }
  */
 @Singleton
 class AgentController @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val sessionKeeper: SessionKeeper,
     private val realtimeKeeper: RealtimeSessionKeeper,
     private val toolRegistry: ToolRegistry,
@@ -100,6 +105,14 @@ class AgentController @Inject constructor(
     @Volatile
     private var stopPhrase: String =
         AgentPreferences.DEFAULT_STOP_PHRASE
+
+    /**
+     * Whether the "open ChatGPT" voice command is enabled. Refreshed from
+     * settings every time the assistant starts. When heard in the user's
+     * transcript, launches ChatGPT voice via the deep link.
+     */
+    @Volatile
+    private var voiceChatGptEnabled: Boolean = false
 
     /**
      * Whether talking over the assistant cuts it off. Refreshed from
@@ -164,6 +177,7 @@ class AgentController @Inject constructor(
             bargeInEnabled = prefs.bargeInEnabled
             sessionLanguage = prefs.languageCode
             sessionBeepEnabled = prefs.sessionBeepEnabled
+            voiceChatGptEnabled = prefs.voiceChatGptEnabled
             beepArmed = false
 
             /*
@@ -362,6 +376,24 @@ class AgentController @Inject constructor(
                         )
                         stop()
                     }
+
+                    if (
+                        event.fromUser &&
+                        voiceChatGptEnabled &&
+                        containsChatGptPhrase(event.text)
+                    ) {
+                        Log.i(
+                            TAG,
+                            "Voice command heard — launching ChatGPT voice",
+                        )
+                        // Launch on a background thread; the deep link
+                        // fires an external activity.
+                        scope.launch {
+                            runCatching {
+                                launchChatGptVoice(appContext)
+                            }
+                        }
+                    }
                 }
 
                 is SessionEvent.ToolInvocation -> {
@@ -423,6 +455,44 @@ class AgentController @Inject constructor(
         ).containsMatchIn(
             text.lowercase(),
         )
+    }
+
+    /**
+     * True when the user's transcript contains a ChatGPT launch phrase as
+     * whole words (case-insensitive): "open chat gpt", "open chatgpt",
+     * "talk to chat gpt", "launch chatgpt". Matched against the live
+     * transcript, so it works in any language the transcription supports.
+     */
+    private fun containsChatGptPhrase(text: String): Boolean {
+        val lower = text.lowercase()
+        val patterns = listOf(
+            "\\bopen\\s+chat\\s*gpt\\b",
+            "\\btalk\\s+to\\s+chat\\s*gpt\\b",
+            "\\blaunch\\s+chat\\s*gpt\\b",
+            "\\bstart\\s+chat\\s*gpt\\b",
+        )
+        return patterns.any { pattern ->
+            Regex(pattern).containsMatchIn(lower)
+        }
+    }
+
+    /**
+     * Fires ChatGPT's voice-mode deep link. The dedicated voice activity
+     * is not exported and bare ACTION_ASSIST silently no-ops, but
+     * ChatGptDeeplinkActivity IS exported and handles
+     * https://chatgpt.com/voice (confirmed via its VIEW intent filter
+     * on-device).
+     */
+    private fun launchChatGptVoice(context: Context) {
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://chatgpt.com/voice"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+            Log.i(TAG, "ChatGPT voice deep link fired")
+        }.onFailure { e ->
+            Log.w(TAG, "Failed to launch ChatGPT voice", e)
+        }
     }
 
     private fun dispatchTools(
