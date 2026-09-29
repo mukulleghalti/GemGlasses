@@ -86,7 +86,14 @@ class TapToChatGptService : Service() {
         val event = intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT) as? KeyEvent
             ?: return false
         val code = event.keyCode
+        Log.d(
+            TAG,
+            "media-button event: keyCode=$code action=${event.action} " +
+                "repeat=${event.repeatCount}",
+        )
         if (code != KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE &&
+            code != KeyEvent.KEYCODE_MEDIA_PLAY &&
+            code != KeyEvent.KEYCODE_MEDIA_PAUSE &&
             code != KeyEvent.KEYCODE_HEADSETHOOK
         ) {
             return false

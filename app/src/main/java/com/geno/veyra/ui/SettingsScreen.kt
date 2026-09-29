@@ -66,6 +66,7 @@ import com.geno.veyra.settings.LocaleHelper
 import com.geno.veyra.settings.defaultWakePhrase
 import com.geno.veyra.settings.wakeBaseLanguage
 import com.geno.veyra.openai.OPENAI_VOICE_MODELS
+import com.geno.veyra.tap.TapToChatGpt
 import com.geno.veyra.wakeword.WakeWordModelState
 
 /**
@@ -186,6 +187,11 @@ fun SettingsScreen(
             title = stringResource(R.string.settings_default_assistant),
             subtitle = stringResource(R.string.settings_default_assistant_sub),
             onClick = { viewModel.openDefaultAssistantSettings(appContext) },
+        )
+        SettingRow(
+            title = stringResource(R.string.settings_test_tap),
+            subtitle = stringResource(R.string.settings_test_tap_sub),
+            onClick = { TapToChatGpt.launch(appContext) },
         )
         SettingRow(
             title = stringResource(R.string.settings_stop_phrase),

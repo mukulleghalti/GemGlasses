@@ -114,6 +114,9 @@
     <string name="settings_tap_to_chatgpt_sub">Tap the glasses to open ChatGPT voice (set ChatGPT as default assistant)</string>
     <string name="settings_default_assistant">Default assistant</string>
     <string name="settings_default_assistant_sub">Open system settings to choose ChatGPT as your assistant</string>
+    <string name="settings_test_tap">Test ChatGPT launch</string>
+    <string name="settings_test_tap_sub">Simulate a glasses tap without tapping</string>
+    <string name="tap_launch_failed">Could not open the voice assistant — is a default assistant set?</string>
     <string name="tap_chatgpt_not_installed">Install the ChatGPT app to use tap-to-start</string>
     <string name="tap_service_channel">Tap to ChatGPT</string>
     <string name="tap_service_title">Tap to ChatGPT</string>

@@ -55,7 +55,16 @@ object TapToChatGpt {
             )
             Log.i(TAG, "ACTION_VOICE_COMMAND fired")
         }.onFailure { e ->
+            // Never fail silently: a missing default assistant (or any
+            // other launch problem) must be visible, not just a log line.
             Log.w(TAG, "voice-command launch failed", e)
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.tap_launch_failed),
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
         }
     }
 }
