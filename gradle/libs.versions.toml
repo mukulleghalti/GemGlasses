@@ -19,7 +19,7 @@ securityCrypto = "1.1.0"
 # Meta Wearables Device Access Toolkit (GitHub Packages). Pin explicitly; the
 # artifact is only resolved when a github_token is configured (see settings.gradle.kts).
 
-mwdat = "0.9.0"
+mwdat = "1.0.0"
 
 # Test
 junit = "4.13.2"

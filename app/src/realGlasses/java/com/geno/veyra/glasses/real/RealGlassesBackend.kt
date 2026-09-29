@@ -17,6 +17,8 @@ import com.geno.veyra.glasses.GlassesDevice
 import com.geno.veyra.glasses.RegistrationState
 import com.meta.wearable.dat.camera.addCamera
 import com.meta.wearable.dat.camera.removeCamera
+import com.meta.wearable.dat.camera.types.AudioCodec
+import com.meta.wearable.dat.camera.types.AudioSampleRate
 import com.meta.wearable.dat.camera.types.PhotoData
 import com.meta.wearable.dat.camera.types.StreamConfiguration
 import com.meta.wearable.dat.camera.types.StreamState
@@ -85,10 +87,10 @@ class RealGlassesBackend @Inject constructor(
          * the user has selected a different setting.
          */
         private var cameraTestVideoQuality =
-            VideoQuality.MEDIUM
+            VideoQuality.HIGH
 
         private var cameraTestFrameRate =
-            24
+            30
 
         private const val JPEG_QUALITY = 90
 
@@ -987,6 +989,11 @@ class RealGlassesBackend @Inject constructor(
 
                 activeSession.addCamera(
                     StreamConfiguration(
+                        audioCodec =
+                            AudioCodec.PCM(
+                                AudioSampleRate.RATE_16000,
+                                1,
+                            ),
                         videoQuality =
                             VideoQuality.MEDIUM,
                         frameRate =
@@ -1275,6 +1282,11 @@ class RealGlassesBackend @Inject constructor(
 
                 activeSession.addCamera(
                     StreamConfiguration(
+                        audioCodec =
+                            AudioCodec.PCM(
+                                AudioSampleRate.RATE_16000,
+                                1,
+                            ),
                         videoQuality =
                             cameraTestVideoQuality,
                         frameRate =

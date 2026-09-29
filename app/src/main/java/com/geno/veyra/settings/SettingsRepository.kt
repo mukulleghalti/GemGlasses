@@ -180,8 +180,8 @@ data class AgentPreferences(
         val DEFAULT = AgentPreferences(
             languageCode = "en",
             voiceName = "Puck",
-            cameraResolution = CameraResolution.MEDIUM,
-            cameraFrameRate = 24,
+            cameraResolution = CameraResolution.HIGH,
+            cameraFrameRate = 30,
             wakeWordEnabled = false,
             wakePhrase = DEFAULT_WAKE_PHRASE,
             startAssistantOnLaunch = false,
