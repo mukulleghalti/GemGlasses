@@ -380,9 +380,11 @@ private fun VeyraRoot(
 
     // Auto-start the assistant on cold launch when the user enabled
     // "Start assistant on launch". Fires once: returning from recents
-    // doesn't recreate the Activity, so it won't re-trigger. If the mic
-    // permission isn't granted, we stay on Home — the normal Start
-    // Assistant flow there handles the permission request.
+    // doesn't recreate the Activity, so it won't re-trigger. Stays on
+    // Home — the session runs in the ViewModel, and the user can tap
+    // the Assistant tab for the transcript. If the mic permission isn't
+    // granted, we stay on Home — the normal Start Assistant flow there
+    // handles the permission request.
     var autoStartDone by remember { mutableStateOf(false) }
     LaunchedEffect(prefs.startAssistantOnLaunch) {
         if (
@@ -397,7 +399,6 @@ private fun VeyraRoot(
                     Manifest.permission.RECORD_AUDIO,
                 ) == PackageManager.PERMISSION_GRANTED
             if (micGranted) {
-                navController.navigate("transcript")
                 viewModel.startSession()
             }
         }
