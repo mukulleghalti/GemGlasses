@@ -63,19 +63,20 @@ object TapToChatGpt {
             return
         }
         runCatching {
-            // Straight to ChatGPT's voice activity (the one behind its
-            // long-press "Voice" shortcut) — no assistant-framework
-            // round-trip, no chooser.
+            // ChatGPT's voice-mode deep link. The dedicated voice activity
+            // is not exported and bare ACTION_ASSIST silently no-ops, but
+            // ChatGptDeeplinkActivity IS exported and handles
+            // https://chatgpt.com/voice (confirmed via its VIEW intent
+            // filter on-device).
             context.startActivity(
-                Intent()
-                    .setClassName(CHATGPT_PACKAGE, VOICE_ACTIVITY)
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://chatgpt.com/voice"))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
-            Log.i(TAG, "voice activity fired")
+            Log.i(TAG, "voice deep link fired")
         }.onFailure { e ->
             // Never fail silently: a disabled/non-exported activity (or any
             // other launch problem) must be visible, not just a log line.
-            Log.w(TAG, "voice activity launch failed", e)
+            Log.w(TAG, "voice deep link launch failed", e)
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(
                     context,
