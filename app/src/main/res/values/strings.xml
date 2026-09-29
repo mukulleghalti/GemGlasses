@@ -206,6 +206,7 @@
     <string name="settings_wake_model_downloading_pct">Downloading voice model… %1$d%%</string>
     <string name="settings_wake_model_ready">Voice model ready.</string>
     <string name="settings_wake_model_error">Voice model error: %1$s</string>
+    <string name="settings_wake_retry">Retry download</string>
     <string name="settings_memories_title">Memories</string>
     <string name="settings_memories_empty">Nothing saved yet. Say “remember this …” in a session to add one.</string>
     <string name="settings_apikey_dialog_title">Gemini API key</string>

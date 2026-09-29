@@ -1095,6 +1095,17 @@ private fun WakeUpDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
+                // Retry button when the model download failed — lets the
+                // user re-attempt without leaving the dialog.
+                if (modelState is WakeWordModelState.Error) {
+                    OutlinedButton(
+                        onClick = { viewModel.retryWakeWordDownload() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.settings_wake_retry))
+                    }
+                }
+
                 val downloadProgress =
                     (modelState as? WakeWordModelState.Downloading)
                         ?.progress

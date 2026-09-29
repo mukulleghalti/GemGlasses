@@ -226,6 +226,20 @@ class AgentViewModel @Inject constructor(
     }
 
     /**
+     * Retries the wake-word model download for the current app language.
+     * Call when [wakeWordModelState] is [WakeWordModelState.Error].
+     */
+    fun retryWakeWordDownload() {
+        viewModelScope.launch {
+            try {
+                wakeWordEngine.downloadModel()
+            } catch (e: Exception) {
+                // The engine already sets Error state; nothing more to do.
+            }
+        }
+    }
+
+    /**
      * Runs the wake-phrase test: listens with the current language's
      * on-device model and reports whether [phrase] would trigger. Caller
      * must hold RECORD_AUDIO.

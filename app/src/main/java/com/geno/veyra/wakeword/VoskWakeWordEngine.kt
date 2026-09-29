@@ -122,6 +122,26 @@ class VoskWakeWordEngine @Inject constructor(
             }
     }
 
+    /**
+     * Downloads the model for the current language if needed. Safe to
+     * call when a previous attempt failed — it re-runs the full
+     * download/unzip and updates [modelState].
+     */
+    override suspend fun downloadModel() {
+        startMutex.withLock {
+            val lang = resolveLanguage()
+            // Clear any stale error state; ensureModel updates it.
+            _modelState.value = WakeWordModelState.Downloading(0f)
+            runCatching {
+                ensureModel(lang)
+            }.onFailure { e ->
+                _modelState.value = WakeWordModelState.Error(
+                    e.message ?: "download failed",
+                )
+            }
+        }
+    }
+
     /** Base language for the wake model, from the app language picker. */
     private fun resolveLanguage(): String =
         wakeBaseLanguage(AppLocaleStore.cachedAppLanguageTag(context))
