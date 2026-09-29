@@ -76,6 +76,16 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var smartHomeController: SmartHomeController
 
+    @Inject
+    lateinit var tapToChatGptCoordinator: com.geno.veyra.tap.TapToChatGptCoordinator
+
+    override fun onResume() {
+        super.onResume()
+        // Retry the glasses-tap listener: if the process started in the
+        // background the first service start may have been denied.
+        runCatching { tapToChatGptCoordinator.ensureRunning() }
+    }
+
     /*
      * ---------------------------------------------------------
      * Bluetooth permissions

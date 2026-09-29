@@ -7,6 +7,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -50,5 +51,23 @@ class TapToChatGptCoordinator @Inject constructor(
 
     companion object {
         private const val TAG = "TapToChatGptCoordinator"
+    }
+
+    /**
+     * Retry the service start whenever the app is foregrounded. The
+     * [start] collector only fires on process start or pref change, so if
+     * the process was born in the background (e.g. right after an app
+     * update) the Android 12+ foreground-service start restriction kills
+     * the first attempt and nothing retries it. Safe to call often;
+     * starting an already-running service is a no-op.
+     */
+    fun ensureRunning() {
+        scope.launch {
+            val enabled = runCatching { settings.preferences.first().tapToChatGptEnabled }
+                .getOrDefault(false)
+            if (!enabled) return@launch
+            runCatching { TapToChatGptService.start(context) }
+                .onFailure { e -> Log.w(TAG, "tap-to-chatgpt ensure failed", e) }
+        }
     }
 }
