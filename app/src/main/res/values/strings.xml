@@ -120,6 +120,8 @@
     <string name="settings_dump_shortcuts_sub">Spike diagnostic: logs ChatGPT\'s launcher shortcut intents</string>
     <string name="settings_dump_links">Dump ChatGPT link filters</string>
     <string name="settings_dump_links_sub">Spike diagnostic: logs ChatGPT\'s deep-link URL patterns</string>
+    <string name="settings_dump_sessions">Dump media sessions</string>
+    <string name="settings_dump_sessions_sub">Spike diagnostic: logs who owns the media-button tap</string>
     <string name="tap_launch_failed">Could not open the voice assistant — is a default assistant set?</string>
     <string name="tap_chatgpt_not_installed">Install the ChatGPT app to use tap-to-start</string>
     <string name="tap_service_channel">Tap to ChatGPT</string>

@@ -204,6 +204,11 @@ fun SettingsScreen(
             onClick = { TapToChatGpt.dumpLinkFilters(appContext) },
         )
         SettingRow(
+            title = stringResource(R.string.settings_dump_sessions),
+            subtitle = stringResource(R.string.settings_dump_sessions_sub),
+            onClick = { TapToChatGpt.dumpMediaSessions(appContext) },
+        )
+        SettingRow(
             title = stringResource(R.string.settings_stop_phrase),
             value = stopLabel,
             onClick = { showStopPhraseDialog = true },

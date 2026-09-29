@@ -1,8 +1,10 @@
 package com.geno.veyra.tap
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.session.MediaSessionManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -85,6 +87,33 @@ object TapToChatGpt {
                 ).show()
             }
         }
+    }
+
+    /**
+     * Diagnostic (spike only): dumps all active media sessions and their
+     * playback states, to see who wins media-button dispatch when the
+     * glasses tap doesn't reach us.
+     */
+    fun dumpMediaSessions(context: Context) {
+        try {
+            val msm = context.getSystemService(MediaSessionManager::class.java)
+                ?: return
+            val sessions = msm.getActiveSessions(
+                ComponentName(context, TapToChatGptService::class.java),
+            )
+            if (sessions.isEmpty()) Log.i(TAG, "media sessions: none active")
+            sessions.forEach { c ->
+                val pb = c.playbackState
+                Log.i(
+                    TAG,
+                    "media session: ${c.packageName}/${c.tag} " +
+                        "state=${pb?.state} actions=${pb?.actions}",
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "media session dump failed", e)
+        }
+        Log.i(TAG, "media session dump done")
     }
 
     /**
