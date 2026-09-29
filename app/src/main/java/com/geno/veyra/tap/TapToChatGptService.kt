@@ -87,6 +87,25 @@ class TapToChatGptService : Service() {
             session.isActive = true
             mediaSession = session
             Log.i(TAG, "MediaSession active; listening for glasses taps")
+        } else {
+            // Re-assert dispatch priority: the system routes taps to the
+            // most recently active eligible session, so if another app's
+            // session has taken the lead (e.g. a music app that was opened
+            // after us), toggle active state and refresh the playback
+            // state to bump us back to the front. Safe while music plays:
+            // a PLAYING session still outranks our PAUSED one, and we
+            // ignore taps while AudioManager.isMusicActive anyway.
+            mediaSession?.let { session ->
+                session.isActive = false
+                session.setPlaybackState(
+                    PlaybackState.Builder()
+                        .setState(PlaybackState.STATE_PAUSED, 0L, 1.0f)
+                        .setActions(PlaybackState.ACTION_PLAY_PAUSE)
+                        .build(),
+                )
+                session.isActive = true
+                Log.d(TAG, "MediaSession priority re-asserted")
+            }
         }
 
         return START_STICKY
