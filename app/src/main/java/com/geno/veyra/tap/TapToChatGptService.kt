@@ -74,18 +74,30 @@ class TapToChatGptService : Service() {
             })
             // Claim media-button handling so taps route here.
             session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS)
-            // Publish a paused playback state: without any playback state
-            // the session is registered (visible in dumpsys) but
-            // MediaSessionService never dispatches media-button events to
-            // it. PAUSED, not PLAYING, so we never appear as "now playing".
+            // Publish a PLAYING playback state: the system only routes
+            // media-button events to sessions it considers "real" players.
+            // A session stuck at PAUSED that never played is deprioritized
+            // and taps vanish silently. PLAYING makes us the dispatch
+            // target; we still ignore taps while AudioManager.isMusicActive
+            // so actual music keeps working. Spike only -- UX polish later.
             session.setPlaybackState(
                 PlaybackState.Builder()
-                    .setState(PlaybackState.STATE_PAUSED, 0L, 1.0f)
+                    .setState(PlaybackState.STATE_PLAYING, 0L, 1.0f)
                     .setActions(PlaybackState.ACTION_PLAY_PAUSE)
                     .build(),
             )
             session.isActive = true
             mediaSession = session
+            // Hold audio focus so the system treats us as the active media
+            // app. A real music app takes focus back when it plays.
+            runCatching {
+                val audio = getSystemService(AudioManager::class.java)
+                audio?.requestAudioFocus(
+                    null,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN,
+                )
+            }
             Log.i(TAG, "MediaSession active; listening for glasses taps")
         } else {
             // Re-assert dispatch priority: the system routes taps to the
@@ -99,7 +111,7 @@ class TapToChatGptService : Service() {
                 session.isActive = false
                 session.setPlaybackState(
                     PlaybackState.Builder()
-                        .setState(PlaybackState.STATE_PAUSED, 0L, 1.0f)
+                        .setState(PlaybackState.STATE_PLAYING, 0L, 1.0f)
                         .setActions(PlaybackState.ACTION_PLAY_PAUSE)
                         .build(),
                 )
