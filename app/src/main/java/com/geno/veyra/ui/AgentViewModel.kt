@@ -299,6 +299,12 @@ class AgentViewModel @Inject constructor(
         }
     }
 
+    fun setTapToChatGptEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setTapToChatGptEnabled(enabled)
+        }
+    }
+
     /**
      * Persists the app UI language. Callers should recreate the activity
      * afterwards so the new locale applies immediately.

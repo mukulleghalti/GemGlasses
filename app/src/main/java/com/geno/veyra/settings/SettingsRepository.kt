@@ -110,6 +110,7 @@ data class AgentPreferences(
     val audioOutput: AudioOutput,
     val bargeInEnabled: Boolean,
     val sessionBeepEnabled: Boolean,
+    val tapToChatGptEnabled: Boolean,
     val webSearchEnabled: Boolean,
     val autoHistoryTitles: Boolean,
     val qrScanEnabled: Boolean,
@@ -186,6 +187,7 @@ data class AgentPreferences(
             audioOutput = AudioOutput.GLASSES,
             bargeInEnabled = true,
             sessionBeepEnabled = true,
+            tapToChatGptEnabled = false,
             webSearchEnabled = false,
             autoHistoryTitles = true,
             qrScanEnabled = false,
@@ -381,6 +383,9 @@ class SettingsRepository @Inject constructor(
     private val sessionBeepEnabledKey =
         booleanPreferencesKey("session_beep_enabled")
 
+    private val tapToChatGptEnabledKey =
+        booleanPreferencesKey("tap_to_chatgpt_enabled")
+
     private val webSearchEnabledKey =
         booleanPreferencesKey("web_search_enabled")
 
@@ -482,6 +487,10 @@ class SettingsRepository @Inject constructor(
                 sessionBeepEnabled =
                     prefs[sessionBeepEnabledKey]
                         ?: AgentPreferences.DEFAULT.sessionBeepEnabled,
+
+                tapToChatGptEnabled =
+                    prefs[tapToChatGptEnabledKey]
+                        ?: AgentPreferences.DEFAULT.tapToChatGptEnabled,
 
                 webSearchEnabled =
                     prefs[webSearchEnabledKey]
@@ -626,6 +635,14 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[sessionBeepEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setTapToChatGptEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[tapToChatGptEnabledKey] = enabled
         }
     }
 

@@ -2,6 +2,7 @@ package com.geno.veyra
 
 import android.app.Application
 import android.util.Log
+import com.geno.veyra.tap.TapToChatGptCoordinator
 import com.geno.veyra.wakeword.WakeWordCoordinator
 import com.meta.wearable.dat.core.Wearables
 import dagger.hilt.android.HiltAndroidApp
@@ -13,6 +14,9 @@ class VeyraApp : Application() {
     @Inject
     lateinit var wakeWordCoordinator: WakeWordCoordinator
 
+    @Inject
+    lateinit var tapToChatGptCoordinator: TapToChatGptCoordinator
+
     companion object {
         private const val TAG = "VeyraApp"
     }
@@ -23,6 +27,10 @@ class VeyraApp : Application() {
         // Starts observing wake-word prefs; the listener service itself only
         // runs when enabled, glasses are connected, and no session is active.
         wakeWordCoordinator.start()
+
+        // Tap-to-ChatGPT: starts/stops the media-button listener from its
+        // own Settings toggle, on a separate branch-safe path.
+        tapToChatGptCoordinator.start()
     }
 
     @Volatile

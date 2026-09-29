@@ -172,6 +172,16 @@ fun SettingsScreen(
             },
         )
         SettingRow(
+            title = stringResource(R.string.settings_tap_to_chatgpt),
+            subtitle = stringResource(R.string.settings_tap_to_chatgpt_sub),
+            trailing = {
+                Switch(
+                    checked = prefs.tapToChatGptEnabled,
+                    onCheckedChange = { viewModel.setTapToChatGptEnabled(it) },
+                )
+            },
+        )
+        SettingRow(
             title = stringResource(R.string.settings_stop_phrase),
             value = stopLabel,
             onClick = { showStopPhraseDialog = true },

@@ -68,6 +68,12 @@
             android:exported="false"
             android:foregroundServiceType="microphone|connectedDevice" />
 
+        <!-- TapToChatGptService: glasses-tap to ChatGPT voice (spike) -->
+        <service
+            android:name=".tap.TapToChatGptService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
         <!-- Timer/reminder alerts fired by AlarmManager -->
         <receiver
             android:name=".alerts.AlertReceiver"
