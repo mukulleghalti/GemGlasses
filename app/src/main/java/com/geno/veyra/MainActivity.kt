@@ -86,6 +86,25 @@ class MainActivity : ComponentActivity() {
         runCatching { tapToChatGptCoordinator.ensureRunning() }
     }
 
+    /**
+     * Spike: catch the glasses tap if it arrives as a direct key event
+     * (HID) instead of via the MediaSession. Logs every key so we can see
+     * what the tap actually sends.
+     */
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+        Log.d(TAG, "keyDown: keyCode=$keyCode")
+        if (keyCode == android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ||
+            keyCode == android.view.KeyEvent.KEYCODE_MEDIA_PLAY ||
+            keyCode == android.view.KeyEvent.KEYCODE_MEDIA_PAUSE ||
+            keyCode == android.view.KeyEvent.KEYCODE_HEADSETHOOK
+        ) {
+            Log.i(TAG, "glasses tap via key event; launching ChatGPT voice")
+            com.geno.veyra.tap.TapToChatGpt.launch(this)
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
     /*
      * ---------------------------------------------------------
      * Bluetooth permissions
