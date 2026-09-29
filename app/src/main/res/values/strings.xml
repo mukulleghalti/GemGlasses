@@ -57,6 +57,7 @@
     <string name="assistant_menu_desc">Conversations</string>
     <string name="assistant_mute_desc">Mute mic</string>
     <string name="assistant_unmute_desc">Unmute mic</string>
+    <string name="assistant_stop_desc">Stop assistant</string>
     <string name="assistant_drawer_title">Conversations</string>
     <string name="assistant_new_conversation">New conversation</string>
     <string name="assistant_idle_hint">Just a tap away</string>
