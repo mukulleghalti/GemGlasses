@@ -10,8 +10,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioManager
+import android.media.MediaPlayer
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
+import java.io.File
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -44,6 +46,7 @@ class TapToChatGptService : Service() {
     }
 
     private var mediaSession: MediaSession? = null
+    private var silentPlayer: MediaPlayer? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -118,6 +121,12 @@ class TapToChatGptService : Service() {
                 )
             }
             Log.i(TAG, "MediaSession active; listening for glasses taps")
+            // Play silent audio on loop: the system only routes media-button
+            // events to sessions it believes are actually producing audio.
+            // A PLAYING state with no audio output is ignored. Silent audio
+            // makes us a "real" player. Volume is 0, so it's inaudible.
+            // Spike only -- remove if a cleaner dispatch method is found.
+            startSilentAudio()
         } else {
             // Re-assert dispatch priority: the system routes taps to the
             // most recently active eligible session, so if another app's
@@ -175,6 +184,12 @@ class TapToChatGptService : Service() {
     }
 
     override fun onDestroy() {
+        stopSilentAudio()
+        // Abandon audio focus so we don't block real music apps.
+        runCatching {
+            val audio = getSystemService(AudioManager::class.java)
+            audio?.abandonAudioFocus(null)
+        }
         mediaSession?.let {
             it.isActive = false
             it.release()
@@ -184,6 +199,72 @@ class TapToChatGptService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /**
+     * Plays 1 second of digital silence on loop at zero volume. This is
+     * a spike workaround: Android's media-button dispatch ignores sessions
+     * that claim PLAYING but produce no audio. The silent loop makes the
+     * session a "real" player so taps route to us.
+     */
+    private fun startSilentAudio() {
+        if (silentPlayer != null) return
+        try {
+            val wavFile = File(cacheDir, "tap_silence.wav")
+            if (!wavFile.exists()) {
+                wavFile.writeBytes(generateSilentWav())
+            }
+            val player = MediaPlayer().apply {
+                setDataSource(wavFile.absolutePath)
+                setAudioStreamType(AudioManager.STREAM_MUSIC)
+                isLooping = true
+                setVolume(0f, 0f)
+                prepare()
+                start()
+            }
+            silentPlayer = player
+            Log.d(TAG, "silent audio loop started")
+        } catch (e: Exception) {
+            Log.w(TAG, "silent audio failed: ${e.message}")
+        }
+    }
+
+    private fun stopSilentAudio() {
+        try {
+            silentPlayer?.stop()
+            silentPlayer?.release()
+        } catch (_: Exception) {
+        }
+        silentPlayer = null
+    }
+
+    /**
+     * Generates a 1-second 44.1kHz mono 16-bit WAV of pure silence.
+     */
+    private fun generateSilentWav(): ByteArray {
+        val sampleRate = 44100
+        val numSamples = sampleRate // 1 second
+        val dataSize = numSamples * 2 // 16-bit mono
+        val buffer = java.nio.ByteBuffer.allocate(44 + dataSize)
+        buffer.order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        // RIFF header
+        buffer.put("RIFF".toByteArray())
+        buffer.putInt(36 + dataSize)
+        buffer.put("WAVE".toByteArray())
+        // fmt chunk
+        buffer.put("fmt ".toByteArray())
+        buffer.putInt(16)
+        buffer.putShort(1) // PCM
+        buffer.putShort(1) // mono
+        buffer.putInt(sampleRate)
+        buffer.putInt(sampleRate * 2) // byte rate
+        buffer.putShort(2) // block align
+        buffer.putShort(16) // bits per sample
+        // data chunk
+        buffer.put("data".toByteArray())
+        buffer.putInt(dataSize)
+        // silence (zeros already)
+        return buffer.array()
+    }
 
     private fun ensureChannel() {
         val manager = getSystemService(NotificationManager::class.java) ?: return
