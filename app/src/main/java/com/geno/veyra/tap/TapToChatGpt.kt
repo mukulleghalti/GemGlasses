@@ -105,7 +105,16 @@ object TapToChatGpt {
             infos.filter { it.activityInfo.packageName == CHATGPT_PACKAGE }
                 .forEach {
                     Log.i(TAG, "chatgpt link activity: ${it.activityInfo.name} exported=${it.activityInfo.exported}")
-                    Log.i(TAG, "chatgpt link filter: ${it.filter}")
+                    val f = it.filter
+                    if (f == null) {
+                        Log.i(TAG, "chatgpt link filter: null")
+                    } else {
+                        Log.i(TAG, "chatgpt link filter actions: ${f.actionsIterator()?.asSequence()?.toList()}")
+                        Log.i(TAG, "chatgpt link filter categories: ${f.categoriesIterator()?.asSequence()?.toList()}")
+                        Log.i(TAG, "chatgpt link filter schemes: ${f.schemesIterator()?.asSequence()?.toList()}")
+                        Log.i(TAG, "chatgpt link filter authorities: ${f.authoritiesIterator()?.asSequence()?.map { a -> "${a.host}:${a.port}" }?.toList()}")
+                        Log.i(TAG, "chatgpt link filter paths: ${f.pathsIterator()?.asSequence()?.map { p -> "${p.path}:${p.type}" }?.toList()}")
+                    }
                 }
         } catch (e: Exception) {
             Log.w(TAG, "chatgpt link filter dump failed", e)
