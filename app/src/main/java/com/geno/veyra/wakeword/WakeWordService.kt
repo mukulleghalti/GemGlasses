@@ -18,6 +18,7 @@ import com.geno.veyra.R
 import com.geno.veyra.service.AssistantStarter
 import com.geno.veyra.settings.AgentPreferences
 import com.geno.veyra.settings.AppLocaleStore
+import com.geno.veyra.settings.SettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +47,9 @@ class WakeWordService : Service() {
 
     @Inject
     lateinit var starter: AssistantStarter
+
+    @Inject
+    lateinit var settings: SettingsRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var runJob: Job? = null
@@ -105,10 +109,41 @@ class WakeWordService : Service() {
 
     // RECORD_AUDIO is held — the engine is actively recording with it.
     @SuppressLint("MissingPermission")
-    private fun onDetected(phrase: String) {
-        Log.i(TAG, "wake word detected (\"$phrase\") — starting assistant")
-        starter.start(initialText = phrase)
+    private fun onDetected(heardText: String) {
+        Log.i(TAG, "wake word detected (\"$heardText\")")
+
+        // "Hey glasses, open ChatGPT" — launch ChatGPT directly instead of
+        // starting a Gemini session. The voice command toggle must be on.
+        val prefs = settings.preferences.value
+        if (prefs.voiceChatGptEnabled && CHATGPT_COMMAND.containsMatchIn(heardText)) {
+            Log.i(TAG, "ChatGPT voice command heard — launching ChatGPT")
+            launchChatGptVoice()
+            stopSelf()
+            return
+        }
+
+        // Normal path: start the assistant session.
+        starter.start(initialText = heardText)
         stopSelf()
+    }
+
+    /**
+     * Opens the user's ChatGPT app directly in voice mode via the
+     * https://chatgpt.com/voice deep link. No API key needed — it uses
+     * the user's own ChatGPT app and account.
+     */
+    private fun launchChatGptVoice() {
+        val intent = Intent(
+            Intent.ACTION_VIEW,
+            android.net.Uri.parse("https://chatgpt.com/voice"),
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching {
+            startActivity(intent)
+        }.onFailure { e ->
+            Log.w(TAG, "failed to launch ChatGPT voice", e)
+        }
     }
 
     override fun onDestroy() {
@@ -167,6 +202,15 @@ class WakeWordService : Service() {
         private const val NOTIFICATION_ID = 43
         private const val EXTRA_PHRASE = "extra_wake_phrase"
         const val ACTION_STOP = "com.geno.veyra.wakeword.STOP"
+
+        /**
+         * Matches "open ChatGPT", "talk to ChatGPT", "launch ChatGPT",
+         * "start ChatGPT" (also "Chat GPT" with a space) as whole words.
+         */
+        private val CHATGPT_COMMAND = Regex(
+            "\\b(open|talk to|launch|start)\\s+chat\\s*gpt\\b",
+            RegexOption.IGNORE_CASE,
+        )
 
         fun start(context: Context, phrase: String) {
             val intent = Intent(context, WakeWordService::class.java)

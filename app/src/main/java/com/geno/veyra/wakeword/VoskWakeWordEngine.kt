@@ -310,7 +310,10 @@ class VoskWakeWordEngine @Inject constructor(
             if (now - lastEmitMs > EMIT_COOLDOWN_MS) {
                 lastEmitMs = now
                 Log.i(TAG, "wake word detected (heard \"$partial\")")
-                _detections.emit(activePhrase ?: return)
+                // Emit the full heard text (not just the wake phrase) so
+                // the service can check for commands like "open ChatGPT"
+                // that follow the wake phrase in the same utterance.
+                _detections.emit(partial)
             }
         }
     }

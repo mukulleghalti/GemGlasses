@@ -92,6 +92,7 @@ fun SettingsScreen(
     var showChatGptKeyDialog by remember { mutableStateOf(false) }
     var showChatGptModelDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showDiagnosticsDialog by remember { mutableStateOf(false) }
     var advancedExpanded by remember { mutableStateOf(false) }
 
     val selectedVoice = VOICES.firstOrNull { it.name == prefs.voiceName }
@@ -356,6 +357,13 @@ fun SettingsScreen(
             )
         }
 
+        SectionLabel(stringResource(R.string.settings_section_diagnostics))
+        SettingRow(
+            title = stringResource(R.string.settings_diagnostics),
+            subtitle = stringResource(R.string.settings_diagnostics_sub),
+            onClick = { showDiagnosticsDialog = true },
+        )
+
         Text(
             stringResource(R.string.settings_privacy_note),
             style = MaterialTheme.typography.bodySmall,
@@ -459,6 +467,12 @@ fun SettingsScreen(
         ChatGptKeyDialog(
             viewModel = viewModel,
             onDismiss = { showChatGptKeyDialog = false },
+        )
+    }
+    if (showDiagnosticsDialog) {
+        DiagnosticsDialog(
+            viewModel = viewModel,
+            onDismiss = { showDiagnosticsDialog = false },
         )
     }
 }
@@ -1629,3 +1643,69 @@ private val STOP_PHRASES = listOf(
     "bye glasses" to "Bye Glasses",
     "that's all" to "That's All",
 )
+
+/**
+ * Diagnostics dialog: shows device/app state and the wake-word model
+ * status, with a Share button so users can send the report to the
+ * developer (e.g. via WhatsApp or email) when something goes wrong.
+ */
+@Composable
+private fun DiagnosticsDialog(
+    viewModel: AgentViewModel,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val modelState by viewModel.wakeWordModelState.collectAsStateWithLifecycle()
+
+    val modelStatus = when (val s = modelState) {
+        is WakeWordModelState.Ready -> "Ready"
+        is WakeWordModelState.NotDownloaded -> "Not downloaded"
+        is WakeWordModelState.Downloading -> "Downloading (${(s.progress * 100).toInt()}%)"
+        is WakeWordModelState.Error -> "Error: ${s.message}"
+    }
+
+    val report = buildString {
+        appendLine("Veyra Diagnostics")
+        appendLine("App: ${com.geno.veyra.BuildConfig.VERSION_NAME} (${com.geno.veyra.BuildConfig.VERSION_CODE})")
+        appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        appendLine("Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
+        appendLine("Wake-word model: $modelStatus")
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_diagnostics)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    report,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(android.content.Intent.EXTRA_TEXT, report)
+                    }
+                    context.startActivity(
+                        android.content.Intent.createChooser(send, "Share diagnostics"),
+                    )
+                },
+            ) {
+                Text(stringResource(R.string.common_share))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_done))
+            }
+        },
+    )
+}
