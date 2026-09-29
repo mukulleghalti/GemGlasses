@@ -3,6 +3,7 @@ package com.geno.veyra.tap
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -86,12 +87,35 @@ object TapToChatGpt {
     }
 
     /**
+     * Diagnostic (spike only): dumps the ChatGPT app's intent filters for
+     * VIEW intents, so we can find the deep-link URL (if any) that opens
+     * voice mode. The Voice long-press item is a dynamic shortcut (not in
+     * the static XML), and AssistantActivity is not exported, so a deep
+     * link into the exported MainActivity is the remaining clean route.
+     */
+    fun dumpLinkFilters(context: Context) {
+        val pm = context.packageManager
+        try {
+            @Suppress("DEPRECATION")
+            val infos = pm.queryIntentActivities(
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://chatgpt.com/")),
+                PackageManager.GET_RESOLVED_FILTER,
+            )
+            if (infos.isEmpty()) Log.i(TAG, "chatgpt link filters: none resolve https://chatgpt.com/")
+            infos.filter { it.activityInfo.packageName == CHATGPT_PACKAGE }
+                .forEach {
+                    Log.i(TAG, "chatgpt link activity: ${it.activityInfo.name} exported=${it.activityInfo.exported}")
+                    Log.i(TAG, "chatgpt link filter: ${it.filter}")
+                }
+        } catch (e: Exception) {
+            Log.w(TAG, "chatgpt link filter dump failed", e)
+        }
+    }
+
+    /**
      * Diagnostic (spike only): dumps the ChatGPT app's static launcher
-     * shortcuts — ids and the exact intents they fire — plus any activities
-     * with voice/assistant in the name. Reading another app's resources
-     * needs no permission. Everything is logged under TAG so it can be
-     * copied from LogFox; used to find the real voice-mode entry point
-     * after ACTION_ASSIST proved to silently no-op.
+     * shortcuts and any voice/assistant activities with their
+     * exported/enabled flags.
      */
     fun dumpShortcuts(context: Context) {
         val pm = context.packageManager
