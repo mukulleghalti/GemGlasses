@@ -21,6 +21,7 @@ dependencyResolutionManagement {
                                  * mavenLocal/README.md.
                                  */
                                 maven(url = uri("mavenLocal"))
+                                maven(url = uri("https://jitpack.io")) // RootEncoder (RTMP) is JitPack-only
             }
 }
 

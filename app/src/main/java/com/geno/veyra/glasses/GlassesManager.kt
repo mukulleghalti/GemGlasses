@@ -19,6 +19,13 @@ class GlassesManager @Inject constructor(
     val devices: Flow<List<GlassesDevice>> =
         backend.devices
 
+    val inputEvents: Flow<GlassesInputEvent> =
+        backend.inputEvents
+
+    suspend fun setCaptureButtonEnabled(enabled: Boolean) {
+        backend.setCaptureButtonEnabled(enabled)
+    }
+
     fun initialize() {
         backend.initialize()
     }
@@ -41,11 +48,27 @@ class GlassesManager @Inject constructor(
         backend.setCameraPermissionRequester(requester)
     }
 
+    fun setMicrophonePermissionRequester(
+        requester: suspend () -> CameraPermission,
+    ) {
+        backend.setMicrophonePermissionRequester(requester)
+    }
+
     suspend fun cameraPermission(): CameraPermission =
         backend.cameraPermission()
 
+    suspend fun microphonePermission(): CameraPermission =
+        backend.microphonePermission()
+
+    /**
+     * Ensures every DAT permission the camera features need. Since
+     * DAT 1.0, camera streams always carry glasses-mic audio, so
+     * MICROPHONE is required alongside CAMERA — without it, streams
+     * stall in STARTING (MICROPHONE_PERMISSION_DENIED) and the Photo
+     * API never starts.
+     */
     suspend fun ensureCameraPermission(): Boolean {
-        return when (backend.cameraPermission()) {
+        val cameraOk = when (backend.cameraPermission()) {
             CameraPermission.GRANTED -> true
 
             CameraPermission.DENIED,
@@ -54,11 +77,31 @@ class GlassesManager @Inject constructor(
                     CameraPermission.GRANTED
             }
         }
+
+        if (!cameraOk) {
+            return false
+        }
+
+        return when (backend.microphonePermission()) {
+            CameraPermission.GRANTED -> true
+
+            CameraPermission.DENIED,
+            CameraPermission.NOT_DETERMINED -> {
+                backend.requestMicrophonePermission() ==
+                    CameraPermission.GRANTED
+            }
+        }
     }
 
     fun cameraFrames(): Flow<ByteArray> =
         backend.cameraFrames()
 
+    fun liveFrames(): Flow<LiveFrame> =
+        backend.liveFrames()
+
     suspend fun connect(): Boolean =
         backend.connect()
+
+    suspend fun disconnect() =
+        backend.disconnect()
 }

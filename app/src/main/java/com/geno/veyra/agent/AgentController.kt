@@ -2,7 +2,10 @@ package com.geno.veyra.agent
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
 import android.media.AudioAttributes
+import android.net.Uri
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import com.geno.veyra.audio.BluetoothAudioRouter
@@ -14,6 +17,8 @@ import com.geno.veyra.gemini.SessionEvent
 import com.geno.veyra.gemini.SessionKeeper
 import com.geno.veyra.gemini.ToolFlags
 import com.geno.veyra.gemini.VoiceSessionKeeper
+import com.geno.veyra.claude.realtime.ClaudeSessionKeeper
+import com.geno.veyra.grok.realtime.GrokSessionKeeper
 import com.geno.veyra.openai.realtime.RealtimeSessionKeeper
 import com.geno.veyra.settings.AiProvider
 import com.geno.veyra.gemini.ToolRegistry
@@ -29,6 +34,7 @@ import com.geno.veyra.state.TranscriptEntry
 import com.geno.veyra.tools.VisionBridge
 import com.geno.veyra.tools.VisionController
 import com.geno.veyra.translate.TranslateController
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -54,8 +60,11 @@ enum class AgentStatus { IDLE, CONNECTING, LISTENING, RECONNECTING, ERROR }
  */
 @Singleton
 class AgentController @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val sessionKeeper: SessionKeeper,
     private val realtimeKeeper: RealtimeSessionKeeper,
+    private val grokKeeper: GrokSessionKeeper,
+    private val claudeKeeper: ClaudeSessionKeeper,
     private val toolRegistry: ToolRegistry,
     private val micStreamer: MicStreamer,
     private val speaker: SpeakerSink,
@@ -75,8 +84,9 @@ class AgentController @Inject constructor(
     private var micJob: Job? = null
 
     /**
-     * The keeper for the running session — [sessionKeeper] (Gemini) or
-     * [realtimeKeeper] (ChatGPT), chosen from the AI provider in
+     * The keeper for the running session — [sessionKeeper] (Gemini),
+     * [realtimeKeeper] (ChatGPT) or the Grok keeper, chosen from the AI
+     * provider in
      * Settings each time the assistant starts. Null when idle.
      */
     @Volatile
@@ -103,10 +113,10 @@ class AgentController @Inject constructor(
 
     /**
      * Whether talking over the assistant cuts it off. Refreshed from
-     * settings every time the assistant starts. Disable to test whether
-     * false interruption events are what make the audio sound choppy.
+     * settings every time the assistant starts.
      */
     @Volatile
+    private var stopPhraseEnabled: Boolean = true
     private var bargeInEnabled: Boolean = true
 
     /**
@@ -138,12 +148,16 @@ class AgentController @Inject constructor(
      */
     @Volatile
     private var pendingInitialText: String? = null
+    private var pendingTranslateView: Boolean = false
 
     val running: Boolean
         get() = eventJob?.isActive == true
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    fun start(initialText: String? = null) {
+    fun start(
+        initialText: String? = null,
+        boostTranslateView: Boolean = false,
+    ) {
         if (running) return
 
         // Only one voice session may own the mic and speaker at a time.
@@ -151,6 +165,7 @@ class AgentController @Inject constructor(
         if (translation.running) translation.stop()
 
         pendingInitialText = initialText
+        pendingTranslateView = boostTranslateView
 
         _status.value = AgentStatus.CONNECTING
         _connectionError.value = null
@@ -173,11 +188,23 @@ class AgentController @Inject constructor(
              * wake-word path lands here too.
              */
             val keeper: VoiceSessionKeeper =
-                if (prefs.aiProvider == AiProvider.OPENAI) {
-                    Log.i(TAG, "Starting assistant with ChatGPT (OpenAI Realtime)")
-                    realtimeKeeper
-                } else {
-                    sessionKeeper
+                when (prefs.aiProvider) {
+                    AiProvider.OPENAI -> {
+                        Log.i(TAG, "Starting assistant with ChatGPT (OpenAI Realtime)")
+                        realtimeKeeper
+                    }
+
+                    AiProvider.GROK -> {
+                        Log.i(TAG, "Starting assistant with Grok (xAI Speech to Speech)")
+                        grokKeeper
+                    }
+
+                    AiProvider.CLAUDE -> {
+                        Log.i(TAG, "Starting assistant with Claude (cascade: Vosk STT + Messages API + TTS)")
+                        claudeKeeper
+                    }
+
+                    AiProvider.GEMINI -> sessionKeeper
                 }
             activeKeeper = keeper
 
@@ -222,10 +249,15 @@ class AgentController @Inject constructor(
                         webSearch = prefs.webSearchEnabled,
                         qrScan = prefs.qrScanEnabled,
                         ocr = prefs.ocrEnabled,
+                        translateView = pendingTranslateView,
                         smartHome = prefs.smartHomeEnabled,
+                        lookPay = prefs.lookPayEnabled,
+                        liveStream = prefs.liveStreamEnabled,
                     ),
                     model = prefs.liveModel,
                     openAiModel = prefs.chatGptModel,
+                    grokModel = prefs.grokModel,
+                    claudeModel = prefs.claudeModel,
                 ),
             )
 
@@ -263,6 +295,25 @@ class AgentController @Inject constructor(
         _status.value = AgentStatus.IDLE
         _connectionError.value = null
         micMute.reset()
+    }
+
+    /**
+     * Sends [text] as a user message into the running session and
+     * mirrors it into the transcript. Returns false when no session
+     * is running. Used by the Snap & Translate tile: a repeat tap
+     * during a live session repeats the request instead of silently
+     * doing nothing.
+     */
+    fun sendUserText(text: String): Boolean {
+        val keeper = activeKeeper ?: return false
+        if (!running) return false
+        conversation.appendTranscript(
+            text,
+            TranscriptEntry.Speaker.USER,
+        )
+        keeper.sendText(text)
+        Log.i(TAG, "Sent user text: \"$text\"")
+        return true
     }
 
     // VisionController: called by the capture_vision tool.

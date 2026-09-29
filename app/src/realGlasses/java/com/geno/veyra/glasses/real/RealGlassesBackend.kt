@@ -11,22 +11,38 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.geno.veyra.glasses.CameraPermission
+import com.geno.veyra.glasses.CapturePress
 import com.geno.veyra.glasses.ConnectionState
+import com.geno.veyra.glasses.GlassesInputEvent
+import com.geno.veyra.glasses.LiveFrame
 import com.geno.veyra.glasses.GlassesBackend
 import com.geno.veyra.glasses.GlassesDevice
 import com.geno.veyra.glasses.RegistrationState
 import com.meta.wearable.dat.camera.addCamera
 import com.meta.wearable.dat.camera.removeCamera
+import com.meta.wearable.dat.camera.types.AudioCodec
+import com.meta.wearable.dat.camera.types.AudioSampleRate
 import com.meta.wearable.dat.camera.types.PhotoData
 import com.meta.wearable.dat.camera.types.StreamConfiguration
 import com.meta.wearable.dat.camera.types.StreamState
 import com.meta.wearable.dat.camera.types.VideoFrame
 import com.meta.wearable.dat.camera.types.VideoQuality
+import com.meta.wearable.dat.camera.photo.types.PhotoQuality
+import com.meta.wearable.dat.camera.photo.types.PhotoResolution
+import com.meta.wearable.dat.camera.photo.types.PhotoState
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.selectors.AutoDeviceSelector
 import com.meta.wearable.dat.core.session.DeviceSession
 import com.meta.wearable.dat.core.session.DeviceSessionState
+import com.meta.wearable.dat.core.types.ChargingState
 import com.meta.wearable.dat.core.types.Device
+import com.meta.wearable.dat.inputs.Inputs
+import com.meta.wearable.dat.inputs.addInputs
+import com.meta.wearable.dat.inputs.removeInputs
+import com.meta.wearable.dat.inputs.types.CapturePressType
+import com.meta.wearable.dat.inputs.types.InputEvent
+import com.meta.wearable.dat.inputs.types.InputSource
+import com.meta.wearable.dat.inputs.types.InputsConfiguration
 import com.meta.wearable.dat.core.types.DeviceIdentifier
 import com.meta.wearable.dat.core.types.LinkState
 import com.meta.wearable.dat.core.types.Permission
@@ -34,13 +50,18 @@ import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.core.types.RegistrationState as MWDATRegistrationState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.collect
@@ -67,8 +88,6 @@ class RealGlassesBackend @Inject constructor(
         private const val REGISTRATION_TIMEOUT_MS = 10_000L
 
         private const val CAMERA_STREAM_TIMEOUT_MS = 15_000L
-        private const val CAMERA_SETTLE_DELAY_MS = 1_500L
-        private const val CAMERA_FIRST_FRAME_TIMEOUT_MS = 10_000L
 
         /*
          * Gemini vision camera configuration.
@@ -78,6 +97,8 @@ class RealGlassesBackend @Inject constructor(
          */
         private const val GEMINI_CAMERA_FRAME_RATE = 24
 
+        private const val LIVE_FRAME_RATE = 24
+
         /*
          * Default Camera Test configuration.
          *
@@ -85,10 +106,10 @@ class RealGlassesBackend @Inject constructor(
          * the user has selected a different setting.
          */
         private var cameraTestVideoQuality =
-            VideoQuality.MEDIUM
+            VideoQuality.HIGH
 
         private var cameraTestFrameRate =
-            24
+            30
 
         private const val JPEG_QUALITY = 90
 
@@ -112,6 +133,9 @@ class RealGlassesBackend @Inject constructor(
     private var cameraPermissionRequester:
         (suspend () -> CameraPermission)? = null
 
+    private var microphonePermissionRequester:
+        (suspend () -> CameraPermission)? = null
+
     private val _registrationState =
         MutableStateFlow(RegistrationState.UNKNOWN)
 
@@ -129,6 +153,24 @@ class RealGlassesBackend @Inject constructor(
 
     override val devices: Flow<List<GlassesDevice>> =
         _devices.asStateFlow()
+
+    private val _inputEvents =
+        MutableSharedFlow<GlassesInputEvent>(
+            extraBufferCapacity = 32,
+        )
+
+    override val inputEvents: SharedFlow<GlassesInputEvent> =
+        _inputEvents.asSharedFlow()
+
+    private var inputs: Inputs? = null
+
+    private var inputsSession: DeviceSession? = null
+
+    private var inputsJob: Job? = null
+
+    /** Capture-button feature switch, driven by the Settings toggle. */
+    @Volatile
+    private var captureButtonWanted = false
 
     @Volatile
     private var initialized = false
@@ -194,6 +236,12 @@ class RealGlassesBackend @Inject constructor(
         requester: suspend () -> CameraPermission,
     ) {
         cameraPermissionRequester = requester
+    }
+
+    override fun setMicrophonePermissionRequester(
+        requester: suspend () -> CameraPermission,
+    ) {
+        microphonePermissionRequester = requester
     }
 
     // =========================================================================
@@ -543,6 +591,57 @@ class RealGlassesBackend @Inject constructor(
         return true
     }
 
+    /**
+     * Stops the current DAT session, if any. The session-state observer
+     * clears the session fields and reports DISCONNECTED when STOPPED
+     * arrives. Used when the capture-button listener is turned off, so
+     * the glasses button returns to its native behaviour.
+     */
+    override suspend fun disconnect() {
+
+        val activeSession =
+            session ?: sharedSession
+
+        if (activeSession == null) {
+
+            _connectionState.value =
+                ConnectionState.DISCONNECTED
+
+            return
+        }
+
+        Log.i(
+            TAG,
+            "disconnect(): stopping session"
+        )
+
+        detachInputs()
+
+        try {
+
+            activeSession.stop()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "session stop() failed",
+                e
+            )
+
+            if (session === activeSession) {
+                session = null
+            }
+
+            if (sharedSession === activeSession) {
+                sharedSession = null
+            }
+
+            _connectionState.value =
+                ConnectionState.DISCONNECTED
+        }
+    }
+
     // =========================================================================
     // SESSION STATE
     // =========================================================================
@@ -568,6 +667,10 @@ class RealGlassesBackend @Inject constructor(
 
                                 _connectionState.value =
                                     ConnectionState.CONNECTED
+
+                                if (captureButtonWanted) {
+                                    attachInputs(activeSession)
+                                }
                             }
                         }
 
@@ -589,6 +692,8 @@ class RealGlassesBackend @Inject constructor(
                                 }
 
                                 session = null
+
+                                detachInputs()
                             }
                         }
 
@@ -615,6 +720,211 @@ class RealGlassesBackend @Inject constructor(
             }
         }
     }
+
+    // =========================================================================
+    // INPUTS (capture button + touchpad)
+    // =========================================================================
+
+    /**
+     * Attaches the DAT Inputs capability to a started session and forwards
+     * its events into [inputEvents]. Runs once per session; the collectors
+     * die with [detachInputs] when the session stops.
+     */
+    private fun attachInputs(
+        activeSession: DeviceSession,
+    ) {
+
+        if (
+            inputsSession === activeSession &&
+            inputs != null
+        ) {
+            return
+        }
+
+        detachInputs()
+
+        inputsSession =
+            activeSession
+
+        inputsJob =
+            scope.launch {
+
+                try {
+
+                    val attached =
+                        activeSession.addInputs(
+                            InputsConfiguration(
+                                sources =
+                                    setOf(
+                                        InputSource.CAPTURE_BUTTON,
+                                        InputSource.CAPTOUCH,
+                                    ),
+                                consumeBack = false,
+                            )
+                        ).getOrElse { error ->
+
+                            Log.e(
+                                TAG,
+                                "addInputs() failed: $error"
+                            )
+
+                            return@launch
+                        }
+
+                    inputs =
+                        attached
+
+                    Log.i(
+                        TAG,
+                        "Inputs attached"
+                    )
+
+                    launch {
+                        attached.state.collect { state ->
+                            Log.i(TAG, "Inputs state: $state")
+                        }
+                    }
+
+                    launch {
+                        attached.errors.collect { error ->
+                            Log.w(TAG, "Inputs error: $error")
+                        }
+                    }
+
+                    attached.events.collect { event ->
+
+                        val mapped =
+                            mapInputEvent(event)
+
+                        Log.i(
+                            TAG,
+                            "Input event: $mapped"
+                        )
+
+                        _inputEvents.tryEmit(
+                            mapped
+                        )
+                    }
+
+                } catch (e: Exception) {
+
+                    Log.e(
+                        TAG,
+                        "Inputs collector failed",
+                        e
+                    )
+                }
+            }
+    }
+
+    private fun detachInputs() {
+
+        inputsJob?.cancel()
+        inputsJob =
+            null
+
+        inputs =
+            null
+
+        // Release the capability on the session itself, so the capture
+        // button returns to the glasses even while the session stays
+        // alive. Best effort: on a stopped session this simply errors.
+        val attachedSession = inputsSession
+        inputsSession =
+            null
+
+        if (attachedSession != null) {
+            runCatching {
+                attachedSession.removeInputs()
+            }
+        }
+    }
+
+    /**
+     * Settings toggle for the capture-button listener. Turning it off
+     * detaches Inputs from the live session (the session itself stays
+     * up, so Veyra remains connected and Meta AI photos work again).
+     * Turning it on attaches to the live session, if one is running.
+     */
+    override suspend fun setCaptureButtonEnabled(
+        enabled: Boolean,
+    ) {
+        captureButtonWanted = enabled
+
+        val activeSession = session ?: sharedSession
+
+        if (enabled) {
+            if (
+                activeSession != null &&
+                activeSession.state.value ==
+                    DeviceSessionState.STARTED
+            ) {
+                attachInputs(activeSession)
+            }
+        } else {
+            detachInputs()
+        }
+    }
+
+    private fun mapInputEvent(
+        event: InputEvent,
+    ): GlassesInputEvent =
+
+        when (event) {
+
+            is InputEvent.Capture ->
+                GlassesInputEvent.Capture(
+                    press =
+                        when (event.pressType) {
+
+                            CapturePressType.SHORT_PRESS ->
+                                CapturePress.SHORT_PRESS
+
+                            CapturePressType.HOLD ->
+                                CapturePress.HOLD
+
+                            CapturePressType.DOUBLE_PRESS ->
+                                CapturePress.DOUBLE_PRESS
+                        },
+                    timestampMs = event.timestampMs,
+                )
+
+            is InputEvent.Button ->
+                GlassesInputEvent.Other(
+                    "Button(${event.button})",
+                    event.timestampMs,
+                )
+
+            is InputEvent.Nav ->
+                GlassesInputEvent.Other(
+                    "Nav(${event.direction})",
+                    event.timestampMs,
+                )
+
+            is InputEvent.Drag ->
+                GlassesInputEvent.Other(
+                    "Drag(${event.action})",
+                    event.timestampMs,
+                )
+
+            is InputEvent.Select ->
+                GlassesInputEvent.Other(
+                    "Select",
+                    event.timestampMs,
+                )
+
+            is InputEvent.Back ->
+                GlassesInputEvent.Other(
+                    "Back",
+                    event.timestampMs,
+                )
+
+            else ->
+                GlassesInputEvent.Other(
+                    event.javaClass.simpleName,
+                    event.timestampMs,
+                )
+        }
 
     // =========================================================================
     // SESSION ERRORS
@@ -770,6 +1080,29 @@ class RealGlassesBackend @Inject constructor(
             connected =
                 device.linkState ==
                     LinkState.CONNECTED,
+            batteryPercent =
+                device.batteryLevel
+                    .takeIf { it in 0..100 },
+            batteryCharging =
+                when (device.chargingState) {
+                    ChargingState.CHARGING ->
+                        true
+
+                    ChargingState.NOT_CHARGING ->
+                        false
+
+                    else ->
+                        null
+                },
+            donState =
+                device.donState.name
+                    .takeIf { it != "UNKNOWN" },
+            hingeState =
+                device.hingeState.name
+                    .takeIf { it != "UNKNOWN" },
+            thermalLevel =
+                device.thermalLevel.name
+                    .takeIf { it != "UNKNOWN" },
         )
     }
 
@@ -833,13 +1166,22 @@ class RealGlassesBackend @Inject constructor(
     // =========================================================================
 
     override suspend fun cameraPermission():
-        CameraPermission {
+        CameraPermission =
+        checkDatPermission(Permission.CAMERA)
+
+    override suspend fun microphonePermission():
+        CameraPermission =
+        checkDatPermission(Permission.MICROPHONE)
+
+    private suspend fun checkDatPermission(
+        permission: Permission,
+    ): CameraPermission {
 
         return try {
 
             val result =
                 Wearables.checkPermissionStatus(
-                    Permission.CAMERA
+                    permission
                 )
 
             val status =
@@ -860,7 +1202,7 @@ class RealGlassesBackend @Inject constructor(
 
             Log.e(
                 TAG,
-                "Camera permission check failed",
+                "DAT permission check failed ($permission)",
                 e
             )
 
@@ -902,6 +1244,47 @@ class RealGlassesBackend @Inject constructor(
             Log.e(
                 TAG,
                 "Camera permission request failed",
+                e
+            )
+
+            CameraPermission.NOT_DETERMINED
+        }
+    }
+
+    override suspend fun requestMicrophonePermission():
+        CameraPermission {
+
+        if (
+            microphonePermission() ==
+                CameraPermission.GRANTED
+        ) {
+            return CameraPermission.GRANTED
+        }
+
+        val requester =
+            microphonePermissionRequester
+
+        if (requester == null) {
+
+            Log.e(
+                TAG,
+                "Microphone permission requester is not registered"
+            )
+
+            return CameraPermission.NOT_DETERMINED
+        }
+
+        return try {
+
+            requester()
+
+            microphonePermission()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Microphone permission request failed",
                 e
             )
 
@@ -982,11 +1365,30 @@ class RealGlassesBackend @Inject constructor(
             return@channelFlow
         }
 
+        if (
+            microphonePermission() !=
+                CameraPermission.GRANTED
+        ) {
+
+            Log.e(
+                TAG,
+                "Gemini camera: microphone permission not granted " +
+                    "(DAT 1.0 camera streams always carry audio)"
+            )
+
+            return@channelFlow
+        }
+
         val activeCamera =
             try {
 
                 activeSession.addCamera(
                     StreamConfiguration(
+                        audioCodec =
+                            AudioCodec.PCM(
+                                AudioSampleRate.RATE_16000,
+                                1,
+                            ),
                         videoQuality =
                             VideoQuality.MEDIUM,
                         frameRate =
@@ -1019,175 +1421,175 @@ class RealGlassesBackend @Inject constructor(
 
         try {
 
-            activeCamera.stream
-                .start()
-                .getOrElse { error ->
+            // Stream capture FIRST: it is the fast, proven path (this
+            // is how vision worked before DAT 1.0, and how Camera Test
+            // succeeds now). The standalone Photo API can take tens of
+            // seconds (STARTED wait + FULL/HIGH transfer), which
+            // overruns the vision burst window — the burst then ends
+            // with zero frames and the user sees no picture in chat.
+            var visionJpeg: ByteArray? =
+                captureViaStream(activeCamera, "Gemini camera")
 
-                    Log.e(
-                        TAG,
-                        "Gemini camera stream start failed: $error"
-                    )
+            if (visionJpeg == null) {
 
-                    return@channelFlow
-                }
+            // Photo API fallback — dedicated high-resolution capture
+            // (FULL / HIGH). The stream is stopped first: Photo and
+            // Stream compete for the camera hardware.
+            runCatching { activeCamera.stream.stop() }
 
-            val streaming =
-                withTimeoutOrNull(
-                    CAMERA_STREAM_TIMEOUT_MS
-                ) {
+            val photo =
+                activeCamera.photo
 
-                    activeCamera.stream.state.first {
-                        it ==
-                            StreamState.STREAMING
+            val photoStarted =
+                withTimeoutOrNull(10_000) {
+                    photo.state.first {
+                        it == PhotoState.STARTED
                     }
-
                     true
-
                 } ?: false
 
-            if (!streaming) {
+            if (!photoStarted) {
 
                 Log.e(
                     TAG,
-                    "Gemini camera stream did not reach STREAMING"
+                    "Gemini camera: Photo API did not reach STARTED " +
+                        "(state=${photo.state.value})"
                 )
-
-                return@channelFlow
             }
 
-            val firstRealFrame =
-                CompletableDeferred<VideoFrame>()
+            if (photoStarted) {
 
-            val videoCollectorJob =
+            Log.i(
+                TAG,
+                "Gemini camera: Photo API started, capturing"
+            )
+
+            val captureDeferred =
+                CompletableDeferred<ByteArray?>()
+
+            val collectJob =
                 launch {
 
                     try {
 
-                        activeCamera.stream.videoStream.collect { frame ->
-
-                            val bytes =
-                                frame.buffer.remaining()
-
-                            if (
-                                !frame.isCodecConfig &&
-                                bytes > 0 &&
-                                !firstRealFrame.isCompleted
-                            ) {
-
-                                firstRealFrame.complete(
-                                    frame
-                                )
+                        val data =
+                            withTimeoutOrNull(30_000) {
+                                photo.photoStream.first()
                             }
+
+                        val jpeg =
+                            data?.imageData
+
+                        if (
+                            jpeg != null &&
+                                jpeg.isNotEmpty()
+                        ) {
+
+                            Log.i(
+                                TAG,
+                                "Gemini camera: Photo API captured " +
+                                    "${jpeg.size} bytes"
+                            )
+
+                            captureDeferred.complete(jpeg)
+
+                        } else {
+
+                            captureDeferred.complete(null)
                         }
 
                     } catch (e: Exception) {
 
                         if (
-                            !firstRealFrame.isCompleted
+                            !captureDeferred.isCompleted
                         ) {
 
-                            firstRealFrame.completeExceptionally(
-                                e
-                            )
+                            captureDeferred
+                                .completeExceptionally(e)
                         }
                     }
                 }
 
-            val firstFrameReceived =
-                withTimeoutOrNull(
-                    CAMERA_FIRST_FRAME_TIMEOUT_MS
-                ) {
+            val errorJob =
+                launch {
 
                     try {
-                        firstRealFrame.await()
-                        true
+
+                        val error =
+                            withTimeoutOrNull(30_000) {
+                                photo.errors.first()
+                            }
+
+                        if (
+                            error != null &&
+                                !captureDeferred.isCompleted
+                        ) {
+
+                            Log.e(
+                                TAG,
+                                "Gemini camera Photo API error: $error"
+                            )
+
+                            captureDeferred.complete(null)
+                        }
+
                     } catch (_: Exception) {
-                        false
-                    }
-
-                } ?: false
-
-            if (!firstFrameReceived) {
-
-                Log.e(
-                    TAG,
-                    "Gemini camera: no video frame received"
-                )
-
-                videoCollectorJob.cancel()
-
-                return@channelFlow
-            }
-
-            delay(
-                CAMERA_SETTLE_DELAY_MS
-            )
-
-            if (
-                activeCamera.stream.state.value !=
-                    StreamState.STREAMING
-            ) {
-
-                Log.e(
-                    TAG,
-                    "Gemini camera stopped before photo capture"
-                )
-
-                videoCollectorJob.cancel()
-
-                return@channelFlow
-            }
-
-            try {
-
-                val captureResult =
-                    activeCamera.stream.capturePhoto()
-
-                val photoData =
-                    captureResult.getOrNull()
-
-                if (photoData == null) {
-
-                    Log.e(
-                        TAG,
-                        "Gemini capturePhoto() failed: " +
-                            captureResult.errorOrNull()
-                    )
-
-                } else {
-
-                    val jpeg =
-                        photoDataToJpeg(
-                            photoData
-                        )
-
-                    if (
-                        jpeg != null &&
-                        jpeg.isNotEmpty()
-                    ) {
-
-                        send(jpeg)
-
-                    } else {
-
-                        Log.e(
-                            TAG,
-                            "Gemini photo JPEG conversion failed"
-                        )
+                        // Capture path handles the result.
                     }
                 }
 
-            } catch (e: Exception) {
+            try {
 
-                Log.e(
-                    TAG,
-                    "Gemini capturePhoto() threw",
-                    e
+                photo.capturePhoto(
+                    resolution = PhotoResolution.FULL,
+                    quality = PhotoQuality.HIGH,
                 )
+
+                val jpeg =
+                    try {
+                        captureDeferred.await()
+                    } catch (e: Exception) {
+                        Log.e(
+                            TAG,
+                            "Gemini camera Photo API capture failed",
+                            e
+                        )
+                        null
+                    }
+
+                if (
+                    jpeg != null &&
+                        jpeg.isNotEmpty()
+                ) {
+
+                    visionJpeg = jpeg
+
+                } else {
+
+                    Log.e(
+                        TAG,
+                        "Gemini camera: no JPEG from Photo API"
+                    )
+                }
 
             } finally {
 
-                videoCollectorJob.cancel()
+                collectJob.cancel()
+                errorJob.cancel()
+            }
+
+            }
+
+            }
+
+            val finalJpeg = visionJpeg
+            if (finalJpeg != null) {
+                send(finalJpeg)
+            } else {
+                Log.e(
+                    TAG,
+                    "Gemini camera: capture failed on both paths"
+                )
             }
 
         } finally {
@@ -1266,6 +1668,20 @@ class RealGlassesBackend @Inject constructor(
             return@channelFlow
         }
 
+        if (
+            microphonePermission() !=
+                CameraPermission.GRANTED
+        ) {
+
+            Log.e(
+                TAG,
+                "Camera Test: microphone permission not granted " +
+                    "(DAT 1.0 camera streams always carry audio)"
+            )
+
+            return@channelFlow
+        }
+
         if (camera != null) {
             stopCameraIfNeeded()
         }
@@ -1275,6 +1691,11 @@ class RealGlassesBackend @Inject constructor(
 
                 activeSession.addCamera(
                     StreamConfiguration(
+                        audioCodec =
+                            AudioCodec.PCM(
+                                AudioSampleRate.RATE_16000,
+                                1,
+                            ),
                         videoQuality =
                             cameraTestVideoQuality,
                         frameRate =
@@ -1305,7 +1726,39 @@ class RealGlassesBackend @Inject constructor(
         camera =
             activeCamera
 
+        // Stream errors were previously invisible: a denied microphone
+        // permission (MICROPHONE_PERMISSION_DENIED) left the stream in
+        // STARTING with nothing in the log. Collect them for the whole
+        // stream lifetime and let the start wait bail on the first one.
+        val firstStreamError =
+            AtomicReference<String?>(null)
+
+        var streamErrorJob: Job? = null
+
         try {
+
+            streamErrorJob =
+                launch {
+
+                    try {
+
+                        activeCamera.stream.errorStream.collect { error ->
+
+                            Log.e(
+                                TAG,
+                                "Camera Test stream error: $error"
+                            )
+
+                            firstStreamError.compareAndSet(
+                                null,
+                                error.toString(),
+                            )
+                        }
+
+                    } catch (_: Exception) {
+                        // Stream is gone; the start/frame paths report.
+                    }
+                }
 
             activeCamera.stream
                 .start()
@@ -1324,12 +1777,16 @@ class RealGlassesBackend @Inject constructor(
                     CAMERA_STREAM_TIMEOUT_MS
                 ) {
 
-                    activeCamera.stream.state.first {
-                        it ==
-                            StreamState.STREAMING
+                    while (
+                        activeCamera.stream.state.value !=
+                            StreamState.STREAMING &&
+                        firstStreamError.get() == null
+                    ) {
+                        delay(200)
                     }
 
-                    true
+                    activeCamera.stream.state.value ==
+                        StreamState.STREAMING
 
                 } ?: false
 
@@ -1337,7 +1794,9 @@ class RealGlassesBackend @Inject constructor(
 
                 Log.e(
                     TAG,
-                    "Camera Test stream did not reach STREAMING"
+                    "Camera Test stream did not reach STREAMING " +
+                        "(state=${activeCamera.stream.state.value}, " +
+                        "firstError=${firstStreamError.get()})"
                 )
 
                 return@channelFlow
@@ -1363,13 +1822,549 @@ class RealGlassesBackend @Inject constructor(
 
         } finally {
 
+            streamErrorJob?.cancel()
+
             stopCameraIfNeeded()
         }
     }
 
     // =========================================================================
+    // LIVE STREAMING (video + glasses-mic audio for RTMP)
+    // =========================================================================
+
+    /**
+     * Starts the camera stream in live configuration — HIGH video at
+     * 24 fps with 44.1 kHz PCM audio from the glasses microphone — and
+     * forwards both frame flows as [LiveFrame]s until the collector is
+     * cancelled. Mirrors the Camera Test stream lifecycle.
+     */
+    override fun liveFrames(): Flow<LiveFrame> = channelFlow {
+
+        Log.i(
+            TAG,
+            "Starting live stream capture"
+        )
+
+        var activeSession =
+            session ?: sharedSession
+
+        if (
+            activeSession == null ||
+            activeSession.state.value !=
+                DeviceSessionState.STARTED
+        ) {
+
+            val connected =
+                try {
+                    connect()
+                } catch (e: Exception) {
+                    Log.e(
+                        TAG,
+                        "Live stream connection failed",
+                        e
+                    )
+                    false
+                }
+
+            if (!connected) {
+                return@channelFlow
+            }
+
+            activeSession =
+                session ?: sharedSession
+        }
+
+        if (
+            activeSession == null ||
+            activeSession.state.value !=
+                DeviceSessionState.STARTED
+        ) {
+            Log.e(
+                TAG,
+                "Live stream: no STARTED DeviceSession"
+            )
+            return@channelFlow
+        }
+
+        if (
+            cameraPermission() !=
+                CameraPermission.GRANTED
+        ) {
+
+            Log.e(
+                TAG,
+                "Live stream: camera permission not granted"
+            )
+
+            return@channelFlow
+        }
+
+        if (
+            microphonePermission() !=
+                CameraPermission.GRANTED
+        ) {
+
+            Log.e(
+                TAG,
+                "Live stream: microphone permission not granted " +
+                    "(DAT 1.0 camera streams always carry audio)"
+            )
+
+            return@channelFlow
+        }
+
+        if (camera != null) {
+            stopCameraIfNeeded()
+        }
+
+        val activeCamera =
+            try {
+
+                activeSession.addCamera(
+                    StreamConfiguration(
+                        audioCodec =
+                            AudioCodec.PCM(
+                                AudioSampleRate.RATE_44100,
+                                1,
+                            ),
+                        videoQuality =
+                            VideoQuality.HIGH,
+                        frameRate =
+                            LIVE_FRAME_RATE,
+                        compressVideo = true,
+                    )
+                ).getOrElse { error ->
+
+                    Log.e(
+                        TAG,
+                        "Live addCamera() failed: $error"
+                    )
+
+                    return@channelFlow
+                }
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Live addCamera() threw",
+                    e
+                )
+
+                return@channelFlow
+            }
+
+        camera =
+            activeCamera
+
+        // See cameraTestFrames: stream errors (notably
+        // MICROPHONE_PERMISSION_DENIED) must be visible, and the
+        // start wait bails on the first one instead of stalling.
+        val firstStreamError =
+            AtomicReference<String?>(null)
+
+        var streamErrorJob: Job? = null
+
+        try {
+
+            streamErrorJob =
+                launch {
+
+                    try {
+
+                        activeCamera.stream.errorStream.collect { error ->
+
+                            Log.e(
+                                TAG,
+                                "Live stream error: $error"
+                            )
+
+                            firstStreamError.compareAndSet(
+                                null,
+                                error.toString(),
+                            )
+                        }
+
+                    } catch (_: Exception) {
+                        // Stream is gone; the start/frame paths report.
+                    }
+                }
+
+            activeCamera.stream
+                .start()
+                .getOrElse { error ->
+
+                    Log.e(
+                        TAG,
+                        "Live stream start failed: $error"
+                    )
+
+                    return@channelFlow
+                }
+
+            val streaming =
+                withTimeoutOrNull(
+                    CAMERA_STREAM_TIMEOUT_MS
+                ) {
+
+                    while (
+                        activeCamera.stream.state.value !=
+                            StreamState.STREAMING &&
+                        firstStreamError.get() == null
+                    ) {
+                        delay(200)
+                    }
+
+                    activeCamera.stream.state.value ==
+                        StreamState.STREAMING
+
+                } ?: false
+
+            if (!streaming) {
+
+                Log.e(
+                    TAG,
+                    "Live stream did not reach STREAMING " +
+                        "(state=${activeCamera.stream.state.value}, " +
+                        "firstError=${firstStreamError.get()})"
+                )
+
+                return@channelFlow
+            }
+
+            Log.i(
+                TAG,
+                "Live stream streaming"
+            )
+
+            val videoJob =
+                launch {
+
+                    try {
+
+                        activeCamera.stream.videoStream.collect { frame ->
+
+                            trySend(
+                                LiveFrame.Video(
+                                    data =
+                                        byteBufferToByteArray(
+                                            frame.buffer
+                                        ),
+                                    width = frame.width,
+                                    height = frame.height,
+                                    ptsUs = frame.presentationTimeUs,
+                                    isCompressed = frame.isCompressed,
+                                    isCodecConfig = frame.isCodecConfig,
+                                )
+                            )
+                        }
+
+                    } catch (e: Exception) {
+
+                        Log.e(
+                            TAG,
+                            "Live video stream failed",
+                            e
+                        )
+                    }
+                }
+
+            val audioJob =
+                launch {
+
+                    try {
+
+                        activeCamera.stream.audioStream.collect { frame ->
+
+                            trySend(
+                                LiveFrame.Audio(
+                                    data =
+                                        byteBufferToByteArray(
+                                            frame.buffer
+                                        ),
+                                    ptsUs = frame.presentationTimeUs,
+                                )
+                            )
+                        }
+
+                    } catch (e: Exception) {
+
+                        Log.e(
+                            TAG,
+                            "Live audio stream failed",
+                            e
+                        )
+                    }
+                }
+
+            videoJob.join()
+            audioJob.cancel()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Live stream failed",
+                e
+            )
+
+        } finally {
+
+            streamErrorJob?.cancel()
+
+            stopCameraIfNeeded()
+        }
+    }
+
+    /**
+     * Waits until [stream] reaches STREAMING (bounded), bailing early on
+     * the first stream error. Returns true on STREAMING.
+     */
+    private suspend fun awaitStreamStreaming(
+        stream: com.meta.wearable.dat.camera.Stream,
+        label: String,
+        timeoutMs: Long = 10_000L,
+    ): Boolean {
+        val firstError =
+            AtomicReference<String?>(null)
+
+        val errorJob =
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    stream.errorStream.collect { error ->
+                        if (firstError.get() == null) {
+                            firstError.set(error.toString())
+                        }
+                    }
+                } catch (_: Exception) {
+                    // Stream ended.
+                }
+            }
+
+        try {
+            val deadline =
+                System.currentTimeMillis() + timeoutMs
+
+            while (System.currentTimeMillis() < deadline) {
+                val error = firstError.get()
+                if (error != null) {
+                    Log.e(
+                        TAG,
+                        "$label: stream error while waiting " +
+                            "for STREAMING: $error"
+                    )
+                    return false
+                }
+                if (stream.state.value == StreamState.STREAMING) {
+                    return true
+                }
+                delay(200)
+            }
+
+            Log.e(
+                TAG,
+                "$label: stream did not reach STREAMING " +
+                    "(state=${stream.state.value})"
+            )
+            return false
+        } finally {
+            errorJob.cancel()
+        }
+    }
+
+    /**
+     * One-shot still capture from the video stream itself
+     * (Stream.capturePhoto). Starts the stream first when needed and
+     * waits for STREAMING. Returns JPEG bytes or null.
+     */
+    private suspend fun captureViaStream(
+        activeCamera: com.meta.wearable.dat.camera.Camera,
+        label: String,
+    ): ByteArray? {
+        val stream = activeCamera.stream
+
+        if (stream.state.value != StreamState.STREAMING) {
+            try {
+                stream.start()
+            } catch (e: Exception) {
+                Log.w(TAG, "$label: stream.start() failed", e)
+            }
+            if (!awaitStreamStreaming(stream, label)) {
+                return null
+            }
+            // Let auto-exposure settle before the still. The pre-1.0
+            // capture waited on the live stream for the same reason;
+            // without it the shot can be a dark, unsettled frame that
+            // OCR and the model can read nothing from.
+            delay(1_000)
+        }
+
+        val result =
+            try {
+                stream.capturePhoto()
+            } catch (e: Exception) {
+                Log.e(TAG, "$label: stream capturePhoto threw", e)
+                return null
+            }
+
+        val data = result.getOrNull()
+        if (data == null) {
+            Log.e(
+                TAG,
+                "$label: stream capture failed: " +
+                    (result.errorOrNull() ?: result.exceptionOrNull())
+            )
+            return null
+        }
+
+        val jpeg = photoDataToJpeg(data)
+        if (jpeg == null || jpeg.isEmpty()) {
+            Log.e(TAG, "$label: stream capture produced no JPEG")
+            return null
+        }
+
+        Log.i(TAG, "$label: stream capture OK (${jpeg.size} bytes)")
+        return jpeg
+    }
+
+    // =========================================================================
     // CAMERA TEST - PHOTO CAPTURE
     // =========================================================================
+
+    /**
+     * Captures a photo using the DAT 1.0.0 standalone Photo API.
+     *
+     * This is the dedicated high-resolution capture path (separate from
+     * the video stream) — PhotoResolution.FULL at PhotoQuality.HIGH.
+     * The video stream is stopped before capture (Stream and Photo
+     * compete for the camera hardware) and restarted afterwards.
+     *
+     * Returns failure if the Photo API is unavailable or the capture
+     * fails, so the caller can fall back to in-stream capturePhoto().
+     */
+    private suspend fun tryPhotoApiCapture(
+        activeCamera: com.meta.wearable.dat.camera.Camera,
+    ): Result<ByteArray> {
+        return try {
+            // Stop the video stream — Photo needs the hardware.
+            try {
+                activeCamera.stream.stop()
+            } catch (e: Exception) {
+                Log.w(TAG, "Photo API: stream.stop() failed", e)
+            }
+
+            val photo = activeCamera.photo
+
+            // Wait for the Photo child to reach STARTED.
+            val started = withTimeoutOrNull(10_000) {
+                photo.state.first { it == PhotoState.STARTED }
+                true
+            } ?: false
+
+            if (!started) {
+                return Result.failure(
+                    IllegalStateException(
+                        "Photo API did not reach STARTED (state=${photo.state.value})"
+                    )
+                )
+            }
+
+            // Collect the result before triggering capture —
+            // photoStream is a SharedFlow, late collectors miss emissions.
+            val captureDeferred = CompletableDeferred<Result<ByteArray>>()
+
+            val collectJob = CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val data = withTimeoutOrNull(30_000) {
+                        photo.photoStream.first()
+                    }
+
+                    if (data == null) {
+                        captureDeferred.complete(
+                            Result.failure(
+                                IllegalStateException(
+                                    "Photo API timed out waiting for capture data"
+                                )
+                            )
+                        )
+                    } else {
+                        val jpeg = data.imageData
+                        if (jpeg.isEmpty()) {
+                            captureDeferred.complete(
+                                Result.failure(
+                                    IllegalStateException(
+                                        "Photo API returned empty image data"
+                                    )
+                                )
+                            )
+                        } else {
+                            Log.i(
+                                TAG,
+                                "Photo API captured: ${jpeg.size} bytes " +
+                                    "(FULL/${PhotoQuality.HIGH})"
+                            )
+                            captureDeferred.complete(Result.success(jpeg))
+                        }
+                    }
+                } catch (e: Exception) {
+                    captureDeferred.complete(Result.failure(e))
+                }
+            }
+
+            // Watch for Photo errors concurrently.
+            val errorJob = CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val error = withTimeoutOrNull(30_000) {
+                        photo.errors.first()
+                    }
+                    if (error != null && !captureDeferred.isCompleted) {
+                        Log.e(TAG, "Photo API error: $error")
+                        captureDeferred.complete(
+                            Result.failure(
+                                IllegalStateException("Photo API error: $error")
+                            )
+                        )
+                    }
+                } catch (_: Exception) {
+                    // Ignore — capture path handles the result.
+                }
+            }
+
+            try {
+                photo.capturePhoto(
+                    resolution = PhotoResolution.FULL,
+                    quality = PhotoQuality.HIGH,
+                )
+
+                captureDeferred.await()
+            } finally {
+                collectJob.cancel()
+                errorJob.cancel()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Photo API capture threw", e)
+            Result.failure(e)
+        } finally {
+            // Restart the video stream for preview and wait until it is
+            // actually STREAMING. A bare start() races the caller, which
+            // then sees a transitional CLOSED state and fails.
+            try {
+                activeCamera.stream.start()
+                val resumed =
+                    awaitStreamStreaming(
+                        activeCamera.stream,
+                        "Photo API",
+                    )
+                Log.i(
+                    TAG,
+                    "Photo API: video stream restarted " +
+                        "(streaming=$resumed)"
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Photo API: stream restart failed", e)
+            }
+        }
+    }
 
     override suspend fun captureCameraTestPhoto():
         Result<ByteArray> {
@@ -1386,87 +2381,38 @@ class RealGlassesBackend @Inject constructor(
             )
         }
 
-        if (
-            activeCamera.stream.state.value !=
-                StreamState.STREAMING
-        ) {
+        // Try the DAT 1.0.0 standalone Photo API first — dedicated
+        // high-resolution capture path (FULL resolution, HIGH quality).
+        // Falls back to in-stream capture if the Photo API fails.
+        val photoApiResult =
+            tryPhotoApiCapture(activeCamera)
 
-            return Result.failure(
-                IllegalStateException(
-                    "Camera stream is not STREAMING: " +
-                        activeCamera.stream.state.value
-                )
-            )
+        if (photoApiResult.isSuccess) {
+            return photoApiResult
         }
 
-        return try {
+        Log.w(
+            TAG,
+            "Photo API capture failed, falling back to stream capture: " +
+                photoApiResult.exceptionOrNull()?.message
+        )
 
-            val captureResult =
-                activeCamera.stream.capturePhoto()
+        // The Photo API attempt stopped and restarted the stream (the
+        // restart is awaited there). Capture through the stream helper,
+        // which waits for STREAMING instead of failing on a
+        // transitional state.
+        val fallbackJpeg =
+            captureViaStream(activeCamera, "Camera Test")
 
-            val photoData =
-                captureResult.getOrNull()
-
-            if (photoData == null) {
-
-                val exception =
-                    captureResult.exceptionOrNull()
-
-                val error =
-                    captureResult.errorOrNull()
-
-                Log.e(
-                    TAG,
-                    "Camera Test photo capture failed: " +
-                        (exception ?: error)
+        return if (fallbackJpeg != null) {
+            Result.success(fallbackJpeg)
+        } else {
+            Result.failure(
+                IllegalStateException(
+                    "Photo capture failed: the Photo API and the " +
+                        "stream capture both returned no image"
                 )
-
-                Result.failure(
-                    exception
-                        ?: IllegalStateException(
-                            "capturePhoto failed: $error"
-                        )
-                )
-
-            } else {
-
-                val jpeg =
-                    photoDataToJpeg(
-                        photoData
-                    )
-
-                if (
-                    jpeg == null ||
-                    jpeg.isEmpty()
-                ) {
-
-                    Result.failure(
-                        IllegalStateException(
-                            "Photo captured but JPEG conversion failed"
-                        )
-                    )
-
-                } else {
-
-                    Log.i(
-                        TAG,
-                        "Camera Test photo captured: " +
-                            "${jpeg.size} bytes"
-                    )
-
-                    Result.success(jpeg)
-                }
-            }
-
-        } catch (e: Exception) {
-
-            Log.e(
-                TAG,
-                "Camera Test capturePhoto() threw",
-                e
             )
-
-            Result.failure(e)
         }
     }
 

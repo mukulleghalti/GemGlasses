@@ -46,6 +46,6 @@ class VisionTool @Inject constructor(
     }
 
     private companion object {
-        const val VISION_BURST_MS = 20_000L
+        const val VISION_BURST_MS = 40_000L
     }
 }

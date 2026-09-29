@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -172,6 +173,9 @@ fun AssistantScreen(
                     onToggleMic = {
                         viewModel.setMicMuted(!micMuted)
                     },
+                    onStop = {
+                        viewModel.stopSession()
+                    },
                 )
             },
             floatingActionButton = {
@@ -207,6 +211,7 @@ private fun AssistantTopBar(
     running: Boolean,
     micMuted: Boolean,
     onToggleMic: () -> Unit,
+    onStop: () -> Unit,
 ) {
     TopAppBar(
         title = { Text(stringResource(R.string.common_assistant)) },
@@ -239,6 +244,14 @@ private fun AssistantTopBar(
                             } else {
                                 MaterialTheme.colorScheme.onSurface
                             },
+                    )
+                }
+                // Stop the session without leaving the screen.
+                IconButton(onClick = onStop) {
+                    Icon(
+                        imageVector = Icons.Default.Stop,
+                        contentDescription = stringResource(R.string.assistant_stop_desc),
+                        tint = MaterialTheme.colorScheme.error,
                     )
                 }
             }

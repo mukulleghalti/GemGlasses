@@ -28,7 +28,7 @@ android {
         // Release branch: every CI build gets a unique, increasing
         // versionCode so public APKs update cleanly over each other.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
-        versionName = "0.3.0"
+        versionName = "0.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // === Existing fields ===
@@ -149,6 +149,8 @@ dependencies {
 
     implementation(libs.mwdat.core)
     implementation(libs.mwdat.camera)
+    implementation(libs.mwdat.inputs)
+    implementation(libs.rootencoder.rtmp)
     implementation(libs.mwdat.display)
     implementation(libs.mwdat.mockdevice)
 

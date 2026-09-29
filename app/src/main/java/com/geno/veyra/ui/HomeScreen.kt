@@ -4,8 +4,13 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,11 +26,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Videocam
+import com.geno.veyra.settings.AiProvider
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,7 +48,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -61,7 +70,9 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     onCameraTestClick: () -> Unit = {},
     onTranslateClick: () -> Unit = {},
+    onLiveClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
+    onOpenAssistant: () -> Unit = {},
     viewModel: AgentViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -82,6 +93,19 @@ fun HomeScreen(
     // clock on each recomposition so it reflects token expiry too.
     val tokenTick by
         viewModel.hasLiveToken.collectAsStateWithLifecycle()
+
+    val prefs by
+        viewModel.preferences.collectAsStateWithLifecycle()
+
+    // No key for the active provider: the assistant cannot run, so say
+    // so up front instead of failing later (tap opens Settings).
+    val noKeySet =
+        when (prefs.aiProvider) {
+            AiProvider.OPENAI -> viewModel.savedOpenAiKey == null
+            AiProvider.GROK -> viewModel.savedGrokKey == null
+            AiProvider.CLAUDE -> viewModel.savedClaudeKey == null
+            AiProvider.GEMINI -> viewModel.savedApiKey == null
+        }
 
     /*
      * IMPORTANT:
@@ -107,6 +131,20 @@ fun HomeScreen(
 
             if (granted) {
                 viewModel.startSession()
+            }
+        }
+
+    // Snap & Translate has its own launcher: a grant starts the
+    // translate session (not a plain session) and opens the
+    // Assistant screen so the user sees the translation happen.
+    val snapTranslateMicLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+
+            if (granted) {
+                viewModel.startSnapTranslate()
+                onOpenAssistant()
             }
         }
 
@@ -143,6 +181,7 @@ fun HomeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -159,7 +198,29 @@ fun HomeScreen(
             device = device,
             onRegisterClick = viewModel::registerGlasses,
             onConnectClick = viewModel::connectGlasses,
+            onDisconnectClick = viewModel::disconnectGlasses,
         )
+
+        if (noKeySet) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSettingsClick() },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor =
+                        MaterialTheme.colorScheme.errorContainer,
+                ),
+            ) {
+                Text(
+                    text = stringResource(R.string.home_no_api_key),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color =
+                        MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(14.dp),
+                )
+            }
+        }
 
         AssistantHero(
             running = running,
@@ -188,12 +249,48 @@ fun HomeScreen(
                 modifier = Modifier.weight(1f),
             )
         }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+
+            QuickTile(
+                title = stringResource(R.string.home_tile_snap_translate),
+                subtitle = stringResource(R.string.home_tile_snap_translate_sub),
+                icon = Icons.Default.Language,
+                onClick = {
+                    if (
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO,
+                        ) == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        viewModel.startSnapTranslate()
+                        onOpenAssistant()
+                    } else {
+                        snapTranslateMicLauncher.launch(
+                            Manifest.permission.RECORD_AUDIO
+                        )
+                    }
+                },
+                modifier = Modifier.weight(1f),
+            )
+
+            QuickTile(
+                title = stringResource(R.string.home_tile_live),
+                subtitle = stringResource(R.string.home_tile_live_sub),
+                icon = Icons.Default.Videocam,
+                onClick = onLiveClick,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 
 /*
  * ---------------------------------------------------------
- * Brand header: V monogram + wordmark, API-key pill at right.
+ * Brand header: Veyra logo + wordmark, API-key pill at right.
  * ---------------------------------------------------------
  */
 
@@ -207,57 +304,17 @@ private fun BrandHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
 
-        Box(
+        // The real Veyra logo (the launcher art, cropped
+        // full-bleed) — replaces the hand-drawn V stroke that
+        // used to sit here.
+        Image(
+            painter = painterResource(R.drawable.veyra_logo),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
             modifier = Modifier
                 .size(48.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            Color(0xFF3B6CFF),
-                            Color(0xFF8B5CF6),
-                        )
-                    )
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-
-            // Drawn V mark. Fixed colors only — no @Composable
-            // theme reads inside a DrawScope.
-            Canvas(
-                modifier = Modifier.size(26.dp)
-            ) {
-
-                val strokeWidth =
-                    3.2.dp.toPx()
-
-                drawPath(
-                    path = Path().apply {
-
-                        moveTo(
-                            size.width * 0.20f,
-                            size.height * 0.16f,
-                        )
-
-                        lineTo(
-                            size.width * 0.50f,
-                            size.height * 0.84f,
-                        )
-
-                        lineTo(
-                            size.width * 0.80f,
-                            size.height * 0.16f,
-                        )
-                    },
-                    color = Color.White,
-                    style = Stroke(
-                        width = strokeWidth,
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round,
-                    ),
-                )
-            }
-        }
+                .clip(RoundedCornerShape(16.dp)),
+        )
 
         Column(
             modifier = Modifier.padding(start = 12.dp),
@@ -375,6 +432,7 @@ private fun GlassesCard(
     device: GlassesDevice?,
     onRegisterClick: () -> Unit,
     onConnectClick: () -> Unit,
+    onDisconnectClick: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -429,6 +487,27 @@ private fun GlassesCard(
                 modifier = Modifier.padding(start = 34.dp),
             )
 
+            device?.batteryPercent?.let { percent ->
+
+                Text(
+                    text =
+                        if (device.batteryCharging == true) {
+                            stringResource(
+                                R.string.home_battery_charging,
+                                percent,
+                            )
+                        } else {
+                            stringResource(
+                                R.string.home_battery,
+                                percent,
+                            )
+                        },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 34.dp),
+                )
+            }
+
             Spacer(
                 modifier = Modifier.height(8.dp)
             )
@@ -476,6 +555,15 @@ private fun GlassesCard(
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.primary,
                     )
+
+                    OutlinedButton(
+                        onClick = onDisconnectClick,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+
+                        Text(stringResource(R.string.home_disconnect_glasses))
+                    }
                 }
 
                 connectionState == ConnectionState.ERROR -> {

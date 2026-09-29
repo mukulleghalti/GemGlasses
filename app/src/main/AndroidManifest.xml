@@ -17,6 +17,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Package visibility (Android 11+): lets us check whether the ChatGPT
+         app is installed for tap-to-start, without QUERY_ALL_PACKAGES -->
+    <queries>
+        <package android:name="com.openai.chatgpt" />
+    </queries>
+
     <!-- Audio permissions for voice assistant -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
@@ -67,6 +73,24 @@
             android:name=".wakeword.WakeWordService"
             android:exported="false"
             android:foregroundServiceType="microphone|connectedDevice" />
+
+        <!-- GlassesInputService: capture-button listener (DAT Inputs) -->
+        <service
+            android:name=".inputs.GlassesInputService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- LiveForegroundService: keeps Go Live publishing alive -->
+        <service
+            android:name=".live.LiveForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- Look and Pay: user-tap confirmation for opening a payment -->
+        <activity
+            android:name=".ui.PaymentConfirmActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <!-- Timer/reminder alerts fired by AlarmManager -->
         <receiver

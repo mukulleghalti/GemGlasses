@@ -26,8 +26,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -41,9 +45,15 @@ import com.geno.veyra.glasses.CameraPermission
 import com.geno.veyra.glasses.GlassesManager
 import com.geno.veyra.smarthome.SmartHomeController
 import com.geno.veyra.ui.AssistantScreen
+import com.geno.veyra.ui.AgentViewModel
+import com.geno.veyra.agent.AgentStatus
+import com.geno.veyra.settings.SettingsRepository
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import com.geno.veyra.ui.CameraSettingsScreen
 import com.geno.veyra.ui.CameraTestScreen
 import com.geno.veyra.ui.HomeScreen
+import com.geno.veyra.ui.LiveScreen
 import com.geno.veyra.ui.SettingsScreen
 import com.geno.veyra.ui.TranslateScreen
 import com.geno.veyra.R
@@ -75,6 +85,62 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var smartHomeController: SmartHomeController
+
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
+
+    /**
+     * Tracks whether the app is coming from the background (or a fresh
+     * launch). True initially so the first onResume counts as a launch.
+     */
+    private var wasInBackground = true
+
+    override fun onResume() {
+        super.onResume()
+        if (wasInBackground) {
+            wasInBackground = false
+            maybeAutoStartAssistant()
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Rotation isn't "background" — don't auto-start after it.
+        if (!isChangingConfigurations) {
+            wasInBackground = true
+        }
+    }
+
+    /**
+     * Starts the assistant when the app is opened and the user enabled
+     * "Start assistant on launch". Fires on cold launch and when the app
+     * is foregrounded from the background (e.g. via a phone-button
+     * shortcut or a Samsung Routine) — but never for in-app navigation,
+     * which doesn't pause the Activity. No-op when the mic permission
+     * isn't granted or a session is already running.
+     */
+    private fun maybeAutoStartAssistant() {
+        lifecycleScope.launch {
+            val enabled =
+                settingsRepository.preferences.first().startAssistantOnLaunch
+            if (!enabled) return@launch
+
+            val micGranted =
+                ContextCompat.checkSelfPermission(
+                    this@MainActivity,
+                    Manifest.permission.RECORD_AUDIO,
+                ) == PackageManager.PERMISSION_GRANTED
+            if (!micGranted) return@launch
+
+            val viewModel =
+                ViewModelProvider(
+                    this@MainActivity,
+                )[AgentViewModel::class.java]
+            if (viewModel.status.value == AgentStatus.IDLE) {
+                viewModel.startSession()
+            }
+        }
+    }
 
     /*
      * ---------------------------------------------------------
@@ -119,7 +185,7 @@ class MainActivity : ComponentActivity() {
 
     /*
      * ---------------------------------------------------------
-     * Meta Wearables CAMERA permission
+     * Meta Wearables permissions (CAMERA + MICROPHONE)
      * ---------------------------------------------------------
      */
 
@@ -141,7 +207,7 @@ class MainActivity : ComponentActivity() {
 
             Log.i(
                 TAG,
-                "Meta camera permission result = $status"
+                "Meta permission result = $status"
             )
 
             val mapped =
@@ -160,8 +226,9 @@ class MainActivity : ComponentActivity() {
             cameraPermissionContinuation = null
         }
 
-    private suspend fun requestMetaCameraPermission():
-        CameraPermission {
+    private suspend fun requestMetaPermission(
+        permission: Permission,
+    ): CameraPermission {
 
         return cameraPermissionMutex.withLock {
 
@@ -176,11 +243,11 @@ class MainActivity : ComponentActivity() {
 
                 Log.i(
                     TAG,
-                    "Launching Meta Wearables CAMERA permission"
+                    "Launching Meta Wearables permission: $permission"
                 )
 
                 cameraPermissionLauncher.launch(
-                    Permission.CAMERA
+                    permission
                 )
             }
         }
@@ -205,7 +272,11 @@ class MainActivity : ComponentActivity() {
         smartHomeController.registerForPermissions(this)
 
         glassesManager.setCameraPermissionRequester {
-            requestMetaCameraPermission()
+            requestMetaPermission(Permission.CAMERA)
+        }
+
+        glassesManager.setMicrophonePermissionRequester {
+            requestMetaPermission(Permission.MICROPHONE)
         }
 
         enableEdgeToEdge()
@@ -493,6 +564,22 @@ private fun VeyraRoot() {
                             restoreState = true
                         }
                     },
+                    onLiveClick = {
+                        navController.navigate("live")
+                    },
+                    onOpenAssistant = {
+                        navController.navigate("transcript") {
+                            popUpTo(
+                                navController.graph
+                                    .findStartDestination()
+                                    .id
+                            ) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                     onSettingsClick = {
                         navController.navigate("settings") {
                             popUpTo(
@@ -524,6 +611,15 @@ private fun VeyraRoot() {
             composable("camera_settings") {
 
                 CameraSettingsScreen(
+                    onBack = {
+                        navController.popBackStack()
+                    },
+                )
+            }
+
+            composable("live") {
+
+                LiveScreen(
                     onBack = {
                         navController.popBackStack()
                     },

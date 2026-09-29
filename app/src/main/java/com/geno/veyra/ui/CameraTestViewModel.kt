@@ -48,6 +48,7 @@ sealed interface CameraTestStatus {
  */
 sealed interface CameraTestError {
     data object PermissionNeeded : CameraTestError
+    data object MicrophonePermissionNeeded : CameraTestError
     data object JpegDecodeFailed : CameraTestError
     data object NoVideoFile : CameraTestError
     data class RecorderFrame(val detail: String) : CameraTestError
@@ -63,6 +64,8 @@ data class CameraTestUiState(
     val capturedPhoto: android.graphics.Bitmap? = null,
     val savedVideoUri: android.net.Uri? = null,
     val error: CameraTestError? = null,
+    /** Last known Meta camera permission state, shown on the screen. */
+    val cameraPermission: CameraPermission = CameraPermission.NOT_DETERMINED,
 )
 
 @HiltViewModel
@@ -121,7 +124,13 @@ class CameraTestViewModel @Inject constructor(
     fun retryCameraPermission() {
         permissionJob?.cancel()
         permissionJob = viewModelScope.launch {
-            applyPermissionResult(backend.requestCameraPermission())
+            val camera = backend.requestCameraPermission()
+            if (camera == CameraPermission.GRANTED) {
+                // The banner's Grant button also recovers the
+                // microphone case (DAT 1.0 streams carry audio).
+                backend.requestMicrophonePermission()
+            }
+            applyPermissionResult(camera)
         }
     }
 
@@ -134,6 +143,7 @@ class CameraTestViewModel @Inject constructor(
         _uiState.value =
             if (result == CameraPermission.GRANTED) {
                 cur.copy(
+                    cameraPermission = result,
                     status =
                         if (
                             cur.status ==
@@ -152,6 +162,7 @@ class CameraTestViewModel @Inject constructor(
                 )
             } else {
                 cur.copy(
+                    cameraPermission = result,
                     status = CameraTestStatus.PermissionNeeded,
                     error = CameraTestError.PermissionNeeded,
                 )
@@ -229,6 +240,40 @@ class CameraTestViewModel @Inject constructor(
                             _uiState.value.copy(
                                 status = CameraTestStatus.PermissionNeeded,
                                 error = CameraTestError.PermissionNeeded,
+                                streaming = false,
+                                cameraPermission = cameraPermission,
+                            )
+
+                        return@launch
+                    }
+
+                    /*
+                     * DAT 1.0 camera streams always include glasses-mic
+                     * audio, so the DAT MICROPHONE permission is also
+                     * required. Without it the stream stalls in STARTING
+                     * forever (MICROPHONE_PERMISSION_DENIED). Prompt for
+                     * it here, right after the camera prompt.
+                     */
+                    val microphonePermission =
+                        backend.requestMicrophonePermission()
+
+                    if (
+                        microphonePermission !=
+                            CameraPermission.GRANTED
+                    ) {
+
+                        Log.w(
+                            TAG,
+                            "Camera Test: Meta microphone permission " +
+                                "not granted ($microphonePermission)",
+                        )
+
+                        _uiState.value =
+                            _uiState.value.copy(
+                                status = CameraTestStatus.PermissionNeeded,
+                                error =
+                                    CameraTestError
+                                        .MicrophonePermissionNeeded,
                                 streaming = false,
                             )
 

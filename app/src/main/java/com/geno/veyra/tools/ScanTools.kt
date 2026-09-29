@@ -4,6 +4,7 @@ import android.graphics.BitmapFactory
 import com.geno.veyra.gemini.protocol.FunctionDeclaration
 import com.geno.veyra.glasses.GlassesCameraSource
 import com.geno.veyra.glasses.GlassesManager
+import com.geno.veyra.state.ConversationStore
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
@@ -25,15 +26,15 @@ import javax.inject.Inject
 private suspend fun captureImage(
     glasses: GlassesManager,
     camera: GlassesCameraSource,
-): Pair<InputImage?, String?> {
+): Triple<InputImage?, String?, ByteArray?> {
     if (!glasses.ensureCameraPermission()) {
-        return null to "Camera permission denied."
+        return Triple(null, "Camera permission denied.", null)
     }
     val jpeg = camera.captureFrame()
-        ?: return null to "Couldn't capture from the glasses camera."
+        ?: return Triple(null, "Couldn't capture from the glasses camera.", null)
     val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
-        ?: return null to "Couldn't decode the camera frame."
-    return InputImage.fromBitmap(bitmap, 0) to null
+        ?: return Triple(null, "Couldn't decode the camera frame.", null)
+    return Triple(InputImage.fromBitmap(bitmap, 0), null, jpeg)
 }
 
 private fun errorResult(message: String?): JsonObject =
@@ -91,7 +92,7 @@ class ScanBarcodeTool @Inject constructor(
     )
 
     override suspend fun execute(args: JsonObject): JsonObject {
-        val (image, error) = captureImage(glasses, camera)
+        val (image, error, _) = captureImage(glasses, camera)
         if (image == null) return errorResult(error)
 
         val scanner = BarcodeScanning.getClient()
@@ -155,7 +156,7 @@ class OcrTool @Inject constructor(
     )
 
     override suspend fun execute(args: JsonObject): JsonObject {
-        val (image, error) = captureImage(glasses, camera)
+        val (image, error, _) = captureImage(glasses, camera)
         if (image == null) return errorResult(error)
 
         val recognizer =
@@ -169,6 +170,81 @@ class OcrTool @Inject constructor(
             buildJsonObject {
                 put("status", "ok")
                 put("text", visionText.text)
+            }
+        } finally {
+            recognizer.close()
+        }
+    }
+}
+
+/**
+ * `translate_view` — Snap & Translate. Captures the user's current view,
+ * reads any text in it (OCR, same path as [OcrTool]), and returns the
+ * text with an instruction to translate it aloud. The Live model does
+ * the translation into the conversation language and speaks it.
+ *
+ * Gated behind the same "OCR" AI Settings toggle as [OcrTool].
+ */
+class TranslateViewTool @Inject constructor(
+    private val glasses: GlassesManager,
+    private val camera: GlassesCameraSource,
+    private val conversation: ConversationStore,
+) : AgentTool {
+
+    override val name = "translate_view"
+
+    override val gate = ToolGate.OCR
+
+    override val declaration = FunctionDeclaration(
+        name = name,
+        description = "Captures the user's current view and reads any " +
+            "text in it (OCR) so you can translate it. Use when the user " +
+            "asks to translate a sign, menu, label, document, or any " +
+            "text they are looking at. Returns the recognized text; " +
+            "translate it into the conversation language and speak the " +
+            "translation.",
+        parameters = schema(
+            """
+            {
+              "type": "object",
+              "properties": {}
+            }
+            """,
+        ),
+    )
+
+    override suspend fun execute(args: JsonObject): JsonObject {
+        val (image, error, jpeg) = captureImage(glasses, camera)
+        if (image == null) return errorResult(error)
+
+        // Show the user what the tool saw, like the vision path does —
+        // a failed OCR is obvious when the photo is in the chat.
+        if (jpeg != null) conversation.addPhoto(jpeg)
+
+        val recognizer =
+            TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        return try {
+            val visionText = runCatching {
+                recognizer.process(image).await()
+            }.getOrElse {
+                return errorResult("Text recognition failed.")
+            }
+            if (visionText.text.isBlank()) {
+                return errorResult(
+                    "No text found in view. Ask the user to aim the " +
+                        "glasses at the text and try again.",
+                )
+            }
+            buildJsonObject {
+                put("status", "ok")
+                put("source_text", visionText.text)
+                put(
+                    "instruction",
+                    "Translate source_text into the conversation " +
+                        "language and speak the translation. Give the " +
+                        "translation first; add the original wording " +
+                        "only if the user asks.",
+                )
             }
         } finally {
             recognizer.close()

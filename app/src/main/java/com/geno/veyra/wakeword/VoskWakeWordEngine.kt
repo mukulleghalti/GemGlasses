@@ -109,17 +109,48 @@ class VoskWakeWordEngine @Inject constructor(
     }
 
     /**
+     * The downloaded speech model directory for the current language,
+     * or null when it has not been downloaded yet. Lets other features
+     * (the Claude provider's on-device dictation) share the wake
+     * word's model instead of downloading a second copy; fetch it with
+     * [downloadModel] when this returns null.
+     */
+    fun modelDirIfReady(): File? {
+        val dir = modelDirFor(resolveLanguage())
+        return if (isModelReady(dir)) dir else null
+    }
+
+    /**
      * Recomputes [modelState] for the current app language. Call when
      * Settings opens — the cached model may belong to another language.
      */
-    override fun refreshModelState() {
-        val dir = modelDirFor(resolveLanguage())
+    override fun refreshModelState() {        val dir = modelDirFor(resolveLanguage())
         _modelState.value =
             if (isModelReady(dir)) {
                 WakeWordModelState.Ready
             } else {
                 WakeWordModelState.NotDownloaded
             }
+    }
+
+    /**
+     * Downloads the model for the current language if needed. Safe to
+     * call when a previous attempt failed — it re-runs the full
+     * download/unzip and updates [modelState].
+     */
+    override suspend fun downloadModel() {
+        startMutex.withLock {
+            val lang = resolveLanguage()
+            // Clear any stale error state; ensureModel updates it.
+            _modelState.value = WakeWordModelState.Downloading(0f)
+            runCatching {
+                ensureModel(lang)
+            }.onFailure { e ->
+                _modelState.value = WakeWordModelState.Error(
+                    e.message ?: "download failed",
+                )
+            }
+        }
     }
 
     /** Base language for the wake model, from the app language picker. */
@@ -310,7 +341,10 @@ class VoskWakeWordEngine @Inject constructor(
             if (now - lastEmitMs > EMIT_COOLDOWN_MS) {
                 lastEmitMs = now
                 Log.i(TAG, "wake word detected (heard \"$partial\")")
-                _detections.emit(activePhrase ?: return)
+                // Emit the full heard text (not just the wake phrase) so
+                // the service can check for commands like "open ChatGPT"
+                // that follow the wake phrase in the same utterance.
+                _detections.emit(partial)
             }
         }
     }

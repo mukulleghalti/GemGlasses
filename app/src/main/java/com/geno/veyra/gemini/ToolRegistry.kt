@@ -5,6 +5,7 @@ import com.geno.veyra.gemini.protocol.FunctionCall
 import com.geno.veyra.gemini.protocol.FunctionResponse
 import com.geno.veyra.gemini.protocol.GoogleSearch
 import com.geno.veyra.gemini.protocol.Tool
+import com.geno.veyra.claude.ClaudeTool
 import com.geno.veyra.openai.realtime.OpenAiFunctionTool
 import com.geno.veyra.tools.AgentTool
 import com.geno.veyra.tools.ToolGate
@@ -21,7 +22,12 @@ data class ToolFlags(
     val webSearch: Boolean = false,
     val qrScan: Boolean = false,
     val ocr: Boolean = false,
+    /** Snap & Translate tile sessions: include translate_view even
+     *  when the OCR toggle is off — the tile tap is the consent. */
+    val translateView: Boolean = false,
     val smartHome: Boolean = false,
+    val lookPay: Boolean = false,
+    val liveStream: Boolean = false,
 )
 
 /**
@@ -46,8 +52,10 @@ class ToolRegistry @Inject constructor(
                     when (tool.gate) {
                         ToolGate.ALWAYS -> true
                         ToolGate.QR_SCAN -> flags.qrScan
-                        ToolGate.OCR -> flags.ocr
+                        ToolGate.OCR -> flags.ocr || (flags.translateView && tool.name == "translate_view")
                         ToolGate.SMART_HOME -> flags.smartHome
+                        ToolGate.LOOK_PAY -> flags.lookPay
+                        ToolGate.LIVE_STREAM -> flags.liveStream
                     }
                 }
                 .map { it.declaration }
@@ -76,8 +84,10 @@ class ToolRegistry @Inject constructor(
                 when (tool.gate) {
                     ToolGate.ALWAYS -> true
                     ToolGate.QR_SCAN -> flags.qrScan
-                    ToolGate.OCR -> flags.ocr
+                    ToolGate.OCR -> flags.ocr || (flags.translateView && tool.name == "translate_view")
                     ToolGate.SMART_HOME -> flags.smartHome
+                    ToolGate.LOOK_PAY -> flags.lookPay
+                    ToolGate.LIVE_STREAM -> flags.liveStream
                 }
             }
             .map { tool ->
@@ -86,6 +96,31 @@ class ToolRegistry @Inject constructor(
                     name = tool.declaration.name,
                     description = tool.declaration.description,
                     parameters = tool.declaration.parameters,
+                )
+            }
+
+    /**
+     * The `tools` array sent to the Anthropic Messages API (Claude
+     * provider). Same toggle gating as [asOpenAiTools]; the
+     * `input_schema` JSON Schema passes through verbatim.
+     */
+    fun asClaudeTools(flags: ToolFlags): List<ClaudeTool> =
+        byName.values
+            .filter { tool ->
+                when (tool.gate) {
+                    ToolGate.ALWAYS -> true
+                    ToolGate.QR_SCAN -> flags.qrScan
+                    ToolGate.OCR -> flags.ocr || (flags.translateView && tool.name == "translate_view")
+                    ToolGate.SMART_HOME -> flags.smartHome
+                    ToolGate.LOOK_PAY -> flags.lookPay
+                    ToolGate.LIVE_STREAM -> flags.liveStream
+                }
+            }
+            .map { tool ->
+                ClaudeTool(
+                    name = tool.declaration.name,
+                    description = tool.declaration.description,
+                    input_schema = tool.declaration.parameters,
                 )
             }
 

@@ -19,7 +19,7 @@ securityCrypto = "1.1.0"
 # Meta Wearables Device Access Toolkit (GitHub Packages). Pin explicitly; the
 # artifact is only resolved when a github_token is configured (see settings.gradle.kts).
 
-mwdat = "0.9.0"
+mwdat = "1.0.1"
 
 # Test
 junit = "4.13.2"
@@ -60,6 +60,8 @@ androidx-security-crypto = { group = "androidx.security", name = "security-crypt
 
 mwdat-core = { group = "com.meta.wearable", name = "mwdat-core", version.ref = "mwdat" }
 mwdat-camera = { group = "com.meta.wearable", name = "mwdat-camera", version.ref = "mwdat" }
+mwdat-inputs = { group = "com.meta.wearable", name = "mwdat-inputs", version.ref = "mwdat" }
+rootencoder-rtmp = { group = "com.github.pedroSG94.RootEncoder", name = "rtmp", version = "2.5.0" }
 mwdat-display = { group = "com.meta.wearable", name = "mwdat-display", version.ref = "mwdat" }
 mwdat-mockdevice = { group = "com.meta.wearable", name = "mwdat-mockdevice", version.ref = "mwdat" }
 

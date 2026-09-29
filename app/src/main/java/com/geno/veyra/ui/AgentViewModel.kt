@@ -1,10 +1,14 @@
 package com.geno.veyra.ui
 
 import android.app.Application
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.geno.veyra.R
 import com.geno.veyra.agent.AgentController
 import com.geno.veyra.agent.AgentStatus
 import com.geno.veyra.audio.MicMuteController
@@ -13,14 +17,19 @@ import com.geno.veyra.glasses.GlassesDevice
 import com.geno.veyra.glasses.GlassesManager
 import com.geno.veyra.glasses.RegistrationState
 import com.geno.veyra.glasses.ConnectionState
+import com.geno.veyra.claude.ClaudeConnectionCheck
+import com.geno.veyra.grok.GrokConnectionCheck
 import com.geno.veyra.openai.OpenAiConnectionCheck
 import com.geno.veyra.service.AgentForegroundService
+import com.geno.veyra.live.LiveStreamManager
 import com.geno.veyra.service.AssistantStarter
 import com.geno.veyra.settings.AgentPreferences
 import com.geno.veyra.settings.AiProvider
 import com.geno.veyra.settings.AppLocaleStore
 import com.geno.veyra.settings.AudioOutput
 import com.geno.veyra.settings.GeminiKeyRepository
+import com.geno.veyra.settings.ClaudeKeyRepository
+import com.geno.veyra.settings.GrokKeyRepository
 import com.geno.veyra.settings.OpenAiKeyRepository
 import com.geno.veyra.settings.Memory
 import com.geno.veyra.settings.MemoryRepository
@@ -61,9 +70,14 @@ class AgentViewModel @Inject constructor(
     private val tokenProvider: TokenProvider,
     private val openAiKeyRepository: OpenAiKeyRepository,
     private val openAiConnectionCheck: OpenAiConnectionCheck,
+    private val grokKeyRepository: GrokKeyRepository,
+    private val grokConnectionCheck: GrokConnectionCheck,
+    private val claudeKeyRepository: ClaudeKeyRepository,
+    private val claudeConnectionCheck: ClaudeConnectionCheck,
     private val micMute: MicMuteController,
     private val memoryRepository: MemoryRepository,
     private val smartHome: SmartHomeController,
+    private val liveStreamManager: LiveStreamManager,
 ) : AndroidViewModel(application) {
 
     val status: StateFlow<AgentStatus> =
@@ -181,6 +195,18 @@ class AgentViewModel @Inject constructor(
         }
     }
 
+    /** Releases the glasses session (Home → Disconnect glasses). */
+    fun disconnectGlasses() {
+        viewModelScope.launch {
+            try {
+                glassesManager.disconnect()
+                Log.i(TAG, "Glasses session released")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error disconnecting glasses", e)
+            }
+        }
+    }
+
     /**
      * Changes the Gemini voice.
      */
@@ -196,6 +222,15 @@ class AgentViewModel @Inject constructor(
     fun setWakeWordEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settings.setWakeWordEnabled(enabled)
+        }
+    }
+
+    /**
+     * Toggles auto-starting the assistant when the app launches.
+     */
+    fun setStartAssistantOnLaunch(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setStartAssistantOnLaunch(enabled)
         }
     }
 
@@ -220,6 +255,20 @@ class AgentViewModel @Inject constructor(
     /** Re-reads wake-model readiness for the current app language. */
     fun refreshWakeWordModelState() {
         wakeWordEngine.refreshModelState()
+    }
+
+    /**
+     * Retries the wake-word model download for the current app language.
+     * Call when [wakeWordModelState] is [WakeWordModelState.Error].
+     */
+    fun retryWakeWordDownload() {
+        viewModelScope.launch {
+            try {
+                wakeWordEngine.downloadModel()
+            } catch (e: Exception) {
+                // The engine already sets Error state; nothing more to do.
+            }
+        }
     }
 
     /**
@@ -299,6 +348,33 @@ class AgentViewModel @Inject constructor(
         }
     }
 
+    fun setVoiceChatGptEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setVoiceChatGptEnabled(enabled)
+        }
+    }
+
+    /**
+     * Opens the system assistant picker. Android does not let apps change
+     * the default assistant programmatically (system-guarded setting), so
+     * this deep-links the user straight to the picker instead: one tap,
+     * choose ChatGPT, done. Falls back to the default-apps screen on OEM
+     * skins that hide the voice-input settings page.
+     */
+    fun openDefaultAssistantSettings(context: Context) {
+        val voiceInput =
+            Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val defaultApps =
+            Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (voiceInput.resolveActivity(context.packageManager) != null) {
+            context.startActivity(voiceInput)
+        } else {
+            context.startActivity(defaultApps)
+        }
+    }
+
     /**
      * Persists the app UI language. Callers should recreate the activity
      * afterwards so the new locale applies immediately.
@@ -344,6 +420,86 @@ class AgentViewModel @Inject constructor(
     fun setSmartHomeEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settings.setSmartHomeEnabled(enabled)
+        }
+    }
+
+    fun setLookPayEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setLookPayEnabled(enabled)
+        }
+    }
+
+    // --- Snap & Translate ------------------------------------------------
+
+    /**
+     * Starts a session whose first request is a translation of the text
+     * in front of the user (the model uses the translate_view tool).
+     * No-op while a session is already running — the user can just ask.
+     * Caller must have RECORD_AUDIO permission.
+     */
+    fun startSnapTranslate() {
+        val text = "Translate the text in front of me and speak " +
+            "the translation."
+        // Session already live: inject the request into it. The old
+        // behaviour returned silently here, so the tile only ever
+        // worked from a cold start.
+        if (controller.sendUserText(text)) return
+        if (controller.status.value != AgentStatus.IDLE) return
+        assistantStarter.start(
+            initialText = text,
+            boostTranslateView = true,
+        )
+    }
+
+    // --- Go Live ----------------------------------------------------------
+
+    val liveStatus: StateFlow<LiveStreamManager.Status> =
+        liveStreamManager.status
+
+    private val _liveStartError = MutableStateFlow<String?>(null)
+    val liveStartError: StateFlow<String?> = _liveStartError
+
+    fun startLive() {
+        viewModelScope.launch {
+            _liveStartError.value = null
+            // Same Meta camera permission the Camera Test uses: prompt
+            // here if needed, so Go Live never dies silently on it.
+            if (!glassesManager.ensureCameraPermission()) {
+                _liveStartError.value =
+                    getApplication<Application>().getString(
+                        R.string.live_error_camera_permission,
+                    )
+                return@launch
+            }
+            _liveStartError.value = liveStreamManager.start()
+        }
+    }
+
+    fun stopLive() {
+        liveStreamManager.stop()
+    }
+
+    fun setLiveStreamEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setLiveStreamEnabled(enabled)
+        }
+    }
+
+    fun setLiveStreamUrl(url: String) {
+        viewModelScope.launch {
+            settings.setLiveStreamUrl(url)
+        }
+    }
+
+    fun setLiveStreamKey(key: String) {
+        viewModelScope.launch {
+            settings.setLiveStreamKey(key)
+        }
+    }
+
+    fun setCaptureButtonEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setCaptureButtonEnabled(enabled)
         }
     }
 
@@ -483,6 +639,87 @@ class AgentViewModel @Inject constructor(
     fun clearOpenAiKey() {
         openAiKeyRepository.clearKey()
         _openAiKeyState.value = ApiKeyState.Missing
+    }
+
+    fun setGrokModel(modelId: String) {
+        viewModelScope.launch {
+            settings.setGrokModel(modelId)
+        }
+    }
+
+    // --- Grok (xAI) API key --------------------------------------------------
+
+    /** Status of the saved Grok key, verified against xAI's API. */
+    private val _grokKeyState = MutableStateFlow<ApiKeyState>(
+        if (grokKeyRepository.hasKey()) ApiKeyState.Unchecked else ApiKeyState.Missing,
+    )
+    val grokKeyState: StateFlow<ApiKeyState> = _grokKeyState
+
+    /** The saved Grok key, for prefilling the Settings field. */
+    val savedGrokKey: String?
+        get() = grokKeyRepository.getKey()
+
+    /**
+     * Saves the key verbatim (no format checks) and immediately verifies
+     * it against xAI's /v1/models endpoint, mirroring [saveOpenAiKey].
+     */
+    fun saveGrokKey(key: String) {
+        viewModelScope.launch {
+            grokKeyRepository.saveKey(key)
+            _grokKeyState.value = ApiKeyState.Checking
+            _grokKeyState.value = try {
+                grokConnectionCheck.verifyKey(key)
+                ApiKeyState.Valid
+            } catch (e: Exception) {
+                ApiKeyState.Invalid(e.message)
+            }
+        }
+    }
+
+    fun clearGrokKey() {
+        grokKeyRepository.clearKey()
+        _grokKeyState.value = ApiKeyState.Missing
+    }
+
+    fun setClaudeModel(modelId: String) {
+        viewModelScope.launch {
+            settings.setClaudeModel(modelId)
+        }
+    }
+
+    // --- Claude (Anthropic) API key ------------------------------------------
+
+    /** Status of the saved Claude key, verified against Anthropic's API. */
+    private val _claudeKeyState = MutableStateFlow<ApiKeyState>(
+        if (claudeKeyRepository.hasKey()) ApiKeyState.Unchecked else ApiKeyState.Missing,
+    )
+    val claudeKeyState: StateFlow<ApiKeyState> = _claudeKeyState
+
+    /** The saved Claude key, for prefilling the Settings field. */
+    val savedClaudeKey: String?
+        get() = claudeKeyRepository.getKey()
+
+    /**
+     * Saves the key verbatim (no format checks) and immediately verifies
+     * it against Anthropic's /v1/models endpoint, mirroring
+     * [saveOpenAiKey].
+     */
+    fun saveClaudeKey(key: String) {
+        viewModelScope.launch {
+            claudeKeyRepository.saveKey(key)
+            _claudeKeyState.value = ApiKeyState.Checking
+            _claudeKeyState.value = try {
+                claudeConnectionCheck.verifyKey(key)
+                ApiKeyState.Valid
+            } catch (e: Exception) {
+                ApiKeyState.Invalid(e.message)
+            }
+        }
+    }
+
+    fun clearClaudeKey() {
+        claudeKeyRepository.clearKey()
+        _claudeKeyState.value = ApiKeyState.Missing
     }
 
     /**

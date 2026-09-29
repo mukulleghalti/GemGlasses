@@ -31,7 +31,7 @@ class MockGlassesBackend : GlassesBackend {
     override val registrationState: Flow<RegistrationState> = _registration
 
     private val _devices = MutableStateFlow(
-        listOf(GlassesDevice(id = "mock-raybans", name = "Ray-Ban Meta (Mock)", connected = true)),
+        listOf(GlassesDevice(id = "mock-raybans", name = "Ray-Ban Meta (Mock)", connected = true, batteryPercent = 82, batteryCharging = false, donState = "DONNED", hingeState = "OPEN", thermalLevel = "NONE")),
     )
     override val devices: Flow<List<GlassesDevice>> = _devices
 

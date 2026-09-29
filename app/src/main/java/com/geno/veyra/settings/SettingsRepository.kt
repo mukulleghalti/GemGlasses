@@ -8,6 +8,10 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.geno.veyra.R
+import com.geno.veyra.claude.CLAUDE_MODELS
+import com.geno.veyra.claude.DEFAULT_CLAUDE_MODEL
+import com.geno.veyra.grok.DEFAULT_GROK_VOICE_MODEL
+import com.geno.veyra.grok.GROK_VOICE_MODELS
 import com.geno.veyra.openai.DEFAULT_OPENAI_VOICE_MODEL
 import com.geno.veyra.openai.OPENAI_VOICE_MODELS
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -106,18 +110,27 @@ data class AgentPreferences(
     val cameraFrameRate: Int,
     val wakeWordEnabled: Boolean,
     val wakePhrase: String,
+    val startAssistantOnLaunch: Boolean,
     val stopPhrase: String,
     val audioOutput: AudioOutput,
     val bargeInEnabled: Boolean,
     val sessionBeepEnabled: Boolean,
+    val voiceChatGptEnabled: Boolean,
     val webSearchEnabled: Boolean,
     val autoHistoryTitles: Boolean,
     val qrScanEnabled: Boolean,
     val ocrEnabled: Boolean,
     val smartHomeEnabled: Boolean,
+    val lookPayEnabled: Boolean,
+    val captureButtonEnabled: Boolean,
+    val liveStreamEnabled: Boolean,
+    val liveStreamUrl: String,
+    val liveStreamKey: String,
     val liveModel: String,
     val aiProvider: AiProvider,
     val chatGptModel: String,
+    val grokModel: String,
+    val claudeModel: String,
 ) {
     /** Built here so the persona text stays in one place. */
     val systemInstruction: String
@@ -146,6 +159,17 @@ data class AgentPreferences(
                 append(
                     "\n\nQR/barcode scanning is enabled: when the user " +
                         "asks to scan a code, call scan_barcode.",
+                )
+            }
+            if (lookPayEnabled) {
+                append(
+                    "\n\nLook and Pay is enabled: when the user asks to " +
+                        "scan a QR code to pay, call scan_pay_qr. Announce " +
+                        "the payment app, recipient, and amount (when " +
+                        "available) to the user, then ASK for confirmation " +
+                        "before calling open_payment_app. Only call " +
+                        "open_payment_app after the user confirms. Never " +
+                        "invent or modify payment details.",
                 )
             }
             if (ocrEnabled) {
@@ -178,22 +202,31 @@ data class AgentPreferences(
         val DEFAULT = AgentPreferences(
             languageCode = "en",
             voiceName = "Puck",
-            cameraResolution = CameraResolution.MEDIUM,
-            cameraFrameRate = 24,
+            cameraResolution = CameraResolution.HIGH,
+            cameraFrameRate = 30,
             wakeWordEnabled = false,
             wakePhrase = DEFAULT_WAKE_PHRASE,
+            startAssistantOnLaunch = false,
             stopPhrase = DEFAULT_STOP_PHRASE,
             audioOutput = AudioOutput.GLASSES,
             bargeInEnabled = true,
             sessionBeepEnabled = true,
+            voiceChatGptEnabled = false,
             webSearchEnabled = false,
             autoHistoryTitles = true,
             qrScanEnabled = false,
             ocrEnabled = false,
             smartHomeEnabled = false,
+            lookPayEnabled = false,
+            captureButtonEnabled = false,
+            liveStreamEnabled = false,
+            liveStreamUrl = "",
+            liveStreamKey = "",
             liveModel = DEFAULT_LIVE_MODEL,
             aiProvider = AiProvider.GEMINI,
             chatGptModel = DEFAULT_OPENAI_VOICE_MODEL,
+            grokModel = DEFAULT_GROK_VOICE_MODEL,
+            claudeModel = DEFAULT_CLAUDE_MODEL,
         )
 
         /** Default wake phrase ("Hey Glasses"). Lowercase: Vosk decodes lowercase. */
@@ -213,6 +246,10 @@ data class AgentPreferences(
             
             Use tools when appropriate:
             - To see what the user is looking at, use capture_vision.
+            - When the user asks you to translate text they are looking at,
+              use capture_vision, read the text in the image, and translate
+              it into the language they name — or the conversation language
+              if they do not name one.
             - To find real places, use search_places. Never invent business or place names.
             - To navigate, use start_navigation.
             - To send a message, use send_message.
@@ -366,6 +403,9 @@ class SettingsRepository @Inject constructor(
     private val wakeWordEnabledKey =
         booleanPreferencesKey("wake_word_enabled")
 
+    private val startAssistantOnLaunchKey =
+        booleanPreferencesKey("start_assistant_on_launch")
+
     private val wakePhraseKey =
         stringPreferencesKey("wake_phrase")
 
@@ -380,6 +420,9 @@ class SettingsRepository @Inject constructor(
 
     private val sessionBeepEnabledKey =
         booleanPreferencesKey("session_beep_enabled")
+
+    private val voiceChatGptEnabledKey =
+        booleanPreferencesKey("voice_chatgpt_enabled")
 
     private val webSearchEnabledKey =
         booleanPreferencesKey("web_search_enabled")
@@ -396,6 +439,21 @@ class SettingsRepository @Inject constructor(
     private val smartHomeEnabledKey =
         booleanPreferencesKey("smart_home_enabled")
 
+    private val lookPayEnabledKey =
+        booleanPreferencesKey("look_pay_enabled")
+
+    private val captureButtonEnabledKey =
+        booleanPreferencesKey("capture_button_enabled")
+
+    private val liveStreamEnabledKey =
+        booleanPreferencesKey("live_stream_enabled")
+
+    private val liveStreamUrlKey =
+        stringPreferencesKey("live_stream_url")
+
+    private val liveStreamKeyKey =
+        stringPreferencesKey("live_stream_key")
+
     private val liveModelKey =
         stringPreferencesKey("live_model")
 
@@ -404,6 +462,12 @@ class SettingsRepository @Inject constructor(
 
     private val chatGptModelKey =
         stringPreferencesKey("chatgpt_model")
+
+    private val grokModelKey =
+        stringPreferencesKey("grok_model")
+
+    private val claudeModelKey =
+        stringPreferencesKey("claude_model")
 
     private val translateSourceLangKey =
         stringPreferencesKey("translate_source_lang")
@@ -460,6 +524,10 @@ class SettingsRepository @Inject constructor(
                     prefs[wakeWordEnabledKey]
                         ?: AgentPreferences.DEFAULT.wakeWordEnabled,
 
+                startAssistantOnLaunch =
+                    prefs[startAssistantOnLaunchKey]
+                        ?: AgentPreferences.DEFAULT.startAssistantOnLaunch,
+
                 wakePhrase =
                     prefs[wakePhraseKey]
                         ?: defaultWakePhrase(
@@ -483,6 +551,10 @@ class SettingsRepository @Inject constructor(
                     prefs[sessionBeepEnabledKey]
                         ?: AgentPreferences.DEFAULT.sessionBeepEnabled,
 
+                voiceChatGptEnabled =
+                    prefs[voiceChatGptEnabledKey]
+                        ?: AgentPreferences.DEFAULT.voiceChatGptEnabled,
+
                 webSearchEnabled =
                     prefs[webSearchEnabledKey]
                         ?: AgentPreferences.DEFAULT.webSearchEnabled,
@@ -503,6 +575,26 @@ class SettingsRepository @Inject constructor(
                     prefs[smartHomeEnabledKey]
                         ?: AgentPreferences.DEFAULT.smartHomeEnabled,
 
+                lookPayEnabled =
+                    prefs[lookPayEnabledKey]
+                        ?: AgentPreferences.DEFAULT.lookPayEnabled,
+
+                captureButtonEnabled =
+                    prefs[captureButtonEnabledKey]
+                        ?: AgentPreferences.DEFAULT.captureButtonEnabled,
+
+                liveStreamEnabled =
+                    prefs[liveStreamEnabledKey]
+                        ?: AgentPreferences.DEFAULT.liveStreamEnabled,
+
+                liveStreamUrl =
+                    prefs[liveStreamUrlKey]
+                        ?: AgentPreferences.DEFAULT.liveStreamUrl,
+
+                liveStreamKey =
+                    prefs[liveStreamKeyKey]
+                        ?: AgentPreferences.DEFAULT.liveStreamKey,
+
                 liveModel =
                     prefs[liveModelKey]
                         ?: AgentPreferences.DEFAULT.liveModel,
@@ -519,6 +611,20 @@ class SettingsRepository @Inject constructor(
                             OPENAI_VOICE_MODELS.any { it.id == id }
                         }
                         ?: AgentPreferences.DEFAULT.chatGptModel,
+
+                grokModel =
+                    prefs[grokModelKey]
+                        ?.takeIf { id ->
+                            GROK_VOICE_MODELS.any { it.id == id }
+                        }
+                        ?: AgentPreferences.DEFAULT.grokModel,
+
+                claudeModel =
+                    prefs[claudeModelKey]
+                        ?.takeIf { id ->
+                            CLAUDE_MODELS.any { it.id == id }
+                        }
+                        ?: AgentPreferences.DEFAULT.claudeModel,
             )
         }
 
@@ -579,6 +685,14 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    suspend fun setStartAssistantOnLaunch(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[startAssistantOnLaunchKey] = enabled
+        }
+    }
+
     suspend fun setWakePhrase(
         phrase: String,
     ) {
@@ -629,6 +743,14 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    suspend fun setVoiceChatGptEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[voiceChatGptEnabledKey] = enabled
+        }
+    }
+
     suspend fun setWebSearchEnabled(
         enabled: Boolean,
     ) {
@@ -669,6 +791,46 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    suspend fun setLookPayEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[lookPayEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setCaptureButtonEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[captureButtonEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setLiveStreamEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[liveStreamEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setLiveStreamUrl(
+        url: String,
+    ) {
+        context.dataStore.edit {
+            it[liveStreamUrlKey] = url
+        }
+    }
+
+    suspend fun setLiveStreamKey(
+        key: String,
+    ) {
+        context.dataStore.edit {
+            it[liveStreamKeyKey] = key
+        }
+    }
+
     suspend fun setLiveModel(
         modelId: String,
     ) {
@@ -690,6 +852,22 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[chatGptModelKey] = modelId
+        }
+    }
+
+    suspend fun setGrokModel(
+        modelId: String,
+    ) {
+        context.dataStore.edit {
+            it[grokModelKey] = modelId
+        }
+    }
+
+    suspend fun setClaudeModel(
+        modelId: String,
+    ) {
+        context.dataStore.edit {
+            it[claudeModelKey] = modelId
         }
     }
 }

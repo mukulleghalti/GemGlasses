@@ -50,6 +50,13 @@ interface WakeWordEngine {
     fun refreshModelState()
 
     /**
+     * Downloads the model for the current app language (if not already
+     * present). Updates [modelState] with progress, Ready on success,
+     * or Error on failure. Does not start listening.
+     */
+    suspend fun downloadModel()
+
+    /**
      * Test mode: listens for [timeoutMs] with the current language's model
      * and reports whether [phrase] would have triggered, using the same
      * decoder and phrase matcher as live detection. Each decoded fragment

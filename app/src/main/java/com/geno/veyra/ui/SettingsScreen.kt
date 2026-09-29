@@ -65,6 +65,8 @@ import com.geno.veyra.settings.LIVE_MODELS
 import com.geno.veyra.settings.LocaleHelper
 import com.geno.veyra.settings.defaultWakePhrase
 import com.geno.veyra.settings.wakeBaseLanguage
+import com.geno.veyra.claude.CLAUDE_MODELS
+import com.geno.veyra.grok.GROK_VOICE_MODELS
 import com.geno.veyra.openai.OPENAI_VOICE_MODELS
 import com.geno.veyra.wakeword.WakeWordModelState
 
@@ -91,8 +93,12 @@ fun SettingsScreen(
     var showProviderDialog by remember { mutableStateOf(false) }
     var showChatGptKeyDialog by remember { mutableStateOf(false) }
     var showChatGptModelDialog by remember { mutableStateOf(false) }
+    var showGrokKeyDialog by remember { mutableStateOf(false) }
+    var showGrokModelDialog by remember { mutableStateOf(false) }
+    var showClaudeKeyDialog by remember { mutableStateOf(false) }
+    var showClaudeModelDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
-    var advancedExpanded by remember { mutableStateOf(false) }
+    var showDiagnosticsDialog by remember { mutableStateOf(false) }
 
     val selectedVoice = VOICES.firstOrNull { it.name == prefs.voiceName }
     val voiceLabel = selectedVoice?.let {
@@ -110,9 +116,12 @@ fun SettingsScreen(
     val apiKeySet = viewModel.savedApiKey != null
     val apiKeyState by viewModel.apiKeyState.collectAsStateWithLifecycle()
     val openAiKeySet = viewModel.savedOpenAiKey != null
+    val grokKeySet = viewModel.savedGrokKey != null
+    val claudeKeySet = viewModel.savedClaudeKey != null
     val appLanguageTag by viewModel.appLanguage.collectAsStateWithLifecycle()
     val appLanguage = AppLanguage.fromTag(appLanguageTag)
     val activity = LocalContext.current as? Activity
+    val appContext = LocalContext.current.applicationContext
     val smartHomeConnected by viewModel.smartHomeConnected.collectAsStateWithLifecycle()
 
     Column(
@@ -172,6 +181,21 @@ fun SettingsScreen(
             },
         )
         SettingRow(
+            title = stringResource(R.string.settings_voice_chatgpt),
+            subtitle = stringResource(R.string.settings_voice_chatgpt_sub),
+            trailing = {
+                Switch(
+                    checked = prefs.voiceChatGptEnabled,
+                    onCheckedChange = { viewModel.setVoiceChatGptEnabled(it) },
+                )
+            },
+        )
+        SettingRow(
+            title = stringResource(R.string.settings_default_assistant),
+            subtitle = stringResource(R.string.settings_default_assistant_sub),
+            onClick = { viewModel.openDefaultAssistantSettings(appContext) },
+        )
+        SettingRow(
             title = stringResource(R.string.settings_stop_phrase),
             value = stopLabel,
             onClick = { showStopPhraseDialog = true },
@@ -182,6 +206,16 @@ fun SettingsScreen(
             title = stringResource(R.string.settings_voice_wakeup),
             subtitle = wakeSubtitle,
             onClick = { showWakeDialog = true },
+        )
+        SettingRow(
+            title = stringResource(R.string.settings_start_assistant_on_launch),
+            subtitle = stringResource(R.string.settings_start_assistant_on_launch_sub),
+            trailing = {
+                Switch(
+                    checked = prefs.startAssistantOnLaunch,
+                    onCheckedChange = { viewModel.setStartAssistantOnLaunch(it) },
+                )
+            },
         )
 
         SectionLabel(stringResource(R.string.settings_section_memory))
@@ -195,10 +229,18 @@ fun SettingsScreen(
         SettingRow(
             title = stringResource(R.string.settings_ai_provider),
             value = stringResource(
-                if (prefs.aiProvider == AiProvider.OPENAI) {
-                    R.string.settings_provider_chatgpt
-                } else {
-                    R.string.settings_provider_gemini
+                when (prefs.aiProvider) {
+                    AiProvider.OPENAI ->
+                        R.string.settings_provider_chatgpt
+
+                    AiProvider.GROK ->
+                        R.string.settings_provider_grok
+
+                    AiProvider.CLAUDE ->
+                        R.string.settings_provider_claude
+
+                    AiProvider.GEMINI ->
+                        R.string.settings_provider_gemini
                 },
             ),
             onClick = { showProviderDialog = true },
@@ -214,6 +256,49 @@ fun SettingsScreen(
                 onClick = { showChatGptKeyDialog = true },
             )
         }
+        if (prefs.aiProvider == AiProvider.GROK) {
+            SettingRow(
+                title = stringResource(R.string.settings_grok_key),
+                value = if (grokKeySet) {
+                    stringResource(R.string.settings_api_key_set)
+                } else {
+                    stringResource(R.string.settings_api_key_not_set)
+                },
+                onClick = { showGrokKeyDialog = true },
+            )
+        }
+        if (prefs.aiProvider == AiProvider.CLAUDE) {
+            SettingRow(
+                title = stringResource(R.string.settings_claude_key),
+                value = if (claudeKeySet) {
+                    stringResource(R.string.settings_api_key_set)
+                } else {
+                    stringResource(R.string.settings_api_key_not_set)
+                },
+                onClick = { showClaudeKeyDialog = true },
+            )
+        }
+        if (prefs.aiProvider == AiProvider.GEMINI) {
+            SettingRow(
+                title = stringResource(R.string.settings_api_key),
+                value = if (apiKeySet) stringResource(R.string.settings_api_key_set) else stringResource(R.string.settings_api_key_not_set),
+                onClick = { showApiKeyDialog = true },
+            )
+            SettingRow(
+                title = stringResource(R.string.settings_check_connection),
+                value = when (val state = apiKeyState) {
+                    is AgentViewModel.ApiKeyState.Checking -> stringResource(R.string.settings_conn_checking)
+                    is AgentViewModel.ApiKeyState.Valid -> stringResource(R.string.settings_conn_ok)
+                    is AgentViewModel.ApiKeyState.Invalid ->
+                        (state.message
+                            ?: stringResource(R.string.settings_conn_fallback)).take(40)
+
+                    is AgentViewModel.ApiKeyState.Missing -> stringResource(R.string.settings_conn_missing)
+                    is AgentViewModel.ApiKeyState.Unchecked -> stringResource(R.string.settings_conn_tap)
+                },
+                onClick = { viewModel.checkConnection() },
+            )
+        }
         SettingRow(
             title = stringResource(R.string.settings_web_search),
             subtitle = stringResource(R.string.settings_web_search_sub),
@@ -224,21 +309,45 @@ fun SettingsScreen(
                 )
             },
         )
-        if (prefs.aiProvider == AiProvider.OPENAI) {
-            SettingRow(
-                title = stringResource(R.string.settings_chatgpt_model),
-                value = OPENAI_VOICE_MODELS.firstOrNull {
-                    it.id == prefs.chatGptModel
-                }?.label ?: prefs.chatGptModel,
-                onClick = { showChatGptModelDialog = true },
-            )
-        } else {
-            SettingRow(
-                title = stringResource(R.string.settings_gemini_model),
-                value = LIVE_MODELS.firstOrNull { it.id == prefs.liveModel }
-                    ?.label ?: prefs.liveModel,
-                onClick = { showModelDialog = true },
-            )
+        when (prefs.aiProvider) {
+            AiProvider.OPENAI -> {
+                SettingRow(
+                    title = stringResource(R.string.settings_chatgpt_model),
+                    value = OPENAI_VOICE_MODELS.firstOrNull {
+                        it.id == prefs.chatGptModel
+                    }?.label ?: prefs.chatGptModel,
+                    onClick = { showChatGptModelDialog = true },
+                )
+            }
+
+            AiProvider.GROK -> {
+                SettingRow(
+                    title = stringResource(R.string.settings_grok_model),
+                    value = GROK_VOICE_MODELS.firstOrNull {
+                        it.id == prefs.grokModel
+                    }?.label ?: prefs.grokModel,
+                    onClick = { showGrokModelDialog = true },
+                )
+            }
+
+            AiProvider.CLAUDE -> {
+                SettingRow(
+                    title = stringResource(R.string.settings_claude_model),
+                    value = CLAUDE_MODELS.firstOrNull {
+                        it.id == prefs.claudeModel
+                    }?.label ?: prefs.claudeModel,
+                    onClick = { showClaudeModelDialog = true },
+                )
+            }
+
+            AiProvider.GEMINI -> {
+                SettingRow(
+                    title = stringResource(R.string.settings_gemini_model),
+                    value = LIVE_MODELS.firstOrNull { it.id == prefs.liveModel }
+                        ?.label ?: prefs.liveModel,
+                    onClick = { showModelDialog = true },
+                )
+            }
         }
         SettingRow(
             title = stringResource(R.string.settings_auto_titles),
@@ -280,6 +389,33 @@ fun SettingsScreen(
                 )
             },
         )
+        SettingRow(
+            title = stringResource(R.string.settings_look_pay),
+            subtitle = stringResource(R.string.settings_look_pay_sub),
+            trailing = {
+                Switch(
+                    checked = prefs.lookPayEnabled,
+                    onCheckedChange = { viewModel.setLookPayEnabled(it) },
+                )
+            },
+        )
+        SettingRow(
+            title = stringResource(R.string.settings_capture_button),
+            subtitle = stringResource(R.string.settings_capture_button_sub),
+            trailing = {
+                Switch(
+                    checked = prefs.captureButtonEnabled,
+                    onCheckedChange = { viewModel.setCaptureButtonEnabled(it) },
+                )
+            },
+        )
+        if (prefs.captureButtonEnabled) {
+            Text(
+                stringResource(R.string.settings_capture_button_warning),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         if (prefs.smartHomeEnabled) {
             SettingRow(
                 title = stringResource(R.string.settings_connect_home),
@@ -296,49 +432,12 @@ fun SettingsScreen(
             )
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { advancedExpanded = !advancedExpanded }
-                .padding(vertical = 13.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                stringResource(R.string.settings_section_advanced).uppercase(),
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp,
-                ),
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                if (advancedExpanded) "▾" else "▸",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        if (advancedExpanded) {
-            SettingRow(
-                title = stringResource(R.string.settings_api_key),
-                value = if (apiKeySet) stringResource(R.string.settings_api_key_set) else stringResource(R.string.settings_api_key_not_set),
-                onClick = { showApiKeyDialog = true },
-            )
-            SettingRow(
-                title = stringResource(R.string.settings_check_connection),
-                value = when (val state = apiKeyState) {
-                    is AgentViewModel.ApiKeyState.Checking -> stringResource(R.string.settings_conn_checking)
-                    is AgentViewModel.ApiKeyState.Valid -> stringResource(R.string.settings_conn_ok)
-                    is AgentViewModel.ApiKeyState.Invalid ->
-                        (state.message
-                            ?: stringResource(R.string.settings_conn_fallback)).take(40)
-
-                    is AgentViewModel.ApiKeyState.Missing -> stringResource(R.string.settings_conn_missing)
-                    is AgentViewModel.ApiKeyState.Unchecked -> stringResource(R.string.settings_conn_tap)
-                },
-                onClick = { viewModel.checkConnection() },
-            )
-        }
+        SectionLabel(stringResource(R.string.settings_section_diagnostics))
+        SettingRow(
+            title = stringResource(R.string.settings_diagnostics),
+            subtitle = stringResource(R.string.settings_diagnostics_sub),
+            onClick = { showDiagnosticsDialog = true },
+        )
 
         Text(
             stringResource(R.string.settings_privacy_note),
@@ -389,6 +488,26 @@ fun SettingsScreen(
                 showChatGptModelDialog = false
             },
             onDismiss = { showChatGptModelDialog = false },
+        )
+    }
+    if (showGrokModelDialog) {
+        GrokModelDialog(
+            current = prefs.grokModel,
+            onSelect = {
+                viewModel.setGrokModel(it)
+                showGrokModelDialog = false
+            },
+            onDismiss = { showGrokModelDialog = false },
+        )
+    }
+    if (showClaudeModelDialog) {
+        ClaudeModelDialog(
+            current = prefs.claudeModel,
+            onSelect = {
+                viewModel.setClaudeModel(it)
+                showClaudeModelDialog = false
+            },
+            onDismiss = { showClaudeModelDialog = false },
         )
     }
     if (showVoiceDialog) {
@@ -443,6 +562,24 @@ fun SettingsScreen(
         ChatGptKeyDialog(
             viewModel = viewModel,
             onDismiss = { showChatGptKeyDialog = false },
+        )
+    }
+    if (showGrokKeyDialog) {
+        GrokKeyDialog(
+            viewModel = viewModel,
+            onDismiss = { showGrokKeyDialog = false },
+        )
+    }
+    if (showClaudeKeyDialog) {
+        ClaudeKeyDialog(
+            viewModel = viewModel,
+            onDismiss = { showClaudeKeyDialog = false },
+        )
+    }
+    if (showDiagnosticsDialog) {
+        DiagnosticsDialog(
+            viewModel = viewModel,
+            onDismiss = { showDiagnosticsDialog = false },
         )
     }
 }
@@ -1065,6 +1202,17 @@ private fun WakeUpDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
+                // Retry button when the model download failed — lets the
+                // user re-attempt without leaving the dialog.
+                if (modelState is WakeWordModelState.Error) {
+                    OutlinedButton(
+                        onClick = { viewModel.retryWakeWordDownload() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.settings_wake_retry))
+                    }
+                }
+
                 val downloadProgress =
                     (modelState as? WakeWordModelState.Downloading)
                         ?.progress
@@ -1159,6 +1307,16 @@ private fun ProviderDialog(
             AiProvider.OPENAI,
             R.string.settings_provider_chatgpt,
             R.string.settings_provider_chatgpt_sub,
+        ),
+        Triple(
+            AiProvider.GROK,
+            R.string.settings_provider_grok,
+            R.string.settings_provider_grok_sub,
+        ),
+        Triple(
+            AiProvider.CLAUDE,
+            R.string.settings_provider_claude,
+            R.string.settings_provider_claude_sub,
         ),
     )
     AlertDialog(
@@ -1380,6 +1538,372 @@ private fun ChatGptKeyDialog(
                 )
                 Text(
                     stringResource(R.string.settings_chatgpt_key_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
+        },
+    )
+}
+
+/**
+ * Picks the Grok voice model used by the Grok provider.
+ * Mirrors [ChatGptModelDialog].
+ */
+@Composable
+private fun GrokModelDialog(
+    current: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_grok_model)) },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 420.dp),
+            ) {
+                items(GROK_VOICE_MODELS) { model ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(model.id) }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween,
+                        verticalAlignment =
+                            Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            model.label,
+                            style =
+                                MaterialTheme.typography.bodyLarge,
+                        )
+                        RadioButton(
+                            selected = model.id == current,
+                            onClick = { onSelect(model.id) },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
+        },
+    )
+}
+
+/**
+ * Manages the user's own xAI API key. Mirrors [ChatGptKeyDialog]:
+ * the key is stored verbatim and verified against xAI's /v1/models
+ * endpoint on save.
+ */
+@Composable
+private fun GrokKeyDialog(
+    viewModel: AgentViewModel,
+    onDismiss: () -> Unit,
+) {
+    val grokKeyState by viewModel.grokKeyState.collectAsStateWithLifecycle()
+    var keyInput by remember {
+        mutableStateOf(viewModel.savedGrokKey.orEmpty())
+    }
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_grok_key_dialog_title)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(
+                    rememberScrollState(),
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedTextField(
+                    value = keyInput,
+                    onValueChange = { keyInput = it },
+                    label = { Text(stringResource(R.string.settings_apikey_label)) },
+                    singleLine = true,
+                    visualTransformation =
+                        if (passwordVisible) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                passwordVisible = !passwordVisible
+                            },
+                        ) {
+                            Icon(
+                                imageVector =
+                                    if (passwordVisible) {
+                                        Icons.Filled.VisibilityOff
+                                    } else {
+                                        Icons.Filled.Visibility
+                                    },
+                                contentDescription =
+                                    if (passwordVisible) {
+                                        stringResource(R.string.settings_apikey_hide)
+                                    } else {
+                                        stringResource(R.string.settings_apikey_show)
+                                    },
+                            )
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (keyInput.isNotBlank()) {
+                                viewModel.saveGrokKey(keyInput)
+                            }
+                        },
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Button(
+                        onClick = { viewModel.saveGrokKey(keyInput) },
+                        enabled = keyInput.isNotBlank() &&
+                            grokKeyState !=
+                            AgentViewModel.ApiKeyState.Checking,
+                    ) {
+                        Text(stringResource(R.string.settings_apikey_save_test))
+                    }
+                    if (viewModel.savedGrokKey != null) {
+                        TextButton(
+                            onClick = {
+                                viewModel.clearGrokKey()
+                                keyInput = ""
+                            },
+                        ) {
+                            Text(stringResource(R.string.settings_apikey_remove))
+                        }
+                    }
+                }
+
+                val statusText = when (val state = grokKeyState) {
+                    AgentViewModel.ApiKeyState.Unchecked ->
+                        stringResource(R.string.settings_apikey_unchecked)
+                    AgentViewModel.ApiKeyState.Checking ->
+                        stringResource(R.string.settings_grok_key_checking)
+                    AgentViewModel.ApiKeyState.Valid ->
+                        stringResource(R.string.settings_apikey_valid)
+                    is AgentViewModel.ApiKeyState.Invalid ->
+                        stringResource(
+                        R.string.settings_apikey_invalid,
+                        state.message
+                            ?: stringResource(R.string.settings_conn_fallback),
+                    )
+                    AgentViewModel.ApiKeyState.Missing ->
+                        stringResource(R.string.settings_apikey_missing)
+                }
+                val statusColor =
+                    if (grokKeyState is AgentViewModel.ApiKeyState.Invalid) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                Text(
+                    statusText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = statusColor,
+                )
+                Text(
+                    stringResource(R.string.settings_grok_key_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
+        },
+    )
+}
+
+/**
+ * Picks the Claude model used by the Claude provider.
+ * Mirrors [ChatGptModelDialog].
+ */
+@Composable
+private fun ClaudeModelDialog(
+    current: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_claude_model)) },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 420.dp),
+            ) {
+                items(CLAUDE_MODELS) { model ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(model.id) }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween,
+                        verticalAlignment =
+                            Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            model.label,
+                            style =
+                                MaterialTheme.typography.bodyLarge,
+                        )
+                        RadioButton(
+                            selected = model.id == current,
+                            onClick = { onSelect(model.id) },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
+        },
+    )
+}
+
+/**
+ * Manages the user's own Anthropic API key. Mirrors
+ * [ChatGptKeyDialog]: the key is stored verbatim and verified
+ * against Anthropic's /v1/models endpoint on save.
+ */
+@Composable
+private fun ClaudeKeyDialog(
+    viewModel: AgentViewModel,
+    onDismiss: () -> Unit,
+) {
+    val claudeKeyState by viewModel.claudeKeyState.collectAsStateWithLifecycle()
+    var keyInput by remember {
+        mutableStateOf(viewModel.savedClaudeKey.orEmpty())
+    }
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_claude_key_dialog_title)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(
+                    rememberScrollState(),
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedTextField(
+                    value = keyInput,
+                    onValueChange = { keyInput = it },
+                    label = { Text(stringResource(R.string.settings_apikey_label)) },
+                    singleLine = true,
+                    visualTransformation =
+                        if (passwordVisible) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                passwordVisible = !passwordVisible
+                            },
+                        ) {
+                            Icon(
+                                imageVector =
+                                    if (passwordVisible) {
+                                        Icons.Filled.VisibilityOff
+                                    } else {
+                                        Icons.Filled.Visibility
+                                    },
+                                contentDescription =
+                                    if (passwordVisible) {
+                                        stringResource(R.string.settings_apikey_hide)
+                                    } else {
+                                        stringResource(R.string.settings_apikey_show)
+                                    },
+                            )
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (keyInput.isNotBlank()) {
+                                viewModel.saveClaudeKey(keyInput)
+                            }
+                        },
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Button(
+                        onClick = { viewModel.saveClaudeKey(keyInput) },
+                        enabled = keyInput.isNotBlank() &&
+                            claudeKeyState !=
+                            AgentViewModel.ApiKeyState.Checking,
+                    ) {
+                        Text(stringResource(R.string.settings_apikey_save_test))
+                    }
+                    if (viewModel.savedClaudeKey != null) {
+                        TextButton(
+                            onClick = {
+                                viewModel.clearClaudeKey()
+                                keyInput = ""
+                            },
+                        ) {
+                            Text(stringResource(R.string.settings_apikey_remove))
+                        }
+                    }
+                }
+
+                val statusText = when (val state = claudeKeyState) {
+                    AgentViewModel.ApiKeyState.Unchecked ->
+                        stringResource(R.string.settings_apikey_unchecked)
+                    AgentViewModel.ApiKeyState.Checking ->
+                        stringResource(R.string.settings_claude_key_checking)
+                    AgentViewModel.ApiKeyState.Valid ->
+                        stringResource(R.string.settings_apikey_valid)
+                    is AgentViewModel.ApiKeyState.Invalid ->
+                        stringResource(
+                        R.string.settings_apikey_invalid,
+                        state.message
+                            ?: stringResource(R.string.settings_conn_fallback),
+                    )
+                    AgentViewModel.ApiKeyState.Missing ->
+                        stringResource(R.string.settings_apikey_missing)
+                }
+                val statusColor =
+                    if (claudeKeyState is AgentViewModel.ApiKeyState.Invalid) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                Text(
+                    statusText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = statusColor,
+                )
+                Text(
+                    stringResource(R.string.settings_claude_key_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1613,3 +2137,69 @@ private val STOP_PHRASES = listOf(
     "bye glasses" to "Bye Glasses",
     "that's all" to "That's All",
 )
+
+/**
+ * Diagnostics dialog: shows device/app state and the wake-word model
+ * status, with a Share button so users can send the report to the
+ * developer (e.g. via WhatsApp or email) when something goes wrong.
+ */
+@Composable
+private fun DiagnosticsDialog(
+    viewModel: AgentViewModel,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val modelState by viewModel.wakeWordModelState.collectAsStateWithLifecycle()
+
+    val modelStatus = when (val s = modelState) {
+        is WakeWordModelState.Ready -> "Ready"
+        is WakeWordModelState.NotDownloaded -> "Not downloaded"
+        is WakeWordModelState.Downloading -> "Downloading (${(s.progress * 100).toInt()}%)"
+        is WakeWordModelState.Error -> "Error: ${s.message}"
+    }
+
+    val report = buildString {
+        appendLine("Veyra Diagnostics")
+        appendLine("App: ${com.geno.veyra.BuildConfig.VERSION_NAME} (${com.geno.veyra.BuildConfig.VERSION_CODE})")
+        appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        appendLine("Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
+        appendLine("Wake-word model: $modelStatus")
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_diagnostics)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    report,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(android.content.Intent.EXTRA_TEXT, report)
+                    }
+                    context.startActivity(
+                        android.content.Intent.createChooser(send, "Share diagnostics"),
+                    )
+                },
+            ) {
+                Text(stringResource(R.string.common_share))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_done))
+            }
+        },
+    )
+}
