@@ -80,6 +80,16 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <!-- Fallback: catches ACTION_MEDIA_BUTTON broadcasts if the
+             MediaSession doesn't get dispatch priority. -->
+        <receiver
+            android:name=".tap.TapMediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
         <!-- Timer/reminder alerts fired by AlarmManager -->
         <receiver
             android:name=".alerts.AlertReceiver"
