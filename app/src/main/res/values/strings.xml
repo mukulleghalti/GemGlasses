@@ -116,6 +116,8 @@
     <string name="settings_default_assistant_sub">Open system settings to choose ChatGPT as your assistant</string>
     <string name="settings_test_tap">Test ChatGPT launch</string>
     <string name="settings_test_tap_sub">Simulate a glasses tap without tapping</string>
+    <string name="settings_dump_shortcuts">Dump ChatGPT shortcuts</string>
+    <string name="settings_dump_shortcuts_sub">Spike diagnostic: logs ChatGPT\'s launcher shortcut intents</string>
     <string name="tap_launch_failed">Could not open the voice assistant — is a default assistant set?</string>
     <string name="tap_chatgpt_not_installed">Install the ChatGPT app to use tap-to-start</string>
     <string name="tap_service_channel">Tap to ChatGPT</string>
