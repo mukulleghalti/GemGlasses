@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioManager
 import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -25,8 +26,8 @@ import dagger.hilt.android.AndroidEntryPoint
  *
  * Holds an active [MediaSession] so the glasses' temple tap (which arrives
  * as a Bluetooth media-button event) is routed to Veyra instead of the
- * music player. On tap it fires [Intent.ACTION_VOICE_COMMAND], which opens
- * the user's default assistant in voice mode — the user sets ChatGPT as
+ * music player. On tap it fires [Intent.ACTION_ASSIST], which opens the
+ * user's default assistant in voice mode — the user sets ChatGPT as
  * the default assistant, exactly like Chachan's documented setup.
  *
  * Known tradeoff, same as Chachan's: the media-button channel is shared,
@@ -71,9 +72,18 @@ class TapToChatGptService : Service() {
                     return handleMediaButton(mediaButtonEvent)
                 }
             })
-            // Claim media-button handling so taps route here; no transport
-            // controls (no playback state/metadata is ever published).
+            // Claim media-button handling so taps route here.
             session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS)
+            // Publish a paused playback state: without any playback state
+            // the session is registered (visible in dumpsys) but
+            // MediaSessionService never dispatches media-button events to
+            // it. PAUSED, not PLAYING, so we never appear as "now playing".
+            session.setPlaybackState(
+                PlaybackState.Builder()
+                    .setState(PlaybackState.STATE_PAUSED, 0L, 1.0f)
+                    .setActions(PlaybackState.ACTION_PLAY_PAUSE)
+                    .build(),
+            )
             session.isActive = true
             mediaSession = session
             Log.i(TAG, "MediaSession active; listening for glasses taps")
