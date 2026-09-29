@@ -18,19 +18,27 @@ import org.xmlpull.v1.XmlPullParser
  * in voice mode, so the user's own account (free tier or Plus) and its
  * own rate limits apply. Nothing for Veyra to rate-limit.
  *
- * The launch goes through [Intent.ACTION_ASSIST], the framework's
- * "invoke my assistant" intent: Android intercepts it and routes it to
- * the default assistant's voice service. The user sets ChatGPT as the
- * default assistant (Settings → Apps → Default apps → Digital assistant),
- * exactly as Chachan's setup instructs. (ACTION_VOICE_COMMAND was tried
- * first, but it is a legacy plain intent that goes through normal
- * activity resolution — it showed an app chooser that didn't even list
- * ChatGPT — instead of the framework's assistant routing.)
+ * The launch goes straight to ChatGPT's voice-assistant activity
+ * (`com.openai.voice.assistant.AssistantActivity` — the activity behind the
+ * app's long-press "Voice" shortcut) via an explicit intent: no
+ * assistant-framework round-trip, no chooser. (ACTION_VOICE_COMMAND was
+ * tried first and showed a chooser that didn't even list ChatGPT; a bare
+ * ACTION_ASSIST resolved to ChatGPT's AssistantProxyActivity but silently
+ * no-op'd without the system's voice-interaction context.)
  */
 object TapToChatGpt {
 
     private const val TAG = "TapToChatGpt"
     private const val CHATGPT_PACKAGE = "com.openai.chatgpt"
+    /**
+     * Voice-assistant activity inside the ChatGPT app, found by dumping its
+     * package: this is the activity behind the app's long-press "Voice"
+     * shortcut. (The ASSIST proxy,
+     * `com.openai.feature.assistant.impl.AssistantProxyActivity`, resolves
+     * fine but silently no-ops without the system's voice-interaction
+     * context, so we bypass it and go straight to the voice activity.)
+     */
+    private const val VOICE_ACTIVITY = "com.openai.voice.assistant.AssistantActivity"
 
     fun isChatGptInstalled(context: Context): Boolean =
         try {
@@ -54,15 +62,19 @@ object TapToChatGpt {
             return
         }
         runCatching {
+            // Straight to ChatGPT's voice activity (the one behind its
+            // long-press "Voice" shortcut) — no assistant-framework
+            // round-trip, no chooser.
             context.startActivity(
-                Intent(Intent.ACTION_ASSIST)
+                Intent()
+                    .setClassName(CHATGPT_PACKAGE, VOICE_ACTIVITY)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
-            Log.i(TAG, "ACTION_ASSIST fired")
+            Log.i(TAG, "voice activity fired")
         }.onFailure { e ->
-            // Never fail silently: a missing default assistant (or any
+            // Never fail silently: a disabled/non-exported activity (or any
             // other launch problem) must be visible, not just a log line.
-            Log.w(TAG, "voice-command launch failed", e)
+            Log.w(TAG, "voice activity launch failed", e)
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(
                     context,
@@ -87,14 +99,15 @@ object TapToChatGpt {
             @Suppress("DEPRECATION")
             val pkg = pm.getPackageInfo(CHATGPT_PACKAGE, PackageManager.GET_ACTIVITIES)
             val interesting = pkg.activities
-                ?.map { it.name }
                 ?.filter {
-                    it.contains("voice", ignoreCase = true) ||
-                        it.contains("assist", ignoreCase = true)
+                    it.name.contains("voice", ignoreCase = true) ||
+                        it.name.contains("assist", ignoreCase = true)
                 }
                 .orEmpty()
             if (interesting.isEmpty()) Log.i(TAG, "chatgpt activities: none with voice/assist in the name")
-            interesting.forEach { Log.i(TAG, "chatgpt activity: $it") }
+            interesting.forEach {
+                Log.i(TAG, "chatgpt activity: ${it.name} exported=${it.exported} enabled=${it.enabled}")
+            }
 
             val launch = pm.getLaunchIntentForPackage(CHATGPT_PACKAGE)?.component
             if (launch == null) {
@@ -109,32 +122,13 @@ object TapToChatGpt {
             }
             val res = pm.getResourcesForApplication(CHATGPT_PACKAGE)
             val parser = res.getXml(shortcutsRes)
-            val ns = "http://schemas.android.com/apk/res/android"
-            var currentId: String? = null
             var event = parser.eventType
             while (event != XmlPullParser.END_DOCUMENT) {
-                when (event) {
-                    XmlPullParser.START_TAG -> when (parser.name) {
-                        "shortcut" -> {
-                            currentId = parser.getAttributeValue(ns, "shortcutId")
-                            Log.i(TAG, "chatgpt shortcut id=$currentId")
-                        }
-                        "intent" -> Log.i(
-                            TAG,
-                            "chatgpt shortcut[$currentId] intent " +
-                                "action=${parser.getAttributeValue(ns, "action")} " +
-                                "data=${parser.getAttributeValue(ns, "data")} " +
-                                "targetPackage=${parser.getAttributeValue(ns, "targetPackage")} " +
-                                "targetClass=${parser.getAttributeValue(ns, "targetClass")}",
-                        )
-                        "extra" -> Log.i(
-                            TAG,
-                            "chatgpt shortcut[$currentId] extra " +
-                                "name=${parser.getAttributeValue(ns, "name")} " +
-                                "value=${parser.getAttributeValue(ns, "value")}",
-                        )
+                if (event == XmlPullParser.START_TAG) {
+                    val attrs = (0 until parser.attributeCount).joinToString(" ") { i ->
+                        "${parser.getAttributeName(i)}=${parser.getAttributeValue(i)}"
                     }
-                    XmlPullParser.END_TAG -> if (parser.name == "shortcut") currentId = null
+                    Log.i(TAG, "chatgpt xml <${parser.name}> $attrs")
                 }
                 event = parser.next()
             }
