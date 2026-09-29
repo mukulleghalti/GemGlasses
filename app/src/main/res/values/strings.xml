@@ -131,6 +131,8 @@
     <string name="tap_service_text">Listening for glasses taps</string>
     <string name="settings_stop_phrase">Stop phrase</string>
     <string name="settings_voice_wakeup">Voice wake-up</string>
+    <string name="settings_start_assistant_on_launch">Start assistant on launch</string>
+    <string name="settings_start_assistant_on_launch_sub">Open the app straight into a live assistant session. Useful with a phone button shortcut — no always-on listening needed.</string>
     <string name="settings_wake_on">On</string>
     <string name="settings_wake_off">Off</string>
     <string name="settings_memories">Memories</string>

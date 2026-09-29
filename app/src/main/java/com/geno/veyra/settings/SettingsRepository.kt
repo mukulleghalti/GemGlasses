@@ -106,6 +106,7 @@ data class AgentPreferences(
     val cameraFrameRate: Int,
     val wakeWordEnabled: Boolean,
     val wakePhrase: String,
+    val startAssistantOnLaunch: Boolean,
     val stopPhrase: String,
     val audioOutput: AudioOutput,
     val bargeInEnabled: Boolean,
@@ -183,6 +184,7 @@ data class AgentPreferences(
             cameraFrameRate = 24,
             wakeWordEnabled = false,
             wakePhrase = DEFAULT_WAKE_PHRASE,
+            startAssistantOnLaunch = false,
             stopPhrase = DEFAULT_STOP_PHRASE,
             audioOutput = AudioOutput.GLASSES,
             bargeInEnabled = true,
@@ -368,6 +370,9 @@ class SettingsRepository @Inject constructor(
     private val wakeWordEnabledKey =
         booleanPreferencesKey("wake_word_enabled")
 
+    private val startAssistantOnLaunchKey =
+        booleanPreferencesKey("start_assistant_on_launch")
+
     private val wakePhraseKey =
         stringPreferencesKey("wake_phrase")
 
@@ -464,6 +469,10 @@ class SettingsRepository @Inject constructor(
                 wakeWordEnabled =
                     prefs[wakeWordEnabledKey]
                         ?: AgentPreferences.DEFAULT.wakeWordEnabled,
+
+                startAssistantOnLaunch =
+                    prefs[startAssistantOnLaunchKey]
+                        ?: AgentPreferences.DEFAULT.startAssistantOnLaunch,
 
                 wakePhrase =
                     prefs[wakePhraseKey]
@@ -585,6 +594,14 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[wakeWordEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setStartAssistantOnLaunch(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[startAssistantOnLaunchKey] = enabled
         }
     }
 

@@ -200,6 +200,16 @@ fun SettingsScreen(
             subtitle = wakeSubtitle,
             onClick = { showWakeDialog = true },
         )
+        SettingRow(
+            title = stringResource(R.string.settings_start_assistant_on_launch),
+            subtitle = stringResource(R.string.settings_start_assistant_on_launch_sub),
+            trailing = {
+                Switch(
+                    checked = prefs.startAssistantOnLaunch,
+                    onCheckedChange = { viewModel.setStartAssistantOnLaunch(it) },
+                )
+            },
+        )
 
         SectionLabel(stringResource(R.string.settings_section_memory))
         SettingRow(

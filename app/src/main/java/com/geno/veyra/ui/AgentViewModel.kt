@@ -203,6 +203,15 @@ class AgentViewModel @Inject constructor(
     }
 
     /**
+     * Toggles auto-starting the assistant when the app launches.
+     */
+    fun setStartAssistantOnLaunch(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setStartAssistantOnLaunch(enabled)
+        }
+    }
+
+    /**
      * Changes the wake phrase (e.g. "hey glasses").
      */
     fun setWakePhrase(phrase: String) {

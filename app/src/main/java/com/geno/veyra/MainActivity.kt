@@ -25,9 +25,17 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.core.content.ContextCompat
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -41,6 +49,7 @@ import com.geno.veyra.glasses.CameraPermission
 import com.geno.veyra.glasses.GlassesManager
 import com.geno.veyra.smarthome.SmartHomeController
 import com.geno.veyra.ui.AssistantScreen
+import com.geno.veyra.ui.AgentViewModel
 import com.geno.veyra.ui.CameraSettingsScreen
 import com.geno.veyra.ui.CameraTestScreen
 import com.geno.veyra.ui.HomeScreen
@@ -201,6 +210,10 @@ class MainActivity : ComponentActivity() {
     ) {
         super.onCreate(savedInstanceState)
 
+        // Cold start = fresh launch (not a rotation, not returning from
+        // recents). Only then may the assistant auto-start.
+        val isColdStart = savedInstanceState == null
+
         glassesManager.setActivity(this)
 
         // Register with the Google Home client for the permission result.
@@ -225,7 +238,7 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background,
                 ) {
 
-                    VeyraRoot()
+                    VeyraRoot(autoStartAssistant = isColdStart)
                 }
             }
         }
@@ -354,10 +367,41 @@ private data class BottomNavItem(
 )
 
 @Composable
-private fun VeyraRoot() {
+private fun VeyraRoot(
+    autoStartAssistant: Boolean = false,
+) {
+
+    val context = LocalContext.current
+    val viewModel: AgentViewModel = hiltViewModel()
+    val prefs by viewModel.preferences.collectAsStateWithLifecycle()
 
     val navController =
         rememberNavController()
+
+    // Auto-start the assistant on cold launch when the user enabled
+    // "Start assistant on launch". Fires once: returning from recents
+    // doesn't recreate the Activity, so it won't re-trigger. If the mic
+    // permission isn't granted, we stay on Home — the normal Start
+    // Assistant flow there handles the permission request.
+    var autoStartDone by remember { mutableStateOf(false) }
+    LaunchedEffect(prefs.startAssistantOnLaunch) {
+        if (
+            autoStartAssistant &&
+                !autoStartDone &&
+                prefs.startAssistantOnLaunch
+        ) {
+            autoStartDone = true
+            val micGranted =
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.RECORD_AUDIO,
+                ) == PackageManager.PERMISSION_GRANTED
+            if (micGranted) {
+                navController.navigate("transcript")
+                viewModel.startSession()
+            }
+        }
+    }
 
     val items =
         listOf(
