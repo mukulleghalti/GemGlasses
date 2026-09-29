@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Veyra</string>
+    <string name="notification_channel">Assistent-Sitzung</string>
+    <string name="notification_title">Veyra aktiv</string>
+    <string name="notification_text">Gemini-Assistent hört über die Brille zu</string>
+    <string name="wakeword_channel">Sprachaktivierung</string>
+    <string name="wakeword_title">Wartet auf Aktivierungswort</string>
+    <string name="wakeword_text">Sage „%1$s“, um den Assistenten zu starten</string>
+
+    <!-- Common -->
+    <string name="common_done">Fertig</string>
+    <string name="common_delete">Löschen</string>
+    <string name="common_cancel">Abbrechen</string>
+    <string name="common_connecting">Wird verbunden…</string>
+    <string name="common_assistant">Assistent</string>
+    <string name="common_translate">Übersetzen</string>
+    <string name="common_settings">Einstellungen</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">Start</string>
+
+    <!-- Home -->
+    <string name="home_tagline">Gemini für deine Brille</string>
+    <string name="home_api_key">API-Schlüssel</string>
+    <string name="home_glasses_title">Brille</string>
+    <string name="home_no_device">Kein Gerät gefunden</string>
+    <string name="home_connected">Verbunden</string>
+    <string name="home_connection_error">Verbindungsfehler</string>
+    <string name="home_registered_not_connected">Registriert — nicht verbunden</string>
+    <string name="home_register_glasses">Brille registrieren</string>
+    <string name="home_register_hint">Öffnet die Meta-App zum Koppeln &amp; Registrieren</string>
+    <string name="home_connecting_to_glasses">Verbinde mit Brille…</string>
+    <string name="home_glasses_connected">Brille verbunden</string>
+    <string name="home_retry_connection">Verbindung erneut versuchen</string>
+    <string name="home_connect_glasses">Brille verbinden</string>
+    <string name="home_stop_assistant">Assistent stoppen</string>
+    <string name="home_start_assistant">Assistent starten</string>
+    <string name="home_assistant_hint">Sprich über deine Brille mit Gemini</string>
+    <string name="home_tile_camera_test">Kameratest</string>
+    <string name="home_tile_camera_test_sub">Brillen-Feed prüfen</string>
+    <string name="home_tile_translate_sub">Live-Übersetzung</string>
+
+    <!-- Agent / registration status labels -->
+    <string name="status_stopped">Gestoppt</string>
+    <string name="status_listening">Hört zu</string>
+    <string name="status_reconnecting">Verbinde erneut…</string>
+    <string name="status_error">Fehler</string>
+    <string name="reg_registered">Registriert</string>
+    <string name="reg_registering">Wird registriert…</string>
+    <string name="reg_not_registered">Nicht registriert</string>
+    <string name="reg_revoked">Registrierung widerrufen — erneut verbinden</string>
+    <string name="reg_unknown">Status unbekannt</string>
+
+    <!-- Assistant tab -->
+    <string name="assistant_menu_desc">Unterhaltungen</string>
+    <string name="assistant_mute_desc">Mikro stummschalten</string>
+    <string name="assistant_unmute_desc">Mikro aktivieren</string>
+    <string name="assistant_drawer_title">Unterhaltungen</string>
+    <string name="assistant_new_conversation">Neue Unterhaltung</string>
+    <string name="assistant_idle_hint">Nur einen Fingertipp entfernt</string>
+    <string name="assistant_live">Live</string>
+    <string name="assistant_ended">Beendet</string>
+    <string name="assistant_empty_transcript">Die Unterhaltung erscheint hier, sobald die Sitzung startet.</string>
+    <string name="assistant_connection_failed">Verbindung fehlgeschlagen</string>
+    <string name="assistant_connection_failed_title">Verbindung zum Assistenten fehlgeschlagen</string>
+    <string name="assistant_connection_failed_generic">Der Assistent hat nicht geantwortet. Das liegt oft am Kontingent oder API-Schlüssel — beides prüfen und erneut versuchen.</string>
+    <string name="assistant_connection_failed_dialog_title">Keine Verbindung</string>
+    <string name="assistant_connection_failed_quota">Dem API-Schlüssel ist das Kontingent ausgegangen, daher kann der Assistent nicht starten. Bei kostenlosen Schlüsseln häufig — Websuche und lange Sitzungen verbrauchen extra Kontingent. Versuche, die Websuche in den KI-Einstellungen zu deaktivieren oder zu einem kostenpflichtigen API-Schlüssel zu wechseln.</string>
+    <string name="assistant_dismiss">Verwerfen</string>
+    <string name="assistant_retry">Erneut versuchen</string>
+    <string name="assistant_cited_places">Zitierte Orte (Google Maps)</string>
+    <string name="transcript_you">Du</string>
+    <string name="transcript_system">System</string>
+    <string name="captured_photo_desc">Aufgenommenes Foto</string>
+    <string name="captured_photo_error">Das aufgenommene Foto konnte nicht angezeigt werden.</string>
+
+    <!-- Conversation history -->
+    <string name="history_delete_all_title">Alle Unterhaltungen löschen?</string>
+    <string name="history_delete_all_message">Dies löscht endgültig jede archivierte Sitzung von diesem Gerät. Dies kann nicht rückgängig gemacht werden.</string>
+    <string name="history_delete_all_confirm">Alle löschen</string>
+    <string name="history_title">Unterhaltungsverlauf</string>
+    <string name="history_clear_all">Alle löschen</string>
+    <string name="history_subtitle">Vergangene Assistenten-Sitzungen, nur auf diesem Gerät gespeichert. Tippe eine an, um sie zu lesen, oder suche über alle hinweg.</string>
+    <string name="history_search_label">Unterhaltungen durchsuchen</string>
+    <string name="history_empty">Noch keine archivierten Unterhaltungen. Beende eine Assistenten-Sitzung und sie erscheint hier.</string>
+    <string name="history_no_text">(kein Text erfasst)</string>
+    <plurals name="history_turns">
+        <item quantity="one">%d Runde</item>
+        <item quantity="other">%d Runden</item>
+    </plurals>
+    <string name="history_no_matches">Keine Treffer für „%1$s“.</string>
+    <string name="history_delete_one_title">Diese Unterhaltung löschen?</string>
+    <string name="history_delete_one_message">Dies löscht die Sitzung vom %1$s endgültig. Dies kann nicht rückgängig gemacht werden.</string>
+    <string name="history_back">← Zurück</string>
+
+    <!-- Settings -->
+    <string name="settings_section_general">Allgemein</string>
+    <string name="settings_language">Sprache</string>
+    <string name="settings_language_system">Systemstandard</string>
+    <string name="settings_language_dialog_title">App-Sprache</string>
+    <string name="settings_section_assistant">Assistent</string>
+    <string name="settings_section_wakeup">Aktivierung</string>
+    <string name="settings_section_memory">Gedächtnis</string>
+    <string name="settings_section_ai">KI-Einstellungen</string>
+    <string name="settings_section_advanced">Erweitert</string>
+    <string name="settings_voice">Stimme</string>
+    <string name="settings_audio_output">Audioausgabe</string>
+    <string name="settings_barge_in">Dazwischenreden</string>
+    <string name="settings_barge_in_sub">Den Assistenten zu unterbrechen stoppt ihn</string>
+    <string name="settings_session_beep">Sitzungs-Ton</string>
+    <string name="settings_session_beep_sub">Kurzen Ton abspielen, wenn der Assistent startet und stoppt</string>
+    <string name="settings_stop_phrase">Stopp-Satz</string>
+    <string name="settings_voice_wakeup">Sprachaktivierung</string>
+    <string name="settings_wake_on">Ein</string>
+    <string name="settings_wake_off">Aus</string>
+    <string name="settings_memories">Erinnerungen</string>
+    <plurals name="settings_memories_saved">
+        <item quantity="one">%d gespeichert</item>
+        <item quantity="other">%d gespeichert</item>
+    </plurals>
+    <string name="settings_web_search">Websuche</string>
+    <string name="settings_web_search_sub">Dem Assistenten Zugriff auf aktuelle Online-Informationen geben</string>
+    <string name="settings_gemini_model">Gemini-Modell</string>
+    <string name="settings_ai_provider">KI-Anbieter</string>
+    <string name="settings_provider_gemini">Gemini</string>
+    <string name="settings_provider_gemini_sub">Google</string>
+    <string name="settings_provider_chatgpt">ChatGPT</string>
+    <string name="settings_provider_chatgpt_sub">OpenAI</string>
+    <string name="settings_chatgpt_key">ChatGPT-API-Schlüssel</string>
+    <string name="settings_chatgpt_key_dialog_title">ChatGPT-API-Schlüssel</string>
+    <string name="settings_chatgpt_key_note">Erstelle einen Schlüssel auf platform.openai.com. Er wird verschlüsselt auf diesem Telefon gespeichert und nur an OpenAI gesendet.</string>
+    <string name="settings_chatgpt_key_checking">Schlüssel wird bei OpenAI überprüft…</string>
+    <string name="settings_chatgpt_model">ChatGPT-Modell</string>
+    <string name="error_openai_key_missing">OpenAI-API-Schlüssel fehlt — füge ihn unter Einstellungen → KI hinzu, um die ChatGPT-Sprache zu nutzen.</string>
+    <string name="settings_auto_titles">Automatische Verlaufstitel</string>
+    <string name="settings_auto_titles_sub">Kurze Titel für vergangene Unterhaltungen erzeugen</string>
+    <string name="settings_qr_scan">QR-/Barcode-Scan</string>
+    <string name="settings_qr_scan_sub">Dem Assistenten erlauben, QR-Codes und Barcodes zu scannen</string>
+    <string name="settings_ocr">OCR</string>
+    <string name="settings_ocr_sub">Dem Assistenten erlauben, Text aus dem Gesehenen zu lesen</string>
+    <string name="settings_smart_home">Smart Home</string>
+    <string name="settings_smart_home_sub">Dem Assistenten erlauben, Google-Home-Geräte zu steuern</string>
+    <string name="settings_connect_home">Google Home verbinden</string>
+    <string name="settings_home_connected">Verbunden</string>
+    <string name="settings_home_not_connected">Nicht verbunden</string>
+    <string name="settings_api_key">Gemini-API-Schlüssel</string>
+    <string name="settings_api_key_set">Gesetzt</string>
+    <string name="settings_api_key_not_set">Nicht gesetzt</string>
+    <string name="settings_check_connection">Verbindung prüfen</string>
+    <string name="settings_conn_checking">Wird geprüft…</string>
+    <string name="settings_conn_ok">Verbindung OK</string>
+    <string name="settings_conn_tap">Zum Testen tippen</string>
+    <string name="settings_conn_missing">Kein Schlüssel gespeichert</string>
+    <string name="settings_conn_fallback">Schlüssel konnte nicht verifiziert werden.</string>
+    <string name="settings_privacy_note">Transkripte bleiben auf diesem Gerät und werden nie synchronisiert.</string>
+    <string name="settings_save">Speichern</string>
+    <string name="settings_voice_dialog_title">Assistentenstimme</string>
+    <string name="settings_voices_group">%1$s Stimmen</string>
+    <string name="settings_voice_female">Weiblich</string>
+    <string name="settings_voice_male">Männlich</string>
+    <string name="settings_model_default_sub">Standard · latenzarme Stimme</string>
+    <string name="settings_model_legacy_sub">Ältere Alternative</string>
+    <string name="settings_audio_dialog_title">Audioausgabe</string>
+    <string name="settings_audio_desc">Brille: Die Stimme kommt in hoher Qualität aus der Brille und das Telefonmikrofon hört zu. Telefonlautsprecher: Die Stimme kommt aus dem Telefon und das Brillenmikrofon hört zu, solange sie verbunden sind.</string>
+    <string name="settings_audio_glasses">Brille</string>
+    <string name="settings_audio_phone">Telefonlautsprecher</string>
+    <string name="settings_stop_dialog_title">Stopp-Satz</string>
+    <string name="settings_stop_desc">Wenn du dies sagst, während der Assistent zuhört, wird die Sitzung beendet.</string>
+    <string name="settings_stop_custom">Benutzerdefiniert: „%1$s“</string>
+    <string name="settings_stop_custom_label">Eigener Satz</string>
+    <string name="settings_wake_dialog_title">Sprachaktivierung</string>
+    <string name="settings_wake_listen">Auf Aktivierungswort hören</string>
+    <string name="settings_wake_mic_needed">Mikrofonberechtigung ist erforderlich. Erteile sie, indem du einmal auf die +-Schaltfläche im Assistenten-Tab tippst.</string>
+    <string name="settings_wake_phrase_label">Aktivierungswort</string>
+    <string name="settings_wake_custom_label">Eigenes Aktivierungswort</string>
+    <string name="settings_wake_vocab_note">Nur Wörter, die das Offline-Sprachmodell kennt, lösen aus — gängige englische Wörter sind am sichersten.</string>
+    <string name="settings_wake_test">Phrase testen</string>
+    <string name="settings_wake_test_listen">Sprich jetzt deine Aktivierungsphrase…</string>
+    <string name="settings_wake_test_hearing">Gehört: %1$s</string>
+    <string name="settings_wake_test_passed">Würde auslösen — diese Phrase funktioniert.</string>
+    <string name="settings_wake_test_failed">Nicht ausgelöst (gehört: “%1$s”). Versuche einfachere, gängige Wörter.</string>
+    <string name="settings_wake_use_phrase">Diese Phrase verwenden</string>
+    <string name="settings_wake_use_anyway">Trotzdem verwenden</string>
+    <string name="settings_wake_model_download">Das Sprachmodell wird bei der ersten Nutzung heruntergeladen (~40 MB, WLAN empfohlen).</string>
+    <string name="settings_wake_model_downloading">Sprachmodell wird heruntergeladen…</string>
+    <string name="settings_wake_model_downloading_pct">Sprachmodell wird heruntergeladen… %1$d%%</string>
+    <string name="settings_wake_model_ready">Sprachmodell bereit.</string>
+    <string name="settings_wake_model_error">Sprachmodell-Fehler: %1$s</string>
+    <string name="settings_memories_title">Erinnerungen</string>
+    <string name="settings_memories_empty">Noch nichts gespeichert. Sage in einer Sitzung „merk dir …“, um etwas hinzuzufügen.</string>
+    <string name="settings_apikey_dialog_title">Gemini-API-Schlüssel</string>
+    <string name="settings_apikey_label">API-Schlüssel</string>
+    <string name="settings_apikey_hide">Schlüssel verbergen</string>
+    <string name="settings_apikey_show">Schlüssel anzeigen</string>
+    <string name="settings_apikey_save_test">Speichern &amp; testen</string>
+    <string name="settings_apikey_remove">Entfernen</string>
+    <string name="settings_apikey_unchecked">Schlüssel gespeichert — tippe auf Speichern &amp; testen, um ihn zu verifizieren.</string>
+    <string name="settings_apikey_checking">Schlüssel wird bei Google verifiziert…</string>
+    <string name="settings_apikey_valid">Schlüssel verifiziert — der Assistent ist bereit.</string>
+    <string name="settings_apikey_invalid">Schlüsselproblem: %1$s</string>
+    <string name="settings_apikey_missing">Noch kein Schlüssel gespeichert.</string>
+    <string name="settings_apikey_note">Hole dir einen kostenlosen Schlüssel von Google AI Studio. Er wird verschlüsselt auf diesem Telefon gespeichert und nur an Google gesendet — die App erzeugt ihre eigenen kurzlebigen Tokens, kein Server dazwischen.</string>
+
+    <!-- Translate -->
+    <string name="translate_from">Von</string>
+    <string name="translate_to">Nach</string>
+    <string name="translate_swap_desc">Sprachen tauschen</string>
+    <string name="translate_empty">Tippe auf das Mikrofon und sprich los — die Übersetzung erscheint hier.</string>
+    <string name="translate_start">Übersetzung starten</string>
+    <string name="translate_stop">Stopp</string>
+    <string name="translate_retry">Erneut versuchen</string>
+    <string name="translate_clear_desc">Verlauf löschen</string>
+    <string name="translate_error">Der Übersetzer war nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.</string>
+
+    <!-- Camera settings -->
+    <string name="camera_settings_title">Kameraeinstellungen</string>
+    <string name="camera_settings_note">Diese Einstellungen gelten beim nächsten Kamerastart.</string>
+    <string name="camera_resolution">Auflösung</string>
+    <string name="camera_resolution_low">Niedrig — 360 × 640</string>
+    <string name="camera_resolution_medium">Mittel — 504 × 896</string>
+    <string name="camera_resolution_high">Hoch — 720 × 1280</string>
+    <string name="camera_frame_rate">Bildrate</string>
+    <string name="camera_fps">%1$d FPS</string>
+    <string name="camera_current">Aktuell: %1$s, %2$d FPS</string>
+
+    <!-- Camera test -->
+    <string name="camera_back">Zurück</string>
+    <string name="camera_status_ready">Bereit</string>
+    <string name="camera_status_starting">Kamera wird gestartet…</string>
+    <string name="camera_status_permission">Kameraberechtigung erforderlich</string>
+    <string name="camera_status_stopped">Kamera gestoppt</string>
+    <string name="camera_status_error">Kamerafehler</string>
+    <string name="camera_status_photo">Foto aufgenommen</string>
+    <string name="camera_status_capture_failed">Aufnahme fehlgeschlagen</string>
+    <string name="camera_status_rec_failed">Videoaufnahme fehlgeschlagen</string>
+    <string name="camera_status_recording">Aufnahme — %1$s</string>
+    <string name="camera_status_live">Live — %1$d × %2$d</string>
+    <string name="camera_status_video_saved">Video gespeichert</string>
+    <string name="camera_status_video_saved_no_audio">Video gespeichert (ohne Ton)</string>
+    <string name="camera_status_rec_stopped">Aufnahme gestoppt</string>
+    <string name="camera_error_permission">Erteile die Kameraberechtigung der Meta-Brille, um den Kameratest zu nutzen</string>
+    <string name="camera_grant">Erlauben</string>
+    <string name="camera_error_jpeg">Foto aufgenommen, aber JPEG konnte nicht dekodiert werden</string>
+    <string name="camera_error_no_video">Es wurde keine Videodatei erstellt</string>
+    <string name="camera_error_recorder">Recorder-Frame-Fehler: %1$s</string>
+    <string name="camera_rec_badge">● AUFN %1$s</string>
+    <string name="camera_video_saved">Video in Galerie gespeichert</string>
+    <string name="camera_start">Start</string>
+    <string name="camera_stop">Stopp</string>
+    <string name="camera_record">Aufnehmen</string>
+    <string name="camera_photo">Foto</string>
+
+    <!-- Timer / reminder alerts -->
+    <string name="alert_channel_name">Timer &amp; Erinnerungen</string>
+    <string name="alert_timer_done">Timer abgelaufen</string>
+    <string name="alert_reminder">Erinnerung</string>
+</resources>

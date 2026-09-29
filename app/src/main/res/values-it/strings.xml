@@ -108,6 +108,8 @@
     <string name="settings_audio_output">Uscita audio</string>
     <string name="settings_barge_in">Interruzione vocale</string>
     <string name="settings_barge_in_sub">Parlare sopra l\'assistente lo interrompe</string>
+    <string name="settings_session_beep">Segnale acustico</string>
+    <string name="settings_session_beep_sub">Riproduce un breve segnale quando l\'assistente si avvia e si ferma</string>
     <string name="settings_stop_phrase">Frase di stop</string>
     <string name="settings_voice_wakeup">Attivazione vocale</string>
     <string name="settings_wake_on">Attivo</string>
@@ -173,6 +175,13 @@
     <string name="settings_wake_phrase_label">Frase chiave</string>
     <string name="settings_wake_custom_label">Frase chiave personalizzata</string>
     <string name="settings_wake_vocab_note">Solo le parole conosciute dal modello vocale offline attiveranno l\'assistente — le parole inglesi comuni sono le più sicure.</string>
+    <string name="settings_wake_test">Prova la frase</string>
+    <string name="settings_wake_test_listen">Pronuncia la tua frase di attivazione…</string>
+    <string name="settings_wake_test_hearing">Sento: %1$s</string>
+    <string name="settings_wake_test_passed">Si attiverebbe — questa frase funziona.</string>
+    <string name="settings_wake_test_failed">Nessuna attivazione (sentito: “%1$s”). Prova parole semplici e comuni.</string>
+    <string name="settings_wake_use_phrase">Usa questa frase</string>
+    <string name="settings_wake_use_anyway">Usa comunque</string>
     <string name="settings_wake_model_download">Il modello vocale viene scaricato al primo utilizzo (~40 MB, consigliato Wi-Fi).</string>
     <string name="settings_wake_model_downloading">Download del modello vocale…</string>
     <string name="settings_wake_model_downloading_pct">Download del modello vocale… %1$d%%</string>
@@ -231,6 +240,7 @@
     <string name="camera_status_video_saved_no_audio">Video salvato (senza audio)</string>
     <string name="camera_status_rec_stopped">Registrazione arrestata</string>
     <string name="camera_error_permission">Concedi l\'autorizzazione alla fotocamera degli occhiali Meta per usare il Test fotocamera</string>
+    <string name="camera_grant">Consenti</string>
     <string name="camera_error_jpeg">Foto acquisita ma impossibile decodificare il JPEG</string>
     <string name="camera_error_no_video">Nessun file video creato</string>
     <string name="camera_error_recorder">Errore frame del registratore: %1$s</string>

@@ -108,6 +108,8 @@
     <string name="settings_audio_output">Saída de áudio</string>
     <string name="settings_barge_in">Interrupção</string>
     <string name="settings_barge_in_sub">Falar enquanto o assistente fala o interrompe</string>
+    <string name="settings_session_beep">Bipe de sessão</string>
+    <string name="settings_session_beep_sub">Toca um bipe curto quando o assistente inicia e para</string>
     <string name="settings_stop_phrase">Frase de parada</string>
     <string name="settings_voice_wakeup">Ativação por voz</string>
     <string name="settings_wake_on">Ativado</string>
@@ -173,6 +175,13 @@
     <string name="settings_wake_phrase_label">Frase de ativação</string>
     <string name="settings_wake_custom_label">Frase de ativação personalizada</string>
     <string name="settings_wake_vocab_note">Só serão detectadas palavras que o modelo de voz off-line conheça — palavras comuns em inglês são as mais seguras.</string>
+    <string name="settings_wake_test">Testar frase</string>
+    <string name="settings_wake_test_listen">Diga sua frase de ativação agora…</string>
+    <string name="settings_wake_test_hearing">Ouvindo: %1$s</string>
+    <string name="settings_wake_test_passed">Ativaria — esta frase funciona.</string>
+    <string name="settings_wake_test_failed">Não ativou (ouvi “%1$s”). Tente palavras mais simples e comuns.</string>
+    <string name="settings_wake_use_phrase">Usar esta frase</string>
+    <string name="settings_wake_use_anyway">Usar mesmo assim</string>
     <string name="settings_wake_model_download">O modelo de voz é baixado no primeiro uso (~40 MB, Wi-Fi recomendado).</string>
     <string name="settings_wake_model_downloading">Baixando modelo de voz…</string>
     <string name="settings_wake_model_downloading_pct">Baixando modelo de voz… %1$d%%</string>
@@ -231,6 +240,7 @@
     <string name="camera_status_video_saved_no_audio">Vídeo salvo (sem áudio)</string>
     <string name="camera_status_rec_stopped">Gravação parada</string>
     <string name="camera_error_permission">Conceda a permissão de câmera dos óculos Meta para usar o teste de câmera</string>
+    <string name="camera_grant">Permitir</string>
     <string name="camera_error_jpeg">Foto capturada, mas não foi possível decodificar o JPEG</string>
     <string name="camera_error_no_video">Nenhum arquivo de vídeo foi criado</string>
     <string name="camera_error_recorder">Erro de quadro do gravador: %1$s</string>

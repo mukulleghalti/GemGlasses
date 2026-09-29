@@ -120,6 +120,8 @@ class ConversationStore @Inject constructor() {
     fun clear() {
         _entries.value = emptyList()
         _places.value = emptyList()
-        seq = 0L
+        // seq is intentionally NOT reset: ConversationArchive dedups on
+        // seq as a process-wide monotonic counter, so resetting it here
+        // would make later sessions look already-archived and get dropped.
     }
 }

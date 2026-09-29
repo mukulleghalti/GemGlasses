@@ -148,7 +148,7 @@ class RealGlassesBackend @Inject constructor(
      *
      * This does NOT affect cameraFrames(), which is the Gemini vision path.
      */
-    fun setCameraTestConfiguration(
+    override fun setCameraTestConfiguration(
         videoQuality: VideoQuality,
         frameRate: Int,
     ) {
@@ -1200,7 +1200,7 @@ class RealGlassesBackend @Inject constructor(
     // CAMERA TEST - LIVE VIDEO STREAM
     // =========================================================================
 
-    fun cameraTestFrames():
+    override fun cameraTestFrames():
         Flow<VideoFrame> = channelFlow {
 
         Log.i(
@@ -1371,7 +1371,7 @@ class RealGlassesBackend @Inject constructor(
     // CAMERA TEST - PHOTO CAPTURE
     // =========================================================================
 
-    suspend fun captureCameraTestPhoto():
+    override suspend fun captureCameraTestPhoto():
         Result<ByteArray> {
 
         val activeCamera =
@@ -1470,7 +1470,7 @@ class RealGlassesBackend @Inject constructor(
         }
     }
 
-    fun stopCameraTest() {
+    override fun stopCameraTest() {
         stopCameraIfNeeded()
     }
 

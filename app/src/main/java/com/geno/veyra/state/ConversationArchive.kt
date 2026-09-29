@@ -95,12 +95,20 @@ class ConversationArchive @Inject constructor(
      * safe to call from [AgentController.stop].
      */
     fun saveSession(entries: List<TranscriptEntry>) {
+        Log.i(
+            TAG,
+            "saveSession: ${entries.size} entries, " +
+                "lastArchivedSeq=$lastArchivedSeq",
+        )
         val fresh = entries.filter {
             it.seq > lastArchivedSeq &&
                 it.speaker != TranscriptEntry.Speaker.SYSTEM &&
                 it.text.isNotBlank()
         }
-        if (fresh.isEmpty()) return
+        if (fresh.isEmpty()) {
+            Log.i(TAG, "saveSession: nothing fresh to archive")
+            return
+        }
         lastArchivedSeq = fresh.maxOf { it.seq }
 
         val startedAt = fresh.minOf { it.timestamp }
@@ -120,6 +128,11 @@ class ConversationArchive @Inject constructor(
                 val file = File(dir(), "${session.id}.json")
                 file.writeText(json.encodeToString(session))
                 prune()
+                Log.i(
+                    TAG,
+                    "archived session ${session.id} " +
+                        "(${session.turns.size} turns)",
+                )
 
                 /*
                  * Auto history titles: one cheap summarization call per

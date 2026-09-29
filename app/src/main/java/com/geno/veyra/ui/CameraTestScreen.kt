@@ -81,6 +81,12 @@ fun CameraTestScreen(
         }
     }
 
+    // Ask for the Meta camera permission as soon as the tab opens, so the
+    // prompt is settled before the user taps Start Camera.
+    LaunchedEffect(Unit) {
+        viewModel.ensureCameraPermission()
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             viewModel.stopPreview()
@@ -227,7 +233,8 @@ fun CameraTestScreen(
             )
         }
 
-        // Error banner.
+        // Error banner. The permission error carries a Grant button so a
+        // denial stays recoverable instead of a dead end.
         uiState.error?.let { error ->
             val errorText =
                 when (error) {
@@ -245,10 +252,7 @@ fun CameraTestScreen(
                     is CameraTestError.Runtime ->
                         error.message
                 }
-            Text(
-                text = errorText,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                style = MaterialTheme.typography.bodySmall,
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 96.dp)
@@ -256,8 +260,27 @@ fun CameraTestScreen(
                         MaterialTheme.colorScheme.errorContainer,
                         RoundedCornerShape(10.dp),
                     )
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-            )
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = errorText,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (error == CameraTestError.PermissionNeeded) {
+                    TextButton(
+                        onClick = viewModel::retryCameraPermission,
+                    ) {
+                        Text(
+                            stringResource(R.string.camera_grant),
+                            color =
+                                MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
+            }
         }
 
         // Saved confirmation.

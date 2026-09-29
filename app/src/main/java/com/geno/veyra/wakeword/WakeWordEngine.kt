@@ -41,4 +41,26 @@ interface WakeWordEngine {
 
     /** Stops listening and releases audio resources. */
     suspend fun stop()
+
+    /**
+     * Recomputes [modelState] for the current app language. The cached
+     * model may belong to another language, so call this when Settings
+     * opens.
+     */
+    fun refreshModelState()
+
+    /**
+     * Test mode: listens for [timeoutMs] with the current language's model
+     * and reports whether [phrase] would have triggered, using the same
+     * decoder and phrase matcher as live detection. Each decoded fragment
+     * goes to [onPartial] so the UI can show what was heard. Any active
+     * listening is paused and resumed afterwards.
+     *
+     * Caller must hold RECORD_AUDIO.
+     */
+    suspend fun testDecode(
+        phrase: String,
+        timeoutMs: Long = 8_000L,
+        onPartial: (String) -> Unit,
+    ): Boolean
 }

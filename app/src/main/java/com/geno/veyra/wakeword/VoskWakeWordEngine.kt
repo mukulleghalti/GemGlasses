@@ -7,6 +7,8 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import com.geno.veyra.audio.MicStreamer
+import com.geno.veyra.settings.AppLocaleStore
+import com.geno.veyra.settings.wakeBaseLanguage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
@@ -21,10 +23,12 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -67,38 +71,104 @@ class VoskWakeWordEngine @Inject constructor(
 
     private var listenJob: Job? = null
     private var activePhrase: String? = null
+    private var activeLang: String? = null
     private var activePattern: Regex? = null
     private var lastEmitMs = 0L
+
+    private data class ModelSpec(
+        val dirName: String,
+    ) {
+        val url: String
+            get() = "https://alphacephei.com/vosk/models/$dirName.zip"
+    }
+
+    /**
+     * One small (~40 MB) on-device model per supported app language, from
+     * the official Vosk model list (all Apache 2.0, built for Android).
+     * Downloaded on demand the first time the language is used for wake
+     * words.
+     *
+     * Declared before the init block: init calls refreshModelState(),
+     * which reads this map, and Kotlin initializes properties in
+     * declaration order.
+     */
+    private val MODEL_SPECS =
+        mapOf(
+            "en" to ModelSpec("vosk-model-small-en-us-0.15"),
+            "de" to ModelSpec("vosk-model-small-de-0.15"),
+            "fr" to ModelSpec("vosk-model-small-fr-0.22"),
+            "es" to ModelSpec("vosk-model-small-es-0.42"),
+            "pt" to ModelSpec("vosk-model-small-pt-0.3"),
+            "it" to ModelSpec("vosk-model-small-it-0.22"),
+        )
 
     init {
         // Surface a cached model immediately so Settings can show "ready"
         // without waiting for the first start().
-        if (isModelReady(modelDir())) {
-            _modelState.value = WakeWordModelState.Ready
-        }
+        refreshModelState()
+    }
+
+    /**
+     * Recomputes [modelState] for the current app language. Call when
+     * Settings opens — the cached model may belong to another language.
+     */
+    override fun refreshModelState() {
+        val dir = modelDirFor(resolveLanguage())
+        _modelState.value =
+            if (isModelReady(dir)) {
+                WakeWordModelState.Ready
+            } else {
+                WakeWordModelState.NotDownloaded
+            }
+    }
+
+    /** Base language for the wake model, from the app language picker. */
+    private fun resolveLanguage(): String =
+        wakeBaseLanguage(AppLocaleStore.cachedAppLanguageTag(context))
+
+    private fun modelDirFor(lang: String): File {
+        val spec = MODEL_SPECS[lang] ?: MODEL_SPECS.getValue("en")
+        return File(context.filesDir, spec.dirName)
     }
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     override suspend fun start(phrase: String) {
         startMutex.withLock {
-            if (listenJob?.isActive == true && activePhrase == phrase) return
+            val lang = resolveLanguage()
+            if (
+                listenJob?.isActive == true &&
+                activePhrase == phrase &&
+                activeLang == lang
+            ) {
+                return
+            }
 
-            // Hold the mutex across the (potentially long) model download so a
-            // concurrent stop() cannot leave a half-started listener behind.
             stopLocked()
+            startLocked(phrase, lang)
+        }
+    }
 
-            val dir = ensureModel()
-            activePhrase = phrase
-            activePattern = phrasePattern(phrase)
+    /**
+     * Starts listening; callers hold [startMutex] (the model download is
+     * long, and the mutex keeps a concurrent stop() from leaving a
+     * half-started listener behind).
+     */
+    private suspend fun startLocked(
+        phrase: String,
+        lang: String,
+    ) {
+        val dir = ensureModel(lang)
+        activePhrase = phrase
+        activeLang = lang
+        activePattern = phrasePattern(phrase)
 
-            listenJob = scope.launch(Dispatchers.IO) {
-                try {
-                    listenLoop(dir)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.e(TAG, "wake-word listen loop failed", e)
-                }
+        listenJob = scope.launch(Dispatchers.IO) {
+            try {
+                listenLoop(dir)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "wake-word listen loop failed", e)
             }
         }
     }
@@ -113,8 +183,88 @@ class VoskWakeWordEngine @Inject constructor(
         listenJob?.cancel()
         listenJob = null
         activePhrase = null
+        activeLang = null
         activePattern = null
     }
+
+    /**
+     * Test mode: listens for [timeoutMs] with the current language's model
+     * and reports whether [phrase] would have triggered, using the exact
+     * same decoder and phrase matcher as live detection. Each decoded
+     * fragment goes to [onPartial] so the UI can show what was heard.
+     *
+     * Any active wake-word listening is paused first (so only one model is
+     * ever in memory) and resumed afterwards.
+     *
+     * Caller must hold RECORD_AUDIO.
+     */
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
+    override suspend fun testDecode(
+        phrase: String,
+        timeoutMs: Long,
+        onPartial: (String) -> Unit,
+    ): Boolean =
+        withContext(Dispatchers.IO) {
+            startMutex.withLock {
+                val lang = resolveLanguage()
+                val resumePhrase = activePhrase
+                val resumeLang = activeLang
+                val wasListening = listenJob?.isActive == true
+                stopLocked()
+                try {
+                    val dir = ensureModel(lang)
+                    val pattern = phrasePattern(phrase)
+                    var matched = false
+                    val model = Model(dir.absolutePath)
+                    try {
+                        val recognizer = Recognizer(model, SAMPLE_RATE_HZ)
+                        try {
+                            withTimeoutOrNull(timeoutMs) {
+                                micStreamer.stream()
+                                    .takeWhile { !matched }
+                                    .collect { chunk ->
+                                        ensureActive()
+                                        recognizer.acceptWaveForm(
+                                            chunk,
+                                            chunk.size,
+                                        )
+                                        val partial =
+                                            runCatching {
+                                                JSONObject(
+                                                    recognizer.partialResult,
+                                                ).optString("partial")
+                                            }.getOrDefault("")
+                                        if (partial.isNotBlank()) {
+                                            onPartial(partial)
+                                        }
+                                        if (
+                                            pattern.containsMatchIn(partial)
+                                        ) {
+                                            matched = true
+                                            // Heard enough — takeWhile stops
+                                            // the stream so the verdict lands
+                                            // quickly.
+                                        }
+                                    }
+                            }
+                        } finally {
+                            recognizer.close()
+                        }
+                    } finally {
+                        model.close()
+                    }
+                    matched
+                } finally {
+                    if (
+                        wasListening &&
+                        resumePhrase != null &&
+                        resumeLang != null
+                    ) {
+                        startLocked(resumePhrase, resumeLang)
+                    }
+                }
+            }
+        }
 
     // Callers hold RECORD_AUDIO (the engine is only started when the
     // permission is granted); the annotation lives on start().
@@ -166,41 +316,47 @@ class VoskWakeWordEngine @Inject constructor(
     }
 
     /**
-     * Returns the model directory, downloading and unzipping it first when
-     * needed. Updates [modelState] along the way; throws on failure.
+     * Returns the model directory for [lang], downloading and unzipping it
+     * first when needed. Updates [modelState] along the way; throws on
+     * failure.
      */
-    private suspend fun ensureModel(): File = withContext(Dispatchers.IO) {
-        val dir = modelDir()
-        if (isModelReady(dir)) {
-            _modelState.value = WakeWordModelState.Ready
-            return@withContext dir
-        }
-
-        Log.i(TAG, "downloading wake-word model (~40 MB)")
-        _modelState.value = WakeWordModelState.Downloading(0f)
-
-        val zipFile = File(context.filesDir, MODEL_ZIP_NAME)
-        try {
-            download(zipFile)
-            unzip(zipFile, context.filesDir)
-            zipFile.delete()
-
-            if (!isModelReady(dir)) {
-                throw IOException("model files missing after unzip")
+    private suspend fun ensureModel(lang: String): File =
+        withContext(Dispatchers.IO) {
+            val spec = MODEL_SPECS[lang] ?: MODEL_SPECS.getValue("en")
+            val dir = File(context.filesDir, spec.dirName)
+            if (isModelReady(dir)) {
+                _modelState.value = WakeWordModelState.Ready
+                return@withContext dir
             }
-            _modelState.value = WakeWordModelState.Ready
-            dir
-        } catch (e: Exception) {
-            zipFile.delete()
-            val message = e.message ?: "download failed"
-            _modelState.value = WakeWordModelState.Error(message)
-            Log.e(TAG, "wake-word model download failed", e)
-            throw e
-        }
-    }
 
-    private suspend fun download(zipFile: File) {
-        val request = Request.Builder().url(MODEL_URL).build()
+            Log.i(TAG, "downloading wake-word model for '$lang' (~40 MB)")
+            _modelState.value = WakeWordModelState.Downloading(0f)
+
+            val zipFile = File(context.filesDir, "${spec.dirName}.zip")
+            try {
+                download(spec.url, zipFile)
+                unzip(zipFile, context.filesDir)
+                zipFile.delete()
+
+                if (!isModelReady(dir)) {
+                    throw IOException("model files missing after unzip")
+                }
+                _modelState.value = WakeWordModelState.Ready
+                dir
+            } catch (e: Exception) {
+                zipFile.delete()
+                val message = e.message ?: "download failed"
+                _modelState.value = WakeWordModelState.Error(message)
+                Log.e(TAG, "wake-word model download failed", e)
+                throw e
+            }
+        }
+
+    private suspend fun download(
+        url: String,
+        zipFile: File,
+    ) {
+        val request = Request.Builder().url(url).build()
         http.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 throw IOException("model download HTTP ${response.code}")
@@ -248,8 +404,6 @@ class VoskWakeWordEngine @Inject constructor(
         }
     }
 
-    private fun modelDir(): File = File(context.filesDir, MODEL_DIR_NAME)
-
     private fun isModelReady(dir: File): Boolean =
         dir.isDirectory && File(dir, "am/final.mdl").exists()
 
@@ -268,10 +422,6 @@ class VoskWakeWordEngine @Inject constructor(
 
     private companion object {
         const val TAG = "VoskWakeWordEngine"
-        const val MODEL_URL =
-            "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
-        const val MODEL_DIR_NAME = "vosk-model-small-en-us-0.15"
-        const val MODEL_ZIP_NAME = "vosk-model-small-en-us-0.15.zip"
         const val SAMPLE_RATE_HZ = 16000.0f
         const val EMIT_COOLDOWN_MS = 3_000L
     }

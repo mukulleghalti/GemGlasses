@@ -108,6 +108,8 @@
     <string name="settings_audio_output">Sortie audio</string>
     <string name="settings_barge_in">Interruption</string>
     <string name="settings_barge_in_sub">Parler pendant que l\'assistant parle l\'interrompt</string>
+    <string name="settings_session_beep">Bip de session</string>
+    <string name="settings_session_beep_sub">Émet un bip court quand l\'assistant démarre et s\'arrête</string>
     <string name="settings_stop_phrase">Phrase d\'arrêt</string>
     <string name="settings_voice_wakeup">Activation vocale</string>
     <string name="settings_wake_on">Activé</string>
@@ -173,6 +175,13 @@
     <string name="settings_wake_phrase_label">Phrase d\'activation</string>
     <string name="settings_wake_custom_label">Phrase d\'activation personnalisée</string>
     <string name="settings_wake_vocab_note">Seuls les mots connus du modèle vocal hors ligne déclencheront — les mots anglais courants sont les plus sûrs.</string>
+    <string name="settings_wake_test">Tester la phrase</string>
+    <string name="settings_wake_test_listen">Dites votre phrase de réveil maintenant…</string>
+    <string name="settings_wake_test_hearing">Entendu : %1$s</string>
+    <string name="settings_wake_test_passed">Se déclencherait — cette phrase fonctionne.</string>
+    <string name="settings_wake_test_failed">Pas de déclenchement (entendu : “%1$s”). Essayez des mots simples et courants.</string>
+    <string name="settings_wake_use_phrase">Utiliser cette phrase</string>
+    <string name="settings_wake_use_anyway">Utiliser quand même</string>
     <string name="settings_wake_model_download">Le modèle vocal se télécharge à la première utilisation (~40 Mo, Wi-Fi recommandé).</string>
     <string name="settings_wake_model_downloading">Téléchargement du modèle vocal…</string>
     <string name="settings_wake_model_downloading_pct">Téléchargement du modèle vocal… %1$d%%</string>
@@ -231,6 +240,7 @@
     <string name="camera_status_video_saved_no_audio">Vidéo enregistrée (sans audio)</string>
     <string name="camera_status_rec_stopped">Enregistrement arrêté</string>
     <string name="camera_error_permission">Accordez l\'autorisation caméra des lunettes Meta pour utiliser le test caméra</string>
+    <string name="camera_grant">Autoriser</string>
     <string name="camera_error_jpeg">Photo capturée mais décodage JPEG impossible</string>
     <string name="camera_error_no_video">Aucun fichier vidéo n\'a été créé</string>
     <string name="camera_error_recorder">Erreur d\'image de l\'enregistreur : %1$s</string>

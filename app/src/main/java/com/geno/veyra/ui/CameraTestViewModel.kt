@@ -4,7 +4,7 @@ import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.geno.veyra.glasses.real.RealGlassesBackend
+import com.geno.veyra.glasses.GlassesBackend
 import com.geno.veyra.glasses.CameraPermission
 import com.geno.veyra.settings.CameraResolution
 import com.geno.veyra.settings.SettingsRepository
@@ -67,7 +67,7 @@ data class CameraTestUiState(
 
 @HiltViewModel
 class CameraTestViewModel @Inject constructor(
-    private val backend: RealGlassesBackend,
+    private val backend: GlassesBackend,
     private val settings: SettingsRepository,
     private val videoRecorder: CameraVideoRecorder,
 ) : ViewModel() {
@@ -92,6 +92,71 @@ class CameraTestViewModel @Inject constructor(
         _frames.asSharedFlow()
 
     private var previewJob: Job? = null
+
+    private var permissionJob: Job? = null
+
+    // =========================================================================
+    // CAMERA PERMISSION
+    // =========================================================================
+
+    /**
+     * Settles the Meta camera permission when the Camera Test tab opens,
+     * so the prompt lands before the user taps Start. Silent check first:
+     * only auto-prompts when the permission was never decided; a previous
+     * denial shows the Grant button instead of nagging on every visit.
+     */
+    fun ensureCameraPermission() {
+        if (permissionJob?.isActive == true) return
+        permissionJob = viewModelScope.launch {
+            val current = backend.cameraPermission()
+            if (current == CameraPermission.NOT_DETERMINED) {
+                applyPermissionResult(backend.requestCameraPermission())
+            } else {
+                applyPermissionResult(current)
+            }
+        }
+    }
+
+    /** Re-prompts from the error banner's Grant button. */
+    fun retryCameraPermission() {
+        permissionJob?.cancel()
+        permissionJob = viewModelScope.launch {
+            applyPermissionResult(backend.requestCameraPermission())
+        }
+    }
+
+    private fun applyPermissionResult(result: CameraPermission) {
+        val cur = _uiState.value
+        // Never stomp an active stream's status.
+        if (cur.streaming || cur.status == CameraTestStatus.Starting) {
+            return
+        }
+        _uiState.value =
+            if (result == CameraPermission.GRANTED) {
+                cur.copy(
+                    status =
+                        if (
+                            cur.status ==
+                            CameraTestStatus.PermissionNeeded
+                        ) {
+                            CameraTestStatus.Ready
+                        } else {
+                            cur.status
+                        },
+                    // Clear only the permission error; leave any other
+                    // error (recorder, JPEG, …) untouched.
+                    error =
+                        cur.error.takeUnless {
+                            it == CameraTestError.PermissionNeeded
+                        },
+                )
+            } else {
+                cur.copy(
+                    status = CameraTestStatus.PermissionNeeded,
+                    error = CameraTestError.PermissionNeeded,
+                )
+            }
+    }
 
     private var recordingStartTimeMs = 0L
 

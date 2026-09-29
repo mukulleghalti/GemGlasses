@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,6 +37,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,6 +63,8 @@ import com.geno.veyra.settings.AiProvider
 import com.geno.veyra.settings.AudioOutput
 import com.geno.veyra.settings.LIVE_MODELS
 import com.geno.veyra.settings.LocaleHelper
+import com.geno.veyra.settings.defaultWakePhrase
+import com.geno.veyra.settings.wakeBaseLanguage
 import com.geno.veyra.openai.OPENAI_VOICE_MODELS
 import com.geno.veyra.wakeword.WakeWordModelState
 
@@ -154,6 +158,16 @@ fun SettingsScreen(
                 Switch(
                     checked = prefs.bargeInEnabled,
                     onCheckedChange = { viewModel.setBargeInEnabled(it) },
+                )
+            },
+        )
+        SettingRow(
+            title = stringResource(R.string.settings_session_beep),
+            subtitle = stringResource(R.string.settings_session_beep_sub),
+            trailing = {
+                Switch(
+                    checked = prefs.sessionBeepEnabled,
+                    onCheckedChange = { viewModel.setSessionBeepEnabled(it) },
                 )
             },
         )
@@ -813,7 +827,23 @@ private fun WakeUpDialog(
     val prefs by viewModel.preferences.collectAsStateWithLifecycle()
     val modelState by viewModel.wakeWordModelState
         .collectAsStateWithLifecycle()
+    val appLanguageTag by viewModel.appLanguage
+        .collectAsStateWithLifecycle()
+    val testState by viewModel.wakeTestState
+        .collectAsStateWithLifecycle()
     var custom by remember { mutableStateOf("") }
+
+    // The cached model may belong to another language; re-check readiness
+    // for the current one whenever the dialog opens.
+    LaunchedEffect(Unit) {
+        viewModel.refreshWakeWordModelState()
+        viewModel.resetWakeTest()
+    }
+
+    val baseLang = wakeBaseLanguage(appLanguageTag)
+    // The phrase the test runs against: the typed custom phrase, or the
+    // currently effective one when the field is empty.
+    val testTarget = custom.ifBlank { prefs.wakePhrase }
 
     val micGranted = ContextCompat.checkSelfPermission(
         context,
@@ -864,18 +894,39 @@ private fun WakeUpDialog(
                     color = MaterialTheme.colorScheme.primary,
                 )
                 ChipRow {
-                    WAKE_PHRASES.forEach { (phrase, label) ->
+                    if (baseLang == "en") {
+                        WAKE_PHRASES.forEach { (phrase, label) ->
+                            FilterChip(
+                                selected = prefs.wakePhrase == phrase,
+                                onClick = { viewModel.setWakePhrase(phrase) },
+                                label = { Text(label) },
+                            )
+                        }
+                    } else {
+                        // Non-English: a single chip for the language's
+                        // default phrase — the English presets decode poorly
+                        // through the other language models.
+                        val defaultPhrase = defaultWakePhrase(baseLang)
                         FilterChip(
-                            selected = prefs.wakePhrase == phrase,
-                            onClick = { viewModel.setWakePhrase(phrase) },
-                            label = { Text(label) },
+                            selected = prefs.wakePhrase == defaultPhrase,
+                            onClick = { viewModel.clearWakePhrase() },
+                            label = {
+                                Text(
+                                    defaultPhrase.replaceFirstChar {
+                                        it.uppercase()
+                                    },
+                                )
+                            },
                         )
                     }
                 }
 
                 OutlinedTextField(
                     value = custom,
-                    onValueChange = { custom = it },
+                    onValueChange = {
+                        custom = it
+                        viewModel.resetWakeTest()
+                    },
                     label = { Text(stringResource(R.string.settings_wake_custom_label)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
@@ -896,6 +947,100 @@ private fun WakeUpDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+
+                // Speak-the-phrase test: decodes with the same on-device
+                // model and matcher as live detection, so the verdict is
+                // exactly what the wake word would do.
+                Button(
+                    onClick = {
+                        viewModel.resetWakeTest()
+                        viewModel.testWakePhrase(testTarget)
+                    },
+                    enabled =
+                        micGranted &&
+                            testState !is WakeTestState.Listening,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.settings_wake_test))
+                }
+
+                when (val state = testState) {
+                    is WakeTestState.Listening -> {
+                        Text(
+                            stringResource(
+                                R.string.settings_wake_test_listen,
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        if (state.heard.isNotBlank()) {
+                            Text(
+                                stringResource(
+                                    R.string.settings_wake_test_hearing,
+                                    state.heard,
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color =
+                                    MaterialTheme.colorScheme
+                                        .onSurfaceVariant,
+                            )
+                        }
+                    }
+                    is WakeTestState.Passed -> {
+                        Text(
+                            stringResource(
+                                R.string.settings_wake_test_passed,
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Button(
+                            onClick = {
+                                applyTestPhrase(viewModel, custom)
+                                custom = ""
+                                viewModel.resetWakeTest()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                stringResource(
+                                    R.string.settings_wake_use_phrase,
+                                ),
+                            )
+                        }
+                    }
+                    is WakeTestState.Failed -> {
+                        Text(
+                            stringResource(
+                                R.string.settings_wake_test_failed,
+                                state.heard,
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                applyTestPhrase(viewModel, custom)
+                                custom = ""
+                                viewModel.resetWakeTest()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                stringResource(
+                                    R.string.settings_wake_use_anyway,
+                                ),
+                            )
+                        }
+                    }
+                    is WakeTestState.Error -> {
+                        Text(
+                            state.message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    WakeTestState.Idle -> Unit
+                }
 
                 val modelStatusText = when (val state = modelState) {
                     WakeWordModelState.NotDownloaded ->
@@ -1444,6 +1589,22 @@ private val WAKE_PHRASES = listOf(
     "okay glasses" to "Okay Glasses",
     "hello glasses" to "Hello Glasses",
 )
+
+/**
+ * Applies the tested phrase: a typed custom phrase is stored, an empty
+ * field means the user tested the effective default — so any stored custom
+ * phrase is cleared instead of pinning the default text.
+ */
+private fun applyTestPhrase(
+    viewModel: AgentViewModel,
+    custom: String,
+) {
+    if (custom.isBlank()) {
+        viewModel.clearWakePhrase()
+    } else {
+        viewModel.setWakePhrase(custom.trim().lowercase())
+    }
+}
 
 // Stop phrases the user can pick from. These are matched against Gemini's
 // transcript (not Vosk), so any wording works.

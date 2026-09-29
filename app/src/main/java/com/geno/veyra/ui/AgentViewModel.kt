@@ -32,10 +32,12 @@ import com.geno.veyra.state.TranscriptEntry
 import com.geno.veyra.wakeword.WakeWordEngine
 import com.geno.veyra.wakeword.WakeWordModelState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -180,15 +182,6 @@ class AgentViewModel @Inject constructor(
     }
 
     /**
-     * Changes the assistant language.
-     */
-    fun setLanguage(code: String) {
-        viewModelScope.launch {
-            settings.setLanguage(code)
-        }
-    }
-
-    /**
      * Changes the Gemini voice.
      */
     fun setVoice(voice: String) {
@@ -213,6 +206,61 @@ class AgentViewModel @Inject constructor(
         viewModelScope.launch {
             settings.setWakePhrase(phrase)
         }
+    }
+
+    /**
+     * Drops the custom wake phrase so the per-language default applies.
+     */
+    fun clearWakePhrase() {
+        viewModelScope.launch {
+            settings.clearWakePhrase()
+        }
+    }
+
+    /** Re-reads wake-model readiness for the current app language. */
+    fun refreshWakeWordModelState() {
+        wakeWordEngine.refreshModelState()
+    }
+
+    /**
+     * Runs the wake-phrase test: listens with the current language's
+     * on-device model and reports whether [phrase] would trigger. Caller
+     * must hold RECORD_AUDIO.
+     */
+    fun testWakePhrase(phrase: String) {
+        val trimmed = phrase.trim().lowercase()
+        if (trimmed.isEmpty()) return
+        if (_wakeTestState.value is WakeTestState.Listening) return
+        _wakeTestState.value = WakeTestState.Listening("")
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                var lastHeard = ""
+                val matched =
+                    wakeWordEngine.testDecode(trimmed) { partial ->
+                        lastHeard = partial
+                        _wakeTestState.value =
+                            WakeTestState.Listening(partial)
+                    }
+                _wakeTestState.value =
+                    if (matched) {
+                        WakeTestState.Passed(
+                            lastHeard.ifBlank { trimmed },
+                        )
+                    } else {
+                        WakeTestState.Failed(
+                            lastHeard.ifBlank { "(nothing heard)" },
+                        )
+                    }
+            } catch (e: Exception) {
+                _wakeTestState.value =
+                    WakeTestState.Error(e.message ?: "test failed")
+            }
+        }
+    }
+
+    /** Clears the wake-phrase test result. */
+    fun resetWakeTest() {
+        _wakeTestState.value = WakeTestState.Idle
     }
 
     /**
@@ -242,6 +290,12 @@ class AgentViewModel @Inject constructor(
     fun setBargeInEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settings.setBargeInEnabled(enabled)
+        }
+    }
+
+    fun setSessionBeepEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setSessionBeepEnabled(enabled)
         }
     }
 
@@ -455,4 +509,29 @@ class AgentViewModel @Inject constructor(
     private companion object {
         const val TAG = "AgentViewModel"
     }
+
+    private val _wakeTestState: MutableStateFlow<WakeTestState> =
+        MutableStateFlow(WakeTestState.Idle)
+
+    /** Live state of the wake-phrase test in Settings. */
+    val wakeTestState: StateFlow<WakeTestState> =
+        _wakeTestState.asStateFlow()
+}
+
+/** UI state for the wake-phrase test in Settings. */
+sealed interface WakeTestState {
+    /** No test has run (or the result was cleared). */
+    data object Idle : WakeTestState
+
+    /** Listening; [heard] is the latest decoded fragment. */
+    data class Listening(val heard: String) : WakeTestState
+
+    /** The phrase matched — it would trigger the assistant. */
+    data class Passed(val heard: String) : WakeTestState
+
+    /** The phrase never matched; [heard] is what Vosk decoded. */
+    data class Failed(val heard: String) : WakeTestState
+
+    /** The test itself broke (mic, model download, …). */
+    data class Error(val message: String) : WakeTestState
 }
