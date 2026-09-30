@@ -141,8 +141,8 @@
     <string name="settings_ocr_sub">Consenti all\'assistente di leggere il testo da ciò che vede</string>
     <string name="settings_smart_home">Casa intelligente</string>
     <string name="settings_smart_home_sub">Consenti all\'assistente di controllare i dispositivi Google Home</string>
-    <string name="settings_upi_pay">Pagamenti UPI</string>
-    <string name="settings_upi_pay_sub">Scansiona i codici QR UPI con gli occhiali per pagare</string>
+    <string name="settings_look_pay">Guarda e paga</string>
+    <string name="settings_look_pay_sub">Scansiona i codici QR di pagamento con gli occhiali: UPI, Venmo, Cash App</string>
     <string name="settings_connect_home">Connetti Google Home</string>
     <string name="settings_home_connected">Connesso</string>
     <string name="settings_home_not_connected">Non connesso</string>

@@ -308,12 +308,12 @@ fun SettingsScreen(
             },
         )
         SettingRow(
-            title = stringResource(R.string.settings_upi_pay),
-            subtitle = stringResource(R.string.settings_upi_pay_sub),
+            title = stringResource(R.string.settings_look_pay),
+            subtitle = stringResource(R.string.settings_look_pay_sub),
             trailing = {
                 Switch(
-                    checked = prefs.upiPayEnabled,
-                    onCheckedChange = { viewModel.setUpiPayEnabled(it) },
+                    checked = prefs.lookPayEnabled,
+                    onCheckedChange = { viewModel.setLookPayEnabled(it) },
                 )
             },
         )

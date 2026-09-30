@@ -163,8 +163,8 @@
     <string name="settings_ocr_sub">Let the assistant read text from what it sees</string>
     <string name="settings_smart_home">Smart Home</string>
     <string name="settings_smart_home_sub">Let the assistant control Google Home devices</string>
-    <string name="settings_upi_pay">UPI Payments</string>
-    <string name="settings_upi_pay_sub">Scan UPI QR codes with the glasses to pay</string>
+    <string name="settings_look_pay">Look and Pay</string>
+    <string name="settings_look_pay_sub">Scan payment QR codes with the glasses — UPI, Venmo, Cash App</string>
     <string name="settings_connect_home">Connect Google Home</string>
     <string name="settings_home_connected">Connected</string>
     <string name="settings_home_not_connected">Not connected</string>

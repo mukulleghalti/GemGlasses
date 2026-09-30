@@ -228,7 +228,7 @@ class AgentController @Inject constructor(
                         qrScan = prefs.qrScanEnabled,
                         ocr = prefs.ocrEnabled,
                         smartHome = prefs.smartHomeEnabled,
-                        upiPay = prefs.upiPayEnabled,
+                        lookPay = prefs.lookPayEnabled,
                     ),
                     model = prefs.liveModel,
                     openAiModel = prefs.chatGptModel,
@@ -431,6 +431,9 @@ class AgentController @Inject constructor(
         )
     }
 
+    /**
+     * True when the user's transcript contains a ChatGPT launch phrase as
+     * whole words (case-insensitive): "open chat gpt", "open chatgpt",
     private fun dispatchTools(
         event: SessionEvent.ToolInvocation,
         keeper: VoiceSessionKeeper,

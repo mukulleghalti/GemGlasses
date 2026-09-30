@@ -117,7 +117,7 @@ data class AgentPreferences(
     val qrScanEnabled: Boolean,
     val ocrEnabled: Boolean,
     val smartHomeEnabled: Boolean,
-    val upiPayEnabled: Boolean,
+    val lookPayEnabled: Boolean,
     val liveModel: String,
     val aiProvider: AiProvider,
     val chatGptModel: String,
@@ -151,14 +151,15 @@ data class AgentPreferences(
                         "asks to scan a code, call scan_barcode.",
                 )
             }
-            if (upiPayEnabled) {
+            if (lookPayEnabled) {
                 append(
-                    "\n\nUPI payments are enabled: when the user asks to " +
-                        "scan a QR code to pay, call scan_upi_qr. Announce " +
-                        "the payee name and amount to the user, then ASK " +
-                        "for confirmation before calling open_payment_app. " +
-                        "Only call open_payment_app after the user confirms. " +
-                        "Never invent or modify payment details.",
+                    "\n\nLook and Pay is enabled: when the user asks to " +
+                        "scan a QR code to pay, call scan_pay_qr. Announce " +
+                        "the payment app, recipient, and amount (when " +
+                        "available) to the user, then ASK for confirmation " +
+                        "before calling open_payment_app. Only call " +
+                        "open_payment_app after the user confirms. Never " +
+                        "invent or modify payment details.",
                 )
             }
             if (ocrEnabled) {
@@ -206,7 +207,7 @@ data class AgentPreferences(
             qrScanEnabled = false,
             ocrEnabled = false,
             smartHomeEnabled = false,
-            upiPayEnabled = false,
+            lookPayEnabled = false,
             liveModel = DEFAULT_LIVE_MODEL,
             aiProvider = AiProvider.GEMINI,
             chatGptModel = DEFAULT_OPENAI_VOICE_MODEL,
@@ -418,8 +419,8 @@ class SettingsRepository @Inject constructor(
     private val smartHomeEnabledKey =
         booleanPreferencesKey("smart_home_enabled")
 
-    private val upiPayEnabledKey =
-        booleanPreferencesKey("upi_pay_enabled")
+    private val lookPayEnabledKey =
+        booleanPreferencesKey("look_pay_enabled")
 
     private val liveModelKey =
         stringPreferencesKey("live_model")
@@ -536,9 +537,9 @@ class SettingsRepository @Inject constructor(
                     prefs[smartHomeEnabledKey]
                         ?: AgentPreferences.DEFAULT.smartHomeEnabled,
 
-                upiPayEnabled =
-                    prefs[upiPayEnabledKey]
-                        ?: AgentPreferences.DEFAULT.upiPayEnabled,
+                lookPayEnabled =
+                    prefs[lookPayEnabledKey]
+                        ?: AgentPreferences.DEFAULT.lookPayEnabled,
 
                 liveModel =
                     prefs[liveModelKey]
@@ -722,11 +723,11 @@ class SettingsRepository @Inject constructor(
         }
     }
 
-    suspend fun setUpiPayEnabled(
+    suspend fun setLookPayEnabled(
         enabled: Boolean,
     ) {
         context.dataStore.edit {
-            it[upiPayEnabledKey] = enabled
+            it[lookPayEnabledKey] = enabled
         }
     }
 

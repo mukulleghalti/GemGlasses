@@ -400,9 +400,9 @@ class AgentViewModel @Inject constructor(
         }
     }
 
-    fun setUpiPayEnabled(enabled: Boolean) {
+    fun setLookPayEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            settings.setUpiPayEnabled(enabled)
+            settings.setLookPayEnabled(enabled)
         }
     }
 
