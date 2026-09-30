@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -112,19 +113,22 @@ class WakeWordService : Service() {
     private fun onDetected(heardText: String) {
         Log.i(TAG, "wake word detected (\"$heardText\")")
 
-        // "Hey glasses, open ChatGPT" — launch ChatGPT directly instead of
-        // starting a Gemini session. The voice command toggle must be on.
-        val prefs = settings.preferences.value
-        if (prefs.voiceChatGptEnabled && CHATGPT_COMMAND.containsMatchIn(heardText)) {
-            Log.i(TAG, "ChatGPT voice command heard — launching ChatGPT")
-            launchChatGptVoice()
-            stopSelf()
-            return
-        }
+        // preferences is a cold Flow — read it in the service scope.
+        scope.launch {
+            // "Hey glasses, open ChatGPT" — launch ChatGPT directly instead of
+            // starting a Gemini session. The voice command toggle must be on.
+            val prefs = settings.preferences.first()
+            if (prefs.voiceChatGptEnabled && CHATGPT_COMMAND.containsMatchIn(heardText)) {
+                Log.i(TAG, "ChatGPT voice command heard — launching ChatGPT")
+                launchChatGptVoice()
+                stopSelf()
+                return@launch
+            }
 
-        // Normal path: start the assistant session.
-        starter.start(initialText = heardText)
-        stopSelf()
+            // Normal path: start the assistant session.
+            starter.start(initialText = heardText)
+            stopSelf()
+        }
     }
 
     /**
