@@ -431,9 +431,6 @@ class AgentController @Inject constructor(
         )
     }
 
-    /**
-     * True when the user's transcript contains a ChatGPT launch phrase as
-     * whole words (case-insensitive): "open chat gpt", "open chatgpt",
     private fun dispatchTools(
         event: SessionEvent.ToolInvocation,
         keeper: VoiceSessionKeeper,
