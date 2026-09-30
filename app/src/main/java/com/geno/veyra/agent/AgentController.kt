@@ -107,7 +107,6 @@ class AgentController @Inject constructor(
         AgentPreferences.DEFAULT_STOP_PHRASE
 
     /**
-    /**
      * Whether talking over the assistant cuts it off. Refreshed from
      * settings every time the assistant starts.
      */
