@@ -24,6 +24,9 @@ import com.meta.wearable.dat.camera.types.StreamConfiguration
 import com.meta.wearable.dat.camera.types.StreamState
 import com.meta.wearable.dat.camera.types.VideoFrame
 import com.meta.wearable.dat.camera.types.VideoQuality
+import com.meta.wearable.dat.camera.photo.types.PhotoQuality
+import com.meta.wearable.dat.camera.photo.types.PhotoResolution
+import com.meta.wearable.dat.camera.photo.types.PhotoState
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.selectors.AutoDeviceSelector
 import com.meta.wearable.dat.core.session.DeviceSession
@@ -1383,6 +1386,130 @@ class RealGlassesBackend @Inject constructor(
     // CAMERA TEST - PHOTO CAPTURE
     // =========================================================================
 
+    /**
+     * Captures a photo using the DAT 1.0.0 standalone Photo API.
+     *
+     * This is the dedicated high-resolution capture path (separate from
+     * the video stream) — PhotoResolution.FULL at PhotoQuality.HIGH.
+     * The video stream is stopped before capture (Stream and Photo
+     * compete for the camera hardware) and restarted afterwards.
+     *
+     * Returns failure if the Photo API is unavailable or the capture
+     * fails, so the caller can fall back to in-stream capturePhoto().
+     */
+    private suspend fun tryPhotoApiCapture(
+        activeCamera: com.meta.wearable.dat.camera.Camera,
+    ): Result<ByteArray> {
+        return try {
+            // Stop the video stream — Photo needs the hardware.
+            try {
+                activeCamera.stream.stop()
+            } catch (e: Exception) {
+                Log.w(TAG, "Photo API: stream.stop() failed", e)
+            }
+
+            val photo = activeCamera.photo
+
+            // Wait for the Photo child to reach STARTED.
+            val started = withTimeoutOrNull(10_000) {
+                photo.state.first { it == PhotoState.STARTED }
+                true
+            } ?: false
+
+            if (!started) {
+                return Result.failure(
+                    IllegalStateException(
+                        "Photo API did not reach STARTED (state=${photo.state.value})"
+                    )
+                )
+            }
+
+            // Collect the result before triggering capture —
+            // photoStream is a SharedFlow, late collectors miss emissions.
+            val captureDeferred = CompletableDeferred<Result<ByteArray>>()
+
+            val collectJob = CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val data = withTimeoutOrNull(30_000) {
+                        photo.photoStream.first()
+                    }
+
+                    if (data == null) {
+                        captureDeferred.complete(
+                            Result.failure(
+                                IllegalStateException(
+                                    "Photo API timed out waiting for capture data"
+                                )
+                            )
+                        )
+                    } else {
+                        val jpeg = data.imageData
+                        if (jpeg.isEmpty()) {
+                            captureDeferred.complete(
+                                Result.failure(
+                                    IllegalStateException(
+                                        "Photo API returned empty image data"
+                                    )
+                                )
+                            )
+                        } else {
+                            Log.i(
+                                TAG,
+                                "Photo API captured: ${jpeg.size} bytes " +
+                                    "(FULL/${PhotoQuality.HIGH})"
+                            )
+                            captureDeferred.complete(Result.success(jpeg))
+                        }
+                    }
+                } catch (e: Exception) {
+                    captureDeferred.complete(Result.failure(e))
+                }
+            }
+
+            // Watch for Photo errors concurrently.
+            val errorJob = CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val error = withTimeoutOrNull(30_000) {
+                        photo.errors.first()
+                    }
+                    if (error != null && !captureDeferred.isCompleted) {
+                        Log.e(TAG, "Photo API error: $error")
+                        captureDeferred.complete(
+                            Result.failure(
+                                IllegalStateException("Photo API error: $error")
+                            )
+                        )
+                    }
+                } catch (_: Exception) {
+                    // Ignore — capture path handles the result.
+                }
+            }
+
+            try {
+                photo.capturePhoto(
+                    resolution = PhotoResolution.FULL,
+                    quality = PhotoQuality.HIGH,
+                )
+
+                captureDeferred.await()
+            } finally {
+                collectJob.cancel()
+                errorJob.cancel()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Photo API capture threw", e)
+            Result.failure(e)
+        } finally {
+            // Restart the video stream for preview.
+            try {
+                activeCamera.stream.start()
+                Log.i(TAG, "Photo API: video stream restarted")
+            } catch (e: Exception) {
+                Log.w(TAG, "Photo API: stream.start() failed", e)
+            }
+        }
+    }
+
     override suspend fun captureCameraTestPhoto():
         Result<ByteArray> {
 
@@ -1397,6 +1524,22 @@ class RealGlassesBackend @Inject constructor(
                 )
             )
         }
+
+        // Try the DAT 1.0.0 standalone Photo API first — dedicated
+        // high-resolution capture path (FULL resolution, HIGH quality).
+        // Falls back to in-stream capture if the Photo API fails.
+        val photoApiResult =
+            tryPhotoApiCapture(activeCamera)
+
+        if (photoApiResult.isSuccess) {
+            return photoApiResult
+        }
+
+        Log.w(
+            TAG,
+            "Photo API capture failed, falling back to stream capture: " +
+                photoApiResult.exceptionOrNull()?.message
+        )
 
         if (
             activeCamera.stream.state.value !=
