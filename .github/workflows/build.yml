@@ -9,6 +9,7 @@ on:
       - AddVideoPhotosave
       - Muse_voice-wake
       - Muse_ondevice-tokens
+      - Muse_dat-1.0.0
 
   workflow_dispatch:
     inputs:
