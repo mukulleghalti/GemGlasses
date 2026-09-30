@@ -72,8 +72,6 @@ class RealGlassesBackend @Inject constructor(
         private const val REGISTRATION_TIMEOUT_MS = 10_000L
 
         private const val CAMERA_STREAM_TIMEOUT_MS = 15_000L
-        private const val CAMERA_SETTLE_DELAY_MS = 1_500L
-        private const val CAMERA_FIRST_FRAME_TIMEOUT_MS = 10_000L
 
         /*
          * Gemini vision camera configuration.
@@ -1029,176 +1027,153 @@ class RealGlassesBackend @Inject constructor(
 
         try {
 
-            activeCamera.stream
-                .start()
-                .getOrElse { error ->
+            // Use the DAT 1.0.0 standalone Photo API directly — dedicated
+            // high-resolution capture (FULL / HIGH) without starting a
+            // video stream. This is a one-shot vision capture; the camera
+            // is stopped in the finally block below.
+            val photo =
+                activeCamera.photo
 
-                    Log.e(
-                        TAG,
-                        "Gemini camera stream start failed: $error"
-                    )
-
-                    return@channelFlow
-                }
-
-            val streaming =
-                withTimeoutOrNull(
-                    CAMERA_STREAM_TIMEOUT_MS
-                ) {
-
-                    activeCamera.stream.state.first {
-                        it ==
-                            StreamState.STREAMING
+            val photoStarted =
+                withTimeoutOrNull(10_000) {
+                    photo.state.first {
+                        it == PhotoState.STARTED
                     }
-
                     true
-
                 } ?: false
 
-            if (!streaming) {
+            if (!photoStarted) {
 
                 Log.e(
                     TAG,
-                    "Gemini camera stream did not reach STREAMING"
+                    "Gemini camera: Photo API did not reach STARTED " +
+                        "(state=${photo.state.value})"
                 )
 
                 return@channelFlow
             }
 
-            val firstRealFrame =
-                CompletableDeferred<VideoFrame>()
+            Log.i(
+                TAG,
+                "Gemini camera: Photo API started, capturing"
+            )
 
-            val videoCollectorJob =
+            val captureDeferred =
+                CompletableDeferred<ByteArray?>()
+
+            val collectJob =
                 launch {
 
                     try {
 
-                        activeCamera.stream.videoStream.collect { frame ->
-
-                            val bytes =
-                                frame.buffer.remaining()
-
-                            if (
-                                !frame.isCodecConfig &&
-                                bytes > 0 &&
-                                !firstRealFrame.isCompleted
-                            ) {
-
-                                firstRealFrame.complete(
-                                    frame
-                                )
+                        val data =
+                            withTimeoutOrNull(30_000) {
+                                photo.photoStream.first()
                             }
+
+                        val jpeg =
+                            data?.imageData
+
+                        if (
+                            jpeg != null &&
+                                jpeg.isNotEmpty()
+                        ) {
+
+                            Log.i(
+                                TAG,
+                                "Gemini camera: Photo API captured " +
+                                    "${jpeg.size} bytes"
+                            )
+
+                            captureDeferred.complete(jpeg)
+
+                        } else {
+
+                            captureDeferred.complete(null)
                         }
 
                     } catch (e: Exception) {
 
                         if (
-                            !firstRealFrame.isCompleted
+                            !captureDeferred.isCompleted
                         ) {
 
-                            firstRealFrame.completeExceptionally(
-                                e
-                            )
+                            captureDeferred
+                                .completeExceptionally(e)
                         }
                     }
                 }
 
-            val firstFrameReceived =
-                withTimeoutOrNull(
-                    CAMERA_FIRST_FRAME_TIMEOUT_MS
-                ) {
+            val errorJob =
+                launch {
 
                     try {
-                        firstRealFrame.await()
-                        true
+
+                        val error =
+                            withTimeoutOrNull(30_000) {
+                                photo.errors.first()
+                            }
+
+                        if (
+                            error != null &&
+                                !captureDeferred.isCompleted
+                        ) {
+
+                            Log.e(
+                                TAG,
+                                "Gemini camera Photo API error: $error"
+                            )
+
+                            captureDeferred.complete(null)
+                        }
+
                     } catch (_: Exception) {
-                        false
-                    }
-
-                } ?: false
-
-            if (!firstFrameReceived) {
-
-                Log.e(
-                    TAG,
-                    "Gemini camera: no video frame received"
-                )
-
-                videoCollectorJob.cancel()
-
-                return@channelFlow
-            }
-
-            delay(
-                CAMERA_SETTLE_DELAY_MS
-            )
-
-            if (
-                activeCamera.stream.state.value !=
-                    StreamState.STREAMING
-            ) {
-
-                Log.e(
-                    TAG,
-                    "Gemini camera stopped before photo capture"
-                )
-
-                videoCollectorJob.cancel()
-
-                return@channelFlow
-            }
-
-            try {
-
-                val captureResult =
-                    activeCamera.stream.capturePhoto()
-
-                val photoData =
-                    captureResult.getOrNull()
-
-                if (photoData == null) {
-
-                    Log.e(
-                        TAG,
-                        "Gemini capturePhoto() failed: " +
-                            captureResult.errorOrNull()
-                    )
-
-                } else {
-
-                    val jpeg =
-                        photoDataToJpeg(
-                            photoData
-                        )
-
-                    if (
-                        jpeg != null &&
-                        jpeg.isNotEmpty()
-                    ) {
-
-                        send(jpeg)
-
-                    } else {
-
-                        Log.e(
-                            TAG,
-                            "Gemini photo JPEG conversion failed"
-                        )
+                        // Capture path handles the result.
                     }
                 }
 
-            } catch (e: Exception) {
+            try {
 
-                Log.e(
-                    TAG,
-                    "Gemini capturePhoto() threw",
-                    e
+                photo.capturePhoto(
+                    resolution = PhotoResolution.FULL,
+                    quality = PhotoQuality.HIGH,
                 )
+
+                val jpeg =
+                    try {
+                        captureDeferred.await()
+                    } catch (e: Exception) {
+                        Log.e(
+                            TAG,
+                            "Gemini camera Photo API capture failed",
+                            e
+                        )
+                        null
+                    }
+
+                if (
+                    jpeg != null &&
+                        jpeg.isNotEmpty()
+                ) {
+
+                    send(jpeg)
+
+                } else {
+
+                    Log.e(
+                        TAG,
+                        "Gemini camera: no JPEG from Photo API"
+                    )
+                }
 
             } finally {
 
-                videoCollectorJob.cancel()
+                collectJob.cancel()
+                errorJob.cancel()
             }
+
+            // Legacy stream-based capture path removed — Photo API is the
+            // dedicated high-resolution path on DAT 1.0.0.
 
         } finally {
 
