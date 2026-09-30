@@ -400,6 +400,12 @@ class AgentViewModel @Inject constructor(
         }
     }
 
+    fun setUpiPayEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setUpiPayEnabled(enabled)
+        }
+    }
+
     /** True once the user has granted Google Home permissions. */
     val smartHomeConnected: StateFlow<Boolean> =
         smartHome.isConnected().stateInDefault(false)

@@ -307,6 +307,16 @@ fun SettingsScreen(
                 )
             },
         )
+        SettingRow(
+            title = stringResource(R.string.settings_upi_pay),
+            subtitle = stringResource(R.string.settings_upi_pay_sub),
+            trailing = {
+                Switch(
+                    checked = prefs.upiPayEnabled,
+                    onCheckedChange = { viewModel.setUpiPayEnabled(it) },
+                )
+            },
+        )
         if (prefs.smartHomeEnabled) {
             SettingRow(
                 title = stringResource(R.string.settings_connect_home),

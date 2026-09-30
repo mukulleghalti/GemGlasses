@@ -16,6 +16,8 @@ import com.geno.veyra.tools.PlacesTool
 import com.geno.veyra.tools.SaveMemoryTool
 import com.geno.veyra.tools.ScanBarcodeTool
 import com.geno.veyra.tools.OcrTool
+import com.geno.veyra.tools.ScanUpiQrTool
+import com.geno.veyra.tools.OpenPaymentAppTool
 import com.geno.veyra.tools.ControlHomeDeviceTool
 import com.geno.veyra.tools.ListHomeDevicesTool
 import com.geno.veyra.tools.SearchConversationsTool
@@ -101,6 +103,14 @@ abstract class ToolsModule {
     @Binds
     @IntoSet
     abstract fun ocrTool(tool: OcrTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun scanUpiQrTool(tool: ScanUpiQrTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun openPaymentAppTool(tool: OpenPaymentAppTool): AgentTool
 
     @Binds
     @IntoSet

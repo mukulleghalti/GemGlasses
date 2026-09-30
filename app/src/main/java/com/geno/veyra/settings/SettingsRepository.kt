@@ -117,6 +117,7 @@ data class AgentPreferences(
     val qrScanEnabled: Boolean,
     val ocrEnabled: Boolean,
     val smartHomeEnabled: Boolean,
+    val upiPayEnabled: Boolean,
     val liveModel: String,
     val aiProvider: AiProvider,
     val chatGptModel: String,
@@ -148,6 +149,16 @@ data class AgentPreferences(
                 append(
                     "\n\nQR/barcode scanning is enabled: when the user " +
                         "asks to scan a code, call scan_barcode.",
+                )
+            }
+            if (upiPayEnabled) {
+                append(
+                    "\n\nUPI payments are enabled: when the user asks to " +
+                        "scan a QR code to pay, call scan_upi_qr. Announce " +
+                        "the payee name and amount to the user, then ASK " +
+                        "for confirmation before calling open_payment_app. " +
+                        "Only call open_payment_app after the user confirms. " +
+                        "Never invent or modify payment details.",
                 )
             }
             if (ocrEnabled) {
@@ -195,6 +206,7 @@ data class AgentPreferences(
             qrScanEnabled = false,
             ocrEnabled = false,
             smartHomeEnabled = false,
+            upiPayEnabled = false,
             liveModel = DEFAULT_LIVE_MODEL,
             aiProvider = AiProvider.GEMINI,
             chatGptModel = DEFAULT_OPENAI_VOICE_MODEL,
@@ -406,6 +418,9 @@ class SettingsRepository @Inject constructor(
     private val smartHomeEnabledKey =
         booleanPreferencesKey("smart_home_enabled")
 
+    private val upiPayEnabledKey =
+        booleanPreferencesKey("upi_pay_enabled")
+
     private val liveModelKey =
         stringPreferencesKey("live_model")
 
@@ -520,6 +535,10 @@ class SettingsRepository @Inject constructor(
                 smartHomeEnabled =
                     prefs[smartHomeEnabledKey]
                         ?: AgentPreferences.DEFAULT.smartHomeEnabled,
+
+                upiPayEnabled =
+                    prefs[upiPayEnabledKey]
+                        ?: AgentPreferences.DEFAULT.upiPayEnabled,
 
                 liveModel =
                     prefs[liveModelKey]
@@ -700,6 +719,14 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[smartHomeEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setUpiPayEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[upiPayEnabledKey] = enabled
         }
     }
 

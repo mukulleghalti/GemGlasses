@@ -107,7 +107,6 @@ class AgentController @Inject constructor(
         AgentPreferences.DEFAULT_STOP_PHRASE
 
     /**
-    /**
      * Whether talking over the assistant cuts it off. Refreshed from
      * settings every time the assistant starts.
      */
@@ -229,6 +228,7 @@ class AgentController @Inject constructor(
                         qrScan = prefs.qrScanEnabled,
                         ocr = prefs.ocrEnabled,
                         smartHome = prefs.smartHomeEnabled,
+                        upiPay = prefs.upiPayEnabled,
                     ),
                     model = prefs.liveModel,
                     openAiModel = prefs.chatGptModel,

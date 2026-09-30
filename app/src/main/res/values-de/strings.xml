@@ -141,6 +141,8 @@
     <string name="settings_ocr_sub">Dem Assistenten erlauben, Text aus dem Gesehenen zu lesen</string>
     <string name="settings_smart_home">Smart Home</string>
     <string name="settings_smart_home_sub">Dem Assistenten erlauben, Google-Home-Geräte zu steuern</string>
+    <string name="settings_upi_pay">UPI-Zahlungen</string>
+    <string name="settings_upi_pay_sub">UPI-QR-Codes mit der Brille zum Bezahlen scannen</string>
     <string name="settings_connect_home">Google Home verbinden</string>
     <string name="settings_home_connected">Verbunden</string>
     <string name="settings_home_not_connected">Nicht verbunden</string>

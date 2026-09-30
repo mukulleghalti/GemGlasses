@@ -22,6 +22,7 @@ data class ToolFlags(
     val qrScan: Boolean = false,
     val ocr: Boolean = false,
     val smartHome: Boolean = false,
+    val upiPay: Boolean = false,
 )
 
 /**
@@ -48,6 +49,7 @@ class ToolRegistry @Inject constructor(
                         ToolGate.QR_SCAN -> flags.qrScan
                         ToolGate.OCR -> flags.ocr
                         ToolGate.SMART_HOME -> flags.smartHome
+                        ToolGate.UPI_PAY -> flags.upiPay
                     }
                 }
                 .map { it.declaration }
@@ -78,6 +80,7 @@ class ToolRegistry @Inject constructor(
                     ToolGate.QR_SCAN -> flags.qrScan
                     ToolGate.OCR -> flags.ocr
                     ToolGate.SMART_HOME -> flags.smartHome
+                    ToolGate.UPI_PAY -> flags.upiPay
                 }
             }
             .map { tool ->
