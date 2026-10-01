@@ -46,7 +46,6 @@ class TapToChatGptService : Service() {
     }
 
     private var mediaSession: MediaSession? = null
-    private var silentPlayer: MediaPlayer? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -121,12 +120,16 @@ class TapToChatGptService : Service() {
                 )
             }
             Log.i(TAG, "MediaSession active; listening for glasses taps")
-            // Play silent audio on loop: the system only routes media-button
-            // events to sessions it believes are actually producing audio.
-            // A PLAYING state with no audio output is ignored. Silent audio
-            // makes us a "real" player. Volume is 0, so it's inaudible.
-            // Spike only -- remove if a cleaner dispatch method is found.
-            startSilentAudio()
+            // Play a brief burst of silence at full volume: the Bluetooth
+            // AVRCP stack only routes media-button events to sessions with
+            // a genuinely active audio pipeline. Silent samples (zeros) at
+            // normal volume = active A2DP stream carrying no audible sound,
+            // so the stack sees real audio flowing and forwards taps to us.
+            // Our earlier attempt played silence at volume 0, which leaves
+            // the pipeline effectively dead — the stack ignored us.
+            // (Chachan's manifest describes exactly this: "plays only brief
+            // silence to acquire the media button".)
+            playBriefSilence()
         } else {
             // Re-assert dispatch priority: the system routes taps to the
             // most recently active eligible session, so if another app's
@@ -145,6 +148,9 @@ class TapToChatGptService : Service() {
                 )
                 session.isActive = true
                 Log.d(TAG, "MediaSession priority re-asserted")
+                // Re-acquire the audio pipeline too, in case another app's
+                // playback knocked us out of the media-button routing.
+                playBriefSilence()
             }
         }
 
@@ -184,7 +190,6 @@ class TapToChatGptService : Service() {
     }
 
     override fun onDestroy() {
-        stopSilentAudio()
         // Abandon audio focus so we don't block real music apps.
         runCatching {
             val audio = getSystemService(AudioManager::class.java)
@@ -201,48 +206,41 @@ class TapToChatGptService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     /**
-     * Plays 1 second of digital silence on loop at zero volume. This is
-     * a spike workaround: Android's media-button dispatch ignores sessions
-     * that claim PLAYING but produce no audio. The silent loop makes the
-     * session a "real" player so taps route to us.
+     * Plays a brief burst of digital silence at full volume. Chachan's
+     * approach (from their APK manifest): the Bluetooth AVRCP stack only
+     * routes media-button taps to sessions with a genuinely active audio
+     * pipeline. Silent samples at normal volume keep the A2DP stream
+     * alive with zeros — inaudible, but the stack sees real audio.
+     * Brief, not looped: one burst acquires the routing.
      */
-    private fun startSilentAudio() {
-        if (silentPlayer != null) return
+    private fun playBriefSilence() {
         try {
             val wavFile = File(cacheDir, "tap_silence.wav")
             if (!wavFile.exists()) {
                 wavFile.writeBytes(generateSilentWav())
             }
-            val player = MediaPlayer().apply {
+            MediaPlayer().apply {
                 setDataSource(wavFile.absolutePath)
                 setAudioStreamType(AudioManager.STREAM_MUSIC)
-                isLooping = true
-                setVolume(0f, 0f)
+                // Full volume: samples are zeros, so nothing audible,
+                // but the pipeline is genuinely active.
+                setVolume(1f, 1f)
                 prepare()
+                setOnCompletionListener { mp -> mp.release() }
                 start()
             }
-            silentPlayer = player
-            Log.d(TAG, "silent audio loop started")
+            Log.d(TAG, "brief silence played to acquire media-button routing")
         } catch (e: Exception) {
-            Log.w(TAG, "silent audio failed: ${e.message}")
+            Log.w(TAG, "brief silence failed: ${e.message}")
         }
-    }
-
-    private fun stopSilentAudio() {
-        try {
-            silentPlayer?.stop()
-            silentPlayer?.release()
-        } catch (_: Exception) {
-        }
-        silentPlayer = null
     }
 
     /**
-     * Generates a 1-second 44.1kHz mono 16-bit WAV of pure silence.
+     * Generates a 0.5-second 44.1kHz mono 16-bit WAV of pure silence.
      */
     private fun generateSilentWav(): ByteArray {
         val sampleRate = 44100
-        val numSamples = sampleRate // 1 second
+        val numSamples = sampleRate / 2 // 0.5 second
         val dataSize = numSamples * 2 // 16-bit mono
         val buffer = java.nio.ByteBuffer.allocate(44 + dataSize)
         buffer.order(java.nio.ByteOrder.LITTLE_ENDIAN)
