@@ -104,6 +104,9 @@ interface GlassesBackend {
 
     suspend fun connect(): Boolean = false
 
+    /** Releases the glasses session, if one is held. Default: nothing held. */
+    suspend fun disconnect() = Unit
+
     // === Camera Test ===
     //
     // Declared here (with safe defaults) so callers share the singleton

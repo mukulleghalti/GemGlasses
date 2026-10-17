@@ -264,4 +264,5 @@
     <string name="input_channel">Botón de captura</string>
     <string name="input_notification_title">El botón de captura está activado</string>
     <string name="input_notification_text">Pulsa el botón de captura de las gafas para hablar con Veyra</string>
+    <string name="settings_capture_button_warning">Mientras esto está activado, el botón de captura inicia y detiene Veyra en lugar de hacer fotos. Desactívalo para recuperar la captura de fotos.</string>
 </resources>

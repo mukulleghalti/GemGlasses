@@ -264,4 +264,5 @@
     <string name="input_channel">Bouton de capture</string>
     <string name="input_notification_title">Le bouton de capture est activé</string>
     <string name="input_notification_text">Appuyez sur le bouton de capture des lunettes pour parler à Veyra</string>
+    <string name="settings_capture_button_warning">Quand cette option est active, le bouton de capture démarre et arrête Veyra au lieu de prendre des photos. Désactivez-la pour retrouver la capture de photos.</string>
 </resources>

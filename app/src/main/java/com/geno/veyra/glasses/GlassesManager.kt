@@ -64,4 +64,7 @@ class GlassesManager @Inject constructor(
 
     suspend fun connect(): Boolean =
         backend.connect()
+
+    suspend fun disconnect() =
+        backend.disconnect()
 }

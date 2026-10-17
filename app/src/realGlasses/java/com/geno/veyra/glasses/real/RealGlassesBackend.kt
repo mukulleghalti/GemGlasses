@@ -573,6 +573,57 @@ class RealGlassesBackend @Inject constructor(
         return true
     }
 
+    /**
+     * Stops the current DAT session, if any. The session-state observer
+     * clears the session fields and reports DISCONNECTED when STOPPED
+     * arrives. Used when the capture-button listener is turned off, so
+     * the glasses button returns to its native behaviour.
+     */
+    override suspend fun disconnect() {
+
+        val activeSession =
+            session ?: sharedSession
+
+        if (activeSession == null) {
+
+            _connectionState.value =
+                ConnectionState.DISCONNECTED
+
+            return
+        }
+
+        Log.i(
+            TAG,
+            "disconnect(): stopping session"
+        )
+
+        detachInputs()
+
+        try {
+
+            activeSession.stop()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "session stop() failed",
+                e
+            )
+
+            if (session === activeSession) {
+                session = null
+            }
+
+            if (sharedSession === activeSession) {
+                sharedSession = null
+            }
+
+            _connectionState.value =
+                ConnectionState.DISCONNECTED
+        }
+    }
+
     // =========================================================================
     // SESSION STATE
     // =========================================================================

@@ -2,6 +2,8 @@ package com.geno.veyra.inputs
 
 import android.content.Context
 import android.util.Log
+import com.geno.veyra.agent.AgentController
+import com.geno.veyra.agent.AgentStatus
 import com.geno.veyra.glasses.GlassesManager
 import com.geno.veyra.glasses.RegistrationState
 import com.geno.veyra.settings.SettingsRepository
@@ -26,6 +28,7 @@ class GlassesInputCoordinator @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settings: SettingsRepository,
     private val glassesManager: GlassesManager,
+    private val controller: AgentController,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -52,6 +55,12 @@ class GlassesInputCoordinator @Inject constructor(
                 } else if (!shouldRun && serviceRunning) {
                     GlassesInputService.stop(context)
                     serviceRunning = false
+                    // Release the DAT session too, so the capture button
+                    // returns to its native behaviour. Skipped while an
+                    // assistant session is live — it shares the session.
+                    if (controller.status.value == AgentStatus.IDLE) {
+                        glassesManager.disconnect()
+                    }
                 }
             }
         }

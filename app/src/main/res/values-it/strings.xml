@@ -264,4 +264,5 @@
     <string name="input_channel">Pulsante di cattura</string>
     <string name="input_notification_title">Il pulsante di cattura è attivo</string>
     <string name="input_notification_text">Premi il pulsante di cattura degli occhiali per parlare con Veyra</string>
+    <string name="settings_capture_button_warning">Quando è attivo, il pulsante di cattura avvia e ferma Veyra invece di scattare foto. Disattivalo per tornare a scattare foto.</string>
 </resources>

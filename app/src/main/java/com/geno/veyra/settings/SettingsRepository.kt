@@ -209,7 +209,7 @@ data class AgentPreferences(
             ocrEnabled = false,
             smartHomeEnabled = false,
             lookPayEnabled = false,
-            captureButtonEnabled = true,
+            captureButtonEnabled = false,
             liveModel = DEFAULT_LIVE_MODEL,
             aiProvider = AiProvider.GEMINI,
             chatGptModel = DEFAULT_OPENAI_VOICE_MODEL,

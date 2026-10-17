@@ -327,6 +327,13 @@ fun SettingsScreen(
                 )
             },
         )
+        if (prefs.captureButtonEnabled) {
+            Text(
+                stringResource(R.string.settings_capture_button_warning),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         if (prefs.smartHomeEnabled) {
             SettingRow(
                 title = stringResource(R.string.settings_connect_home),
