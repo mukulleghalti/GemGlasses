@@ -438,10 +438,15 @@ class AgentViewModel @Inject constructor(
      * Caller must have RECORD_AUDIO permission.
      */
     fun startSnapTranslate() {
+        val text = "Translate the text in front of me and speak " +
+            "the translation."
+        // Session already live: inject the request into it. The old
+        // behaviour returned silently here, so the tile only ever
+        // worked from a cold start.
+        if (controller.sendUserText(text)) return
         if (controller.status.value != AgentStatus.IDLE) return
         assistantStarter.start(
-            initialText = "Translate the text in front of me. Use the " +
-                "translate_view tool and speak the translation.",
+            initialText = text,
             boostTranslateView = true,
         )
     }

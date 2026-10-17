@@ -297,6 +297,25 @@ class AgentController @Inject constructor(
         micMute.reset()
     }
 
+    /**
+     * Sends [text] as a user message into the running session and
+     * mirrors it into the transcript. Returns false when no session
+     * is running. Used by the Snap & Translate tile: a repeat tap
+     * during a live session repeats the request instead of silently
+     * doing nothing.
+     */
+    fun sendUserText(text: String): Boolean {
+        val keeper = activeKeeper ?: return false
+        if (!running) return false
+        conversation.appendTranscript(
+            text,
+            TranscriptEntry.Speaker.USER,
+        )
+        keeper.sendText(text)
+        Log.i(TAG, "Sent user text: \"$text\"")
+        return true
+    }
+
     // VisionController: called by the capture_vision tool.
     override fun startVisionBurst(durationMs: Long) {
         scope.launch {

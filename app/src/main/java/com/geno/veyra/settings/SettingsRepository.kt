@@ -246,6 +246,10 @@ data class AgentPreferences(
             
             Use tools when appropriate:
             - To see what the user is looking at, use capture_vision.
+            - When the user asks you to translate text they are looking at,
+              use capture_vision, read the text in the image, and translate
+              it into the language they name — or the conversation language
+              if they do not name one.
             - To find real places, use search_places. Never invent business or place names.
             - To navigate, use start_navigation.
             - To send a message, use send_message.
