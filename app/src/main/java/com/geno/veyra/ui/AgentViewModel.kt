@@ -18,6 +18,7 @@ import com.geno.veyra.glasses.RegistrationState
 import com.geno.veyra.glasses.ConnectionState
 import com.geno.veyra.openai.OpenAiConnectionCheck
 import com.geno.veyra.service.AgentForegroundService
+import com.geno.veyra.live.LiveStreamManager
 import com.geno.veyra.service.AssistantStarter
 import com.geno.veyra.settings.AgentPreferences
 import com.geno.veyra.settings.AiProvider
@@ -67,6 +68,7 @@ class AgentViewModel @Inject constructor(
     private val micMute: MicMuteController,
     private val memoryRepository: MemoryRepository,
     private val smartHome: SmartHomeController,
+    private val liveStreamManager: LiveStreamManager,
 ) : AndroidViewModel(application) {
 
     val status: StateFlow<AgentStatus> =
@@ -180,6 +182,18 @@ class AgentViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error connecting glasses", e)
+            }
+        }
+    }
+
+    /** Releases the glasses session (Home → Disconnect glasses). */
+    fun disconnectGlasses() {
+        viewModelScope.launch {
+            try {
+                glassesManager.disconnect()
+                Log.i(TAG, "Glasses session released")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error disconnecting glasses", e)
             }
         }
     }
@@ -403,6 +417,58 @@ class AgentViewModel @Inject constructor(
     fun setLookPayEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settings.setLookPayEnabled(enabled)
+        }
+    }
+
+    // --- Snap & Translate ------------------------------------------------
+
+    /**
+     * Starts a session whose first request is a translation of the text
+     * in front of the user (the model uses the translate_view tool).
+     * No-op while a session is already running — the user can just ask.
+     * Caller must have RECORD_AUDIO permission.
+     */
+    fun startSnapTranslate() {
+        if (controller.status.value != AgentStatus.IDLE) return
+        assistantStarter.start(
+            initialText = "Translate the text in front of me. Use the " +
+                "translate_view tool and speak the translation.",
+        )
+    }
+
+    // --- Go Live ----------------------------------------------------------
+
+    val liveStatus: StateFlow<LiveStreamManager.Status> =
+        liveStreamManager.status
+
+    private val _liveStartError = MutableStateFlow<String?>(null)
+    val liveStartError: StateFlow<String?> = _liveStartError
+
+    fun startLive() {
+        viewModelScope.launch {
+            _liveStartError.value = liveStreamManager.start()
+        }
+    }
+
+    fun stopLive() {
+        liveStreamManager.stop()
+    }
+
+    fun setLiveStreamEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setLiveStreamEnabled(enabled)
+        }
+    }
+
+    fun setLiveStreamUrl(url: String) {
+        viewModelScope.launch {
+            settings.setLiveStreamUrl(url)
+        }
+    }
+
+    fun setLiveStreamKey(key: String) {
+        viewModelScope.launch {
+            settings.setLiveStreamKey(key)
         }
     }
 

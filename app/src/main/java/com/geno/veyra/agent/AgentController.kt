@@ -229,6 +229,7 @@ class AgentController @Inject constructor(
                         ocr = prefs.ocrEnabled,
                         smartHome = prefs.smartHomeEnabled,
                         lookPay = prefs.lookPayEnabled,
+                        liveStream = prefs.liveStreamEnabled,
                     ),
                     model = prefs.liveModel,
                     openAiModel = prefs.chatGptModel,

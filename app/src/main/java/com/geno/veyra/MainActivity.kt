@@ -53,6 +53,7 @@ import kotlinx.coroutines.launch
 import com.geno.veyra.ui.CameraSettingsScreen
 import com.geno.veyra.ui.CameraTestScreen
 import com.geno.veyra.ui.HomeScreen
+import com.geno.veyra.ui.LiveScreen
 import com.geno.veyra.ui.SettingsScreen
 import com.geno.veyra.ui.TranslateScreen
 import com.geno.veyra.R
@@ -558,6 +559,9 @@ private fun VeyraRoot() {
                             restoreState = true
                         }
                     },
+                    onLiveClick = {
+                        navController.navigate("live")
+                    },
                     onSettingsClick = {
                         navController.navigate("settings") {
                             popUpTo(
@@ -589,6 +593,15 @@ private fun VeyraRoot() {
             composable("camera_settings") {
 
                 CameraSettingsScreen(
+                    onBack = {
+                        navController.popBackStack()
+                    },
+                )
+            }
+
+            composable("live") {
+
+                LiveScreen(
                     onBack = {
                         navController.popBackStack()
                     },

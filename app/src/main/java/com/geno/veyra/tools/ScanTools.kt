@@ -175,3 +175,73 @@ class OcrTool @Inject constructor(
         }
     }
 }
+
+/**
+ * `translate_view` — Snap & Translate. Captures the user's current view,
+ * reads any text in it (OCR, same path as [OcrTool]), and returns the
+ * text with an instruction to translate it aloud. The Live model does
+ * the translation into the conversation language and speaks it.
+ *
+ * Gated behind the same "OCR" AI Settings toggle as [OcrTool].
+ */
+class TranslateViewTool @Inject constructor(
+    private val glasses: GlassesManager,
+    private val camera: GlassesCameraSource,
+) : AgentTool {
+
+    override val name = "translate_view"
+
+    override val gate = ToolGate.OCR
+
+    override val declaration = FunctionDeclaration(
+        name = name,
+        description = "Captures the user's current view and reads any " +
+            "text in it (OCR) so you can translate it. Use when the user " +
+            "asks to translate a sign, menu, label, document, or any " +
+            "text they are looking at. Returns the recognized text; " +
+            "translate it into the conversation language and speak the " +
+            "translation.",
+        parameters = schema(
+            """
+            {
+              "type": "object",
+              "properties": {}
+            }
+            """,
+        ),
+    )
+
+    override suspend fun execute(args: JsonObject): JsonObject {
+        val (image, error) = captureImage(glasses, camera)
+        if (image == null) return errorResult(error)
+
+        val recognizer =
+            TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        return try {
+            val visionText = runCatching {
+                recognizer.process(image).await()
+            }.getOrElse {
+                return errorResult("Text recognition failed.")
+            }
+            if (visionText.text.isBlank()) {
+                return errorResult(
+                    "No text found in view. Ask the user to aim the " +
+                        "glasses at the text and try again.",
+                )
+            }
+            buildJsonObject {
+                put("status", "ok")
+                put("source_text", visionText.text)
+                put(
+                    "instruction",
+                    "Translate source_text into the conversation " +
+                        "language and speak the translation. Give the " +
+                        "translation first; add the original wording " +
+                        "only if the user asks.",
+                )
+            }
+        } finally {
+            recognizer.close()
+        }
+    }
+}

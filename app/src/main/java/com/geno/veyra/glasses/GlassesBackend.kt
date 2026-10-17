@@ -37,6 +37,26 @@ enum class ConnectionState {
     ERROR,
 }
 
+/** One frame of the live-stream feed: compressed H.264 video or PCM audio. */
+sealed interface LiveFrame {
+
+    val ptsUs: Long
+
+    class Video(
+        val data: ByteArray,
+        val width: Int,
+        val height: Int,
+        override val ptsUs: Long,
+        val isCompressed: Boolean,
+        val isCodecConfig: Boolean,
+    ) : LiveFrame
+
+    class Audio(
+        val data: ByteArray,
+        override val ptsUs: Long,
+    ) : LiveFrame
+}
+
 enum class CameraPermission {
     GRANTED,
     DENIED,
@@ -120,6 +140,9 @@ interface GlassesBackend {
     ) {}
 
     fun cameraTestFrames(): Flow<VideoFrame> = emptyFlow()
+
+    /** Glasses video + mic audio for live streaming (RTMP). */
+    fun liveFrames(): Flow<LiveFrame> = emptyFlow()
 
     suspend fun captureCameraTestPhoto(): Result<ByteArray> =
         Result.failure(

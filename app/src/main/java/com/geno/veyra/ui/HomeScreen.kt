@@ -6,6 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,10 +23,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +66,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     onCameraTestClick: () -> Unit = {},
     onTranslateClick: () -> Unit = {},
+    onLiveClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     viewModel: AgentViewModel = hiltViewModel(),
 ) {
@@ -143,6 +149,7 @@ fun HomeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -159,6 +166,7 @@ fun HomeScreen(
             device = device,
             onRegisterClick = viewModel::registerGlasses,
             onConnectClick = viewModel::connectGlasses,
+            onDisconnectClick = viewModel::disconnectGlasses,
         )
 
         AssistantHero(
@@ -185,6 +193,39 @@ fun HomeScreen(
                 subtitle = stringResource(R.string.home_tile_translate_sub),
                 icon = Icons.Default.Translate,
                 onClick = onTranslateClick,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+
+            QuickTile(
+                title = stringResource(R.string.home_tile_snap_translate),
+                subtitle = stringResource(R.string.home_tile_snap_translate_sub),
+                icon = Icons.Default.Language,
+                onClick = {
+                    if (
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO,
+                        ) == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        viewModel.startSnapTranslate()
+                    } else {
+                        micLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                },
+                modifier = Modifier.weight(1f),
+            )
+
+            QuickTile(
+                title = stringResource(R.string.home_tile_live),
+                subtitle = stringResource(R.string.home_tile_live_sub),
+                icon = Icons.Default.Videocam,
+                onClick = onLiveClick,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -375,6 +416,7 @@ private fun GlassesCard(
     device: GlassesDevice?,
     onRegisterClick: () -> Unit,
     onConnectClick: () -> Unit,
+    onDisconnectClick: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -497,6 +539,15 @@ private fun GlassesCard(
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.primary,
                     )
+
+                    OutlinedButton(
+                        onClick = onDisconnectClick,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+
+                        Text(stringResource(R.string.home_disconnect_glasses))
+                    }
                 }
 
                 connectionState == ConnectionState.ERROR -> {

@@ -80,6 +80,18 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <!-- LiveForegroundService: keeps Go Live publishing alive -->
+        <service
+            android:name=".live.LiveForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- Look and Pay: user-tap confirmation for opening a payment -->
+        <activity
+            android:name=".ui.PaymentConfirmActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- Timer/reminder alerts fired by AlarmManager -->
         <receiver
             android:name=".alerts.AlertReceiver"

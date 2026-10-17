@@ -18,6 +18,9 @@ import com.geno.veyra.tools.ScanBarcodeTool
 import com.geno.veyra.tools.OcrTool
 import com.geno.veyra.tools.ScanPayQrTool
 import com.geno.veyra.tools.OpenPaymentAppTool
+import com.geno.veyra.tools.TranslateViewTool
+import com.geno.veyra.tools.StartLiveStreamTool
+import com.geno.veyra.tools.StopLiveStreamTool
 import com.geno.veyra.tools.ControlHomeDeviceTool
 import com.geno.veyra.tools.ListHomeDevicesTool
 import com.geno.veyra.tools.SearchConversationsTool
@@ -119,4 +122,16 @@ abstract class ToolsModule {
     @Binds
     @IntoSet
     abstract fun controlHomeDeviceTool(tool: ControlHomeDeviceTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun translateViewTool(tool: TranslateViewTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun startLiveStreamTool(tool: StartLiveStreamTool): AgentTool
+
+    @Binds
+    @IntoSet
+    abstract fun stopLiveStreamTool(tool: StopLiveStreamTool): AgentTool
 }

@@ -8,6 +8,7 @@ import android.util.Log
 import com.geno.veyra.gemini.protocol.FunctionDeclaration
 import com.geno.veyra.glasses.GlassesCameraSource
 import com.geno.veyra.glasses.GlassesManager
+import com.geno.veyra.ui.PaymentConfirmActivity
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
@@ -30,6 +31,18 @@ import javax.inject.Singleton
 class LastScannedPayment @Inject constructor() {
     @Volatile
     var paymentUrl: String? = null
+
+    @Volatile
+    var data: PaymentQrData? = null
+
+    @Volatile
+    var scannedAtMs: Long = 0L
+
+    fun clear() {
+        paymentUrl = null
+        data = null
+        scannedAtMs = 0L
+    }
 }
 
 /** Which payment app a scanned QR code belongs to. */
@@ -221,9 +234,12 @@ class ScanPayQrTool @Inject constructor(
                 }
             }
 
-            // Remember the URL for open_payment_app. The raw URL never
-            // goes back to the model.
+            // Remember the payment for open_payment_app. The raw URL
+            // never goes back to the model. The scan is single-use and
+            // expires quickly (see OpenPaymentAppTool).
             lastScannedPayment.paymentUrl = found.rawUrl
+            lastScannedPayment.data = found
+            lastScannedPayment.scannedAtMs = System.currentTimeMillis()
 
             Log.i(
                 "LookPay",
@@ -247,13 +263,17 @@ class ScanPayQrTool @Inject constructor(
 }
 
 /**
- * `open_payment_app` — opens the user's payment app with the most
- * recently scanned QR code's payment details.
+ * `open_payment_app` — asks for the scanned payment to be opened, via an
+ * on-screen confirmation prompt.
  *
- * Takes no parameters: it only opens the URL produced by the last
- * [ScanPayQrTool] call, so the model cannot redirect the payment.
- * The user reviews the details and confirms inside their own payment
- * app — Veyra never handles money.
+ * The hard gate: this tool never opens a payment URL itself. It shows
+ * [PaymentConfirmActivity] with the scanned details, and the payment app
+ * opens only when the user taps Open on that prompt. Takes no
+ * parameters: it only ever acts on the URL produced by the last
+ * [ScanPayQrTool] call, and only within [SCAN_TTL_MS] of the scan, so
+ * the model cannot redirect or replay a payment. The user reviews the
+ * details again inside their own payment app — Veyra never handles
+ * money.
  *
  * Gated behind the "Look and Pay" AI Settings toggle.
  */
@@ -268,11 +288,12 @@ class OpenPaymentAppTool @Inject constructor(
 
     override val declaration = FunctionDeclaration(
         name = name,
-        description = "Opens the user's payment app with the previously " +
-            "scanned QR code's payment details. Call ONLY after " +
-            "scan_pay_qr succeeded AND the user confirmed they want to " +
-            "proceed with the payment. The user reviews and confirms " +
-            "the payment inside their own payment app.",
+        description = "Shows an on-screen confirmation prompt for the " +
+            "previously scanned payment QR code. The payment app opens " +
+            "ONLY if the user taps Open on that prompt — you cannot " +
+            "open it yourself. Call ONLY after scan_pay_qr succeeded " +
+            "AND the user confirmed they want to proceed. The scan " +
+            "expires 2 minutes after scanning; re-scan if it expired.",
         parameters = schema(
             """
             {
@@ -284,39 +305,51 @@ class OpenPaymentAppTool @Inject constructor(
     )
 
     override suspend fun execute(args: JsonObject): JsonObject {
-        val paymentUrl = lastScannedPayment.paymentUrl
-            ?: return payError(
+        if (lastScannedPayment.paymentUrl == null) {
+            return payError(
                 "No payment QR code has been scanned yet. " +
                     "Call scan_pay_qr first.",
             )
+        }
+
+        val ageMs = System.currentTimeMillis() - lastScannedPayment.scannedAtMs
+        if (ageMs > SCAN_TTL_MS) {
+            lastScannedPayment.clear()
+            return payError(
+                "The scanned payment has expired. " +
+                    "Call scan_pay_qr again before opening.",
+            )
+        }
 
         return try {
             val intent = Intent(
-                Intent.ACTION_VIEW,
-                Uri.parse(paymentUrl),
+                context,
+                PaymentConfirmActivity::class.java,
             ).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
 
-            Log.i("LookPay", "Opened payment app for scanned QR")
-
-            // Clear so a stale URL can't be re-opened later.
-            lastScannedPayment.paymentUrl = null
+            Log.i("LookPay", "Payment confirmation prompt shown")
 
             buildJsonObject {
-                put("status", "ok")
+                put("status", "confirmation_shown")
                 put(
                     "message",
-                    "Payment app opened. The user should verify the " +
-                        "details there before confirming.",
+                    "A confirmation prompt is on the user's phone. " +
+                        "The payment app opens only if the user taps " +
+                        "Open there. Do not say the payment app has " +
+                        "opened.",
                 )
             }
         } catch (e: Exception) {
-            Log.e("LookPay", "Failed to open payment app", e)
-            payError(
-                "Couldn't open a payment app. Is one installed?",
-            )
+            Log.e("LookPay", "Failed to show payment confirmation", e)
+            payError("Couldn't show the confirmation prompt.")
         }
+    }
+
+    companion object {
+        /** A scan stays openable for two minutes. */
+        private const val SCAN_TTL_MS = 120_000L
     }
 }

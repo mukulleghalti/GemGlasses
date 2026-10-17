@@ -62,6 +62,9 @@ class GlassesManager @Inject constructor(
     fun cameraFrames(): Flow<ByteArray> =
         backend.cameraFrames()
 
+    fun liveFrames(): Flow<LiveFrame> =
+        backend.liveFrames()
+
     suspend fun connect(): Boolean =
         backend.connect()
 

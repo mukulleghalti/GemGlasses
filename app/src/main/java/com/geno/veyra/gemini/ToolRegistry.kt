@@ -23,6 +23,7 @@ data class ToolFlags(
     val ocr: Boolean = false,
     val smartHome: Boolean = false,
     val lookPay: Boolean = false,
+    val liveStream: Boolean = false,
 )
 
 /**
@@ -50,6 +51,7 @@ class ToolRegistry @Inject constructor(
                         ToolGate.OCR -> flags.ocr
                         ToolGate.SMART_HOME -> flags.smartHome
                         ToolGate.LOOK_PAY -> flags.lookPay
+                        ToolGate.LIVE_STREAM -> flags.liveStream
                     }
                 }
                 .map { it.declaration }
@@ -81,6 +83,7 @@ class ToolRegistry @Inject constructor(
                     ToolGate.OCR -> flags.ocr
                     ToolGate.SMART_HOME -> flags.smartHome
                     ToolGate.LOOK_PAY -> flags.lookPay
+                    ToolGate.LIVE_STREAM -> flags.liveStream
                 }
             }
             .map { tool ->

@@ -119,6 +119,9 @@ data class AgentPreferences(
     val smartHomeEnabled: Boolean,
     val lookPayEnabled: Boolean,
     val captureButtonEnabled: Boolean,
+    val liveStreamEnabled: Boolean,
+    val liveStreamUrl: String,
+    val liveStreamKey: String,
     val liveModel: String,
     val aiProvider: AiProvider,
     val chatGptModel: String,
@@ -210,6 +213,9 @@ data class AgentPreferences(
             smartHomeEnabled = false,
             lookPayEnabled = false,
             captureButtonEnabled = false,
+            liveStreamEnabled = false,
+            liveStreamUrl = "",
+            liveStreamKey = "",
             liveModel = DEFAULT_LIVE_MODEL,
             aiProvider = AiProvider.GEMINI,
             chatGptModel = DEFAULT_OPENAI_VOICE_MODEL,
@@ -427,6 +433,15 @@ class SettingsRepository @Inject constructor(
     private val captureButtonEnabledKey =
         booleanPreferencesKey("capture_button_enabled")
 
+    private val liveStreamEnabledKey =
+        booleanPreferencesKey("live_stream_enabled")
+
+    private val liveStreamUrlKey =
+        stringPreferencesKey("live_stream_url")
+
+    private val liveStreamKeyKey =
+        stringPreferencesKey("live_stream_key")
+
     private val liveModelKey =
         stringPreferencesKey("live_model")
 
@@ -549,6 +564,18 @@ class SettingsRepository @Inject constructor(
                 captureButtonEnabled =
                     prefs[captureButtonEnabledKey]
                         ?: AgentPreferences.DEFAULT.captureButtonEnabled,
+
+                liveStreamEnabled =
+                    prefs[liveStreamEnabledKey]
+                        ?: AgentPreferences.DEFAULT.liveStreamEnabled,
+
+                liveStreamUrl =
+                    prefs[liveStreamUrlKey]
+                        ?: AgentPreferences.DEFAULT.liveStreamUrl,
+
+                liveStreamKey =
+                    prefs[liveStreamKeyKey]
+                        ?: AgentPreferences.DEFAULT.liveStreamKey,
 
                 liveModel =
                     prefs[liveModelKey]
@@ -745,6 +772,30 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[captureButtonEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setLiveStreamEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[liveStreamEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setLiveStreamUrl(
+        url: String,
+    ) {
+        context.dataStore.edit {
+            it[liveStreamUrlKey] = url
+        }
+    }
+
+    suspend fun setLiveStreamKey(
+        key: String,
+    ) {
+        context.dataStore.edit {
+            it[liveStreamKeyKey] = key
         }
     }
 

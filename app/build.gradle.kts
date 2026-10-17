@@ -124,6 +124,7 @@ dependencies {
     implementation(libs.mwdat.core)
     implementation(libs.mwdat.camera)
     implementation(libs.mwdat.inputs)
+    implementation(libs.rootencoder.rtmp)
     implementation(libs.mwdat.display)
     implementation(libs.mwdat.mockdevice)
 

@@ -14,6 +14,7 @@ import com.geno.veyra.glasses.CameraPermission
 import com.geno.veyra.glasses.CapturePress
 import com.geno.veyra.glasses.ConnectionState
 import com.geno.veyra.glasses.GlassesInputEvent
+import com.geno.veyra.glasses.LiveFrame
 import com.geno.veyra.glasses.GlassesBackend
 import com.geno.veyra.glasses.GlassesDevice
 import com.geno.veyra.glasses.RegistrationState
@@ -93,6 +94,8 @@ class RealGlassesBackend @Inject constructor(
          * the existing Gemini vision path.
          */
         private const val GEMINI_CAMERA_FRAME_RATE = 24
+
+        private const val LIVE_FRAME_RATE = 24
 
         /*
          * Default Camera Test configuration.
@@ -1622,6 +1625,241 @@ class RealGlassesBackend @Inject constructor(
             Log.e(
                 TAG,
                 "Camera Test video stream failed",
+                e
+            )
+
+        } finally {
+
+            stopCameraIfNeeded()
+        }
+    }
+
+    // =========================================================================
+    // LIVE STREAMING (video + glasses-mic audio for RTMP)
+    // =========================================================================
+
+    /**
+     * Starts the camera stream in live configuration — HIGH video at
+     * 24 fps with 44.1 kHz PCM audio from the glasses microphone — and
+     * forwards both frame flows as [LiveFrame]s until the collector is
+     * cancelled. Mirrors the Camera Test stream lifecycle.
+     */
+    override fun liveFrames(): Flow<LiveFrame> = channelFlow {
+
+        Log.i(
+            TAG,
+            "Starting live stream capture"
+        )
+
+        var activeSession =
+            session ?: sharedSession
+
+        if (
+            activeSession == null ||
+            activeSession.state.value !=
+                DeviceSessionState.STARTED
+        ) {
+
+            val connected =
+                try {
+                    connect()
+                } catch (e: Exception) {
+                    Log.e(
+                        TAG,
+                        "Live stream connection failed",
+                        e
+                    )
+                    false
+                }
+
+            if (!connected) {
+                return@channelFlow
+            }
+
+            activeSession =
+                session ?: sharedSession
+        }
+
+        if (
+            activeSession == null ||
+            activeSession.state.value !=
+                DeviceSessionState.STARTED
+        ) {
+            Log.e(
+                TAG,
+                "Live stream: no STARTED DeviceSession"
+            )
+            return@channelFlow
+        }
+
+        if (
+            cameraPermission() !=
+                CameraPermission.GRANTED
+        ) {
+
+            Log.e(
+                TAG,
+                "Live stream: camera permission not granted"
+            )
+
+            return@channelFlow
+        }
+
+        if (camera != null) {
+            stopCameraIfNeeded()
+        }
+
+        val activeCamera =
+            try {
+
+                activeSession.addCamera(
+                    StreamConfiguration(
+                        audioCodec =
+                            AudioCodec.PCM(
+                                AudioSampleRate.RATE_44100,
+                                1,
+                            ),
+                        videoQuality =
+                            VideoQuality.HIGH,
+                        frameRate =
+                            LIVE_FRAME_RATE,
+                        compressVideo = true,
+                    )
+                ).getOrElse { error ->
+
+                    Log.e(
+                        TAG,
+                        "Live addCamera() failed: $error"
+                    )
+
+                    return@channelFlow
+                }
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Live addCamera() threw",
+                    e
+                )
+
+                return@channelFlow
+            }
+
+        camera =
+            activeCamera
+
+        try {
+
+            activeCamera.stream
+                .start()
+                .getOrElse { error ->
+
+                    Log.e(
+                        TAG,
+                        "Live stream start failed: $error"
+                    )
+
+                    return@channelFlow
+                }
+
+            val streaming =
+                withTimeoutOrNull(
+                    CAMERA_STREAM_TIMEOUT_MS
+                ) {
+
+                    activeCamera.stream.state.first {
+                        it ==
+                            StreamState.STREAMING
+                    }
+
+                    true
+
+                } ?: false
+
+            if (!streaming) {
+
+                Log.e(
+                    TAG,
+                    "Live stream did not reach STREAMING"
+                )
+
+                return@channelFlow
+            }
+
+            Log.i(
+                TAG,
+                "Live stream streaming"
+            )
+
+            val videoJob =
+                launch {
+
+                    try {
+
+                        activeCamera.stream.videoStream.collect { frame ->
+
+                            trySend(
+                                LiveFrame.Video(
+                                    data =
+                                        byteBufferToByteArray(
+                                            frame.buffer
+                                        ),
+                                    width = frame.width,
+                                    height = frame.height,
+                                    ptsUs = frame.presentationTimeUs,
+                                    isCompressed = frame.isCompressed,
+                                    isCodecConfig = frame.isCodecConfig,
+                                )
+                            )
+                        }
+
+                    } catch (e: Exception) {
+
+                        Log.e(
+                            TAG,
+                            "Live video stream failed",
+                            e
+                        )
+                    }
+                }
+
+            val audioJob =
+                launch {
+
+                    try {
+
+                        activeCamera.stream.audioStream.collect { frame ->
+
+                            trySend(
+                                LiveFrame.Audio(
+                                    data =
+                                        byteBufferToByteArray(
+                                            frame.buffer
+                                        ),
+                                    ptsUs = frame.presentationTimeUs,
+                                )
+                            )
+                        }
+
+                    } catch (e: Exception) {
+
+                        Log.e(
+                            TAG,
+                            "Live audio stream failed",
+                            e
+                        )
+                    }
+                }
+
+            videoJob.join()
+            audioJob.cancel()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Live stream failed",
                 e
             )
 

@@ -23,6 +23,7 @@ enum class ToolGate {
     OCR,
     SMART_HOME,
     LOOK_PAY,
+    LIVE_STREAM,
 }
 
 /**
