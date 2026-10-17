@@ -13,12 +13,15 @@ import kotlinx.serialization.json.put
 import javax.inject.Inject
 
 /**
- * `get_device_status` — phone battery level/charging state plus whether the
- * Meta glasses are currently connected.
+ * `get_device_status` — phone battery level/charging state, the glasses
+ * link state, and the glasses' own device state.
  *
- * The Meta DAT SDK does not expose the glasses' own battery percentage, so
- * this reports what the phone can actually know: its own battery via
- * BatteryManager, and the glasses link state from GlassesManager.
+ * Since the DAT 1.0 SDK, the glasses report their own battery
+ * percentage, charging state, don state (worn or not), hinge state
+ * (open or folded), and thermal level through the device metadata that
+ * GlassesManager already collects. Those values are included whenever
+ * the SDK provides them; a disconnected or unregistered pair simply
+ * omits them.
  */
 class DeviceStatusTool @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -30,13 +33,15 @@ class DeviceStatusTool @Inject constructor(
     override val declaration = FunctionDeclaration(
         name = name,
         description = "Reports device status: the phone's battery " +
-            "percentage and whether it is charging, plus whether the " +
-            "Meta glasses are currently connected. Call when the user " +
-            "asks about battery level, charging, or whether their " +
-            "glasses are connected. Note: the glasses' own battery " +
-            "percentage is not exposed by the SDK, so never invent a " +
-            "glasses battery number — report the phone battery and the " +
-            "glasses connection state as returned.",
+            "percentage and whether it is charging, the glasses " +
+            "connection state, and — when the glasses are connected — " +
+            "the glasses' own battery percentage, whether they are " +
+            "charging, whether they are being worn, their hinge state, " +
+            "and their thermal level. Call when the user asks about " +
+            "battery level, charging, glasses temperature, or whether " +
+            "their glasses are connected. Report the glasses battery " +
+            "only when glassesBatteryPercent is present in the result; " +
+            "never invent a glasses battery number when it is absent.",
         parameters = schema(
             """
             {
@@ -64,6 +69,13 @@ class DeviceStatusTool @Inject constructor(
             ConnectionState.DISCONNECTED
         }
 
+        val glassesDevice = try {
+            val known = glassesManager.devices.first()
+            known.firstOrNull { it.connected } ?: known.firstOrNull()
+        } catch (e: Exception) {
+            null
+        }
+
         return buildJsonObject {
             put("phoneBatteryPercent", level)
             put("phoneCharging", charging)
@@ -72,6 +84,23 @@ class DeviceStatusTool @Inject constructor(
                 "glassesConnected",
                 glassesState == ConnectionState.CONNECTED,
             )
+            glassesDevice?.let { device ->
+                device.batteryPercent?.let {
+                    put("glassesBatteryPercent", it)
+                }
+                device.batteryCharging?.let {
+                    put("glassesBatteryCharging", it)
+                }
+                device.donState?.let {
+                    put("glassesDonState", it)
+                }
+                device.hingeState?.let {
+                    put("glassesHingeState", it)
+                }
+                device.thermalLevel?.let {
+                    put("glassesThermalLevel", it)
+                }
+            }
         }
     }
 }

@@ -10,6 +10,7 @@ on:
       - Muse_voice-wake
       - Muse_ondevice-tokens
       - Muse_dat-1.0.0
+      - Muse_mwdat-1.0.1
 
   workflow_dispatch:
     inputs:

@@ -429,6 +429,27 @@ private fun GlassesCard(
                 modifier = Modifier.padding(start = 34.dp),
             )
 
+            device?.batteryPercent?.let { percent ->
+
+                Text(
+                    text =
+                        if (device.batteryCharging == true) {
+                            stringResource(
+                                R.string.home_battery_charging,
+                                percent,
+                            )
+                        } else {
+                            stringResource(
+                                R.string.home_battery,
+                                percent,
+                            )
+                        },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 34.dp),
+                )
+            }
+
             Spacer(
                 modifier = Modifier.height(8.dp)
             )

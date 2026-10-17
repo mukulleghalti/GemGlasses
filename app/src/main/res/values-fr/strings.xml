@@ -24,6 +24,8 @@
     <string name="home_tagline">Gemini pour vos lunettes</string>
     <string name="home_api_key">Clé API</string>
     <string name="home_glasses_title">Lunettes</string>
+    <string name="home_battery">Batterie %1$d%%</string>
+    <string name="home_battery_charging">Batterie %1$d%% · En charge</string>
     <string name="home_no_device">Aucun appareil trouvé</string>
     <string name="home_connected">Connecté</string>
     <string name="home_connection_error">Erreur de connexion</string>

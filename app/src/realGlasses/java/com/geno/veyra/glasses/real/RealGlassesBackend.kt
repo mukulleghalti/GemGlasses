@@ -31,6 +31,7 @@ import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.selectors.AutoDeviceSelector
 import com.meta.wearable.dat.core.session.DeviceSession
 import com.meta.wearable.dat.core.session.DeviceSessionState
+import com.meta.wearable.dat.core.types.ChargingState
 import com.meta.wearable.dat.core.types.Device
 import com.meta.wearable.dat.core.types.DeviceIdentifier
 import com.meta.wearable.dat.core.types.LinkState
@@ -773,6 +774,29 @@ class RealGlassesBackend @Inject constructor(
             connected =
                 device.linkState ==
                     LinkState.CONNECTED,
+            batteryPercent =
+                device.batteryLevel
+                    .takeIf { it in 0..100 },
+            batteryCharging =
+                when (device.chargingState) {
+                    ChargingState.CHARGING ->
+                        true
+
+                    ChargingState.NOT_CHARGING ->
+                        false
+
+                    else ->
+                        null
+                },
+            donState =
+                device.donState.name
+                    .takeIf { it != "UNKNOWN" },
+            hingeState =
+                device.hingeState.name
+                    .takeIf { it != "UNKNOWN" },
+            thermalLevel =
+                device.thermalLevel.name
+                    .takeIf { it != "UNKNOWN" },
         )
     }
 

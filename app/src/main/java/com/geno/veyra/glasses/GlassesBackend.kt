@@ -10,6 +10,16 @@ data class GlassesDevice(
     val id: String,
     val name: String,
     val connected: Boolean,
+    /** Glasses battery percentage (0–100), null when the SDK reports none. */
+    val batteryPercent: Int? = null,
+    /** True while charging, false when not, null when unknown. */
+    val batteryCharging: Boolean? = null,
+    /** DAT DonState name (DONNED / DOFFED), null when unknown. */
+    val donState: String? = null,
+    /** DAT HingeState name (OPEN / CLOSED), null when unknown. */
+    val hingeState: String? = null,
+    /** DAT ThermalLevel name (NONE … SHUTDOWN), null when unknown. */
+    val thermalLevel: String? = null,
 )
 
 enum class RegistrationState {
