@@ -567,6 +567,19 @@ private fun VeyraRoot() {
                     onLiveClick = {
                         navController.navigate("live")
                     },
+                    onOpenAssistant = {
+                        navController.navigate("transcript") {
+                            popUpTo(
+                                navController.graph
+                                    .findStartDestination()
+                                    .id
+                            ) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                     onSettingsClick = {
                         navController.navigate("settings") {
                             popUpTo(

@@ -186,25 +186,58 @@ class LiveStreamManager @Inject constructor(
     }
 
     private fun sendVideoFrame(frame: LiveFrame.Video) {
-        val isKey = when (videoCodec) {
-            VideoCodec.H265 -> H265.isKeyFrame(frame.data)
-            else -> H264.isKeyFrame(frame.data)
+        // RootEncoder's packetizers treat each buffer as ONE NAL unit
+        // (the MediaCodec output shape). DAT frames are whole access
+        // units bundling many NAL units; sent unsplit, the bundle is
+        // packetized as a single bogus NAL and no decoder can read it
+        // (YouTube went live with no picture). Split first. Parameter
+        // sets are skipped here — they already travel in the RTMP
+        // config record.
+        val units = AnnexB.splitUnits(frame.data)
+        if (units.isEmpty()) {
+            sendUnit(frame.data, frame.ptsUs, wholeFrameKey(frame))
+            return
         }
+        for (unit in units) {
+            val codeLength = AnnexB.startCodeLength(unit)
+            if (codeLength == 0 || unit.size <= codeLength) continue
+            val header = unit[codeLength].toInt()
+            when (videoCodec) {
+                VideoCodec.H265 -> {
+                    val type = (header shr 1) and 0x3F
+                    if (type == 32 || type == 33 || type == 34) continue
+                    sendUnit(unit, frame.ptsUs, type == 19 || type == 20)
+                }
+                else -> {
+                    val type = header and 0x1F
+                    if (type == 7 || type == 8) continue
+                    sendUnit(unit, frame.ptsUs, type == 5)
+                }
+            }
+        }
+    }
 
+    private fun sendUnit(data: ByteArray, ptsUs: Long, keyFrame: Boolean) {
         val info = MediaCodec.BufferInfo().apply {
             offset = 0
-            size = frame.data.size
-            presentationTimeUs = rebased(frame.ptsUs)
-            flags = if (isKey) {
+            size = data.size
+            presentationTimeUs = rebased(ptsUs)
+            flags = if (keyFrame) {
                 MediaCodec.BUFFER_FLAG_KEY_FRAME
             } else {
                 0
             }
         }
         runCatching {
-            client?.sendVideo(ByteBuffer.wrap(frame.data), info)
+            client?.sendVideo(ByteBuffer.wrap(data), info)
         }
     }
+
+    private fun wholeFrameKey(frame: LiveFrame.Video): Boolean =
+        when (videoCodec) {
+            VideoCodec.H265 -> H265.isKeyFrame(frame.data)
+            else -> H264.isKeyFrame(frame.data)
+        }
 
     /**
      * Pre-connect frame handling. Detects the camera codec from the

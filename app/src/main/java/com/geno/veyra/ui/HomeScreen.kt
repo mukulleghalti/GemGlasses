@@ -70,6 +70,7 @@ fun HomeScreen(
     onTranslateClick: () -> Unit = {},
     onLiveClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
+    onOpenAssistant: () -> Unit = {},
     viewModel: AgentViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -128,6 +129,20 @@ fun HomeScreen(
 
             if (granted) {
                 viewModel.startSession()
+            }
+        }
+
+    // Snap & Translate has its own launcher: a grant starts the
+    // translate session (not a plain session) and opens the
+    // Assistant screen so the user sees the translation happen.
+    val snapTranslateMicLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+
+            if (granted) {
+                viewModel.startSnapTranslate()
+                onOpenAssistant()
             }
         }
 
@@ -250,8 +265,11 @@ fun HomeScreen(
                         ) == PackageManager.PERMISSION_GRANTED
                     ) {
                         viewModel.startSnapTranslate()
+                        onOpenAssistant()
                     } else {
-                        micLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        snapTranslateMicLauncher.launch(
+                            Manifest.permission.RECORD_AUDIO
+                        )
                     }
                 },
                 modifier = Modifier.weight(1f),
