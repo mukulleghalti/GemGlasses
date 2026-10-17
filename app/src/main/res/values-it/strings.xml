@@ -259,4 +259,9 @@
     <string name="alert_channel_name">Timer e promemoria</string>
     <string name="alert_timer_done">Timer scaduto</string>
     <string name="alert_reminder">Promemoria</string>
+    <string name="settings_capture_button">Pulsante di cattura</string>
+    <string name="settings_capture_button_sub">Avvia o ferma l\'assistente con il pulsante di cattura degli occhiali. Tienilo premuto per chiedere cosa vedi.</string>
+    <string name="input_channel">Pulsante di cattura</string>
+    <string name="input_notification_title">Il pulsante di cattura è attivo</string>
+    <string name="input_notification_text">Premi il pulsante di cattura degli occhiali per parlare con Veyra</string>
 </resources>

@@ -19,6 +19,9 @@ class GlassesManager @Inject constructor(
     val devices: Flow<List<GlassesDevice>> =
         backend.devices
 
+    val inputEvents: Flow<GlassesInputEvent> =
+        backend.inputEvents
+
     fun initialize() {
         backend.initialize()
     }

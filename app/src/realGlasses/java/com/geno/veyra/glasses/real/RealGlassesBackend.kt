@@ -11,7 +11,9 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.geno.veyra.glasses.CameraPermission
+import com.geno.veyra.glasses.CapturePress
 import com.geno.veyra.glasses.ConnectionState
+import com.geno.veyra.glasses.GlassesInputEvent
 import com.geno.veyra.glasses.GlassesBackend
 import com.geno.veyra.glasses.GlassesDevice
 import com.geno.veyra.glasses.RegistrationState
@@ -33,6 +35,12 @@ import com.meta.wearable.dat.core.session.DeviceSession
 import com.meta.wearable.dat.core.session.DeviceSessionState
 import com.meta.wearable.dat.core.types.ChargingState
 import com.meta.wearable.dat.core.types.Device
+import com.meta.wearable.dat.inputs.Inputs
+import com.meta.wearable.dat.inputs.addInputs
+import com.meta.wearable.dat.inputs.types.CapturePressType
+import com.meta.wearable.dat.inputs.types.InputEvent
+import com.meta.wearable.dat.inputs.types.InputSource
+import com.meta.wearable.dat.inputs.types.InputsConfiguration
 import com.meta.wearable.dat.core.types.DeviceIdentifier
 import com.meta.wearable.dat.core.types.LinkState
 import com.meta.wearable.dat.core.types.Permission
@@ -42,11 +50,15 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.collect
@@ -133,6 +145,20 @@ class RealGlassesBackend @Inject constructor(
 
     override val devices: Flow<List<GlassesDevice>> =
         _devices.asStateFlow()
+
+    private val _inputEvents =
+        MutableSharedFlow<GlassesInputEvent>(
+            extraBufferCapacity = 32,
+        )
+
+    override val inputEvents: SharedFlow<GlassesInputEvent> =
+        _inputEvents.asSharedFlow()
+
+    private var inputs: Inputs? = null
+
+    private var inputsSession: DeviceSession? = null
+
+    private var inputsJob: Job? = null
 
     @Volatile
     private var initialized = false
@@ -572,6 +598,8 @@ class RealGlassesBackend @Inject constructor(
 
                                 _connectionState.value =
                                     ConnectionState.CONNECTED
+
+                                attachInputs(activeSession)
                             }
                         }
 
@@ -593,6 +621,8 @@ class RealGlassesBackend @Inject constructor(
                                 }
 
                                 session = null
+
+                                detachInputs()
                             }
                         }
 
@@ -619,6 +649,175 @@ class RealGlassesBackend @Inject constructor(
             }
         }
     }
+
+    // =========================================================================
+    // INPUTS (capture button + touchpad)
+    // =========================================================================
+
+    /**
+     * Attaches the DAT Inputs capability to a started session and forwards
+     * its events into [inputEvents]. Runs once per session; the collectors
+     * die with [detachInputs] when the session stops.
+     */
+    private fun attachInputs(
+        activeSession: DeviceSession,
+    ) {
+
+        if (
+            inputsSession === activeSession &&
+            inputs != null
+        ) {
+            return
+        }
+
+        detachInputs()
+
+        inputsSession =
+            activeSession
+
+        inputsJob =
+            scope.launch {
+
+                try {
+
+                    val attached =
+                        activeSession.addInputs(
+                            InputsConfiguration(
+                                sources =
+                                    setOf(
+                                        InputSource.CAPTURE_BUTTON,
+                                        InputSource.CAPTOUCH,
+                                    ),
+                                consumeBack = false,
+                            )
+                        ).getOrElse { error ->
+
+                            Log.e(
+                                TAG,
+                                "addInputs() failed: $error"
+                            )
+
+                            return@launch
+                        }
+
+                    inputs =
+                        attached
+
+                    Log.i(
+                        TAG,
+                        "Inputs attached"
+                    )
+
+                    launch {
+                        attached.state.collect { state ->
+                            Log.i(TAG, "Inputs state: $state")
+                        }
+                    }
+
+                    launch {
+                        attached.errors.collect { error ->
+                            Log.w(TAG, "Inputs error: $error")
+                        }
+                    }
+
+                    attached.events.collect { event ->
+
+                        val mapped =
+                            mapInputEvent(event)
+
+                        Log.i(
+                            TAG,
+                            "Input event: $mapped"
+                        )
+
+                        _inputEvents.tryEmit(
+                            mapped
+                        )
+                    }
+
+                } catch (e: Exception) {
+
+                    Log.e(
+                        TAG,
+                        "Inputs collector failed",
+                        e
+                    )
+                }
+            }
+    }
+
+    private fun detachInputs() {
+
+        inputsJob?.cancel()
+        inputsJob =
+            null
+
+        inputs =
+            null
+
+        inputsSession =
+            null
+    }
+
+    private fun mapInputEvent(
+        event: InputEvent,
+    ): GlassesInputEvent =
+
+        when (event) {
+
+            is InputEvent.Capture ->
+                GlassesInputEvent.Capture(
+                    press =
+                        when (event.pressType) {
+
+                            CapturePressType.SHORT_PRESS ->
+                                CapturePress.SHORT_PRESS
+
+                            CapturePressType.HOLD ->
+                                CapturePress.HOLD
+
+                            CapturePressType.DOUBLE_PRESS ->
+                                CapturePress.DOUBLE_PRESS
+                        },
+                    timestampMs = event.timestampMs,
+                )
+
+            is InputEvent.Button ->
+                GlassesInputEvent.Other(
+                    "Button(${event.button})",
+                    event.timestampMs,
+                )
+
+            is InputEvent.Nav ->
+                GlassesInputEvent.Other(
+                    "Nav(${event.direction})",
+                    event.timestampMs,
+                )
+
+            is InputEvent.Drag ->
+                GlassesInputEvent.Other(
+                    "Drag(${event.action})",
+                    event.timestampMs,
+                )
+
+            is InputEvent.Select ->
+                GlassesInputEvent.Other(
+                    "Select",
+                    event.timestampMs,
+                )
+
+            is InputEvent.Back ->
+                GlassesInputEvent.Other(
+                    "Back",
+                    event.timestampMs,
+                )
+
+            else ->
+                GlassesInputEvent.Other(
+                    event.javaClass.simpleName,
+                    event.timestampMs,
+                )
+        }
 
     // =========================================================================
     // SESSION ERRORS

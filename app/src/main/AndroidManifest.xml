@@ -74,6 +74,12 @@
             android:exported="false"
             android:foregroundServiceType="microphone|connectedDevice" />
 
+        <!-- GlassesInputService: capture-button listener (DAT Inputs) -->
+        <service
+            android:name=".inputs.GlassesInputService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
         <!-- Timer/reminder alerts fired by AlarmManager -->
         <receiver
             android:name=".alerts.AlertReceiver"

@@ -259,4 +259,9 @@
     <string name="alert_channel_name">Temporizadores e lembretes</string>
     <string name="alert_timer_done">Temporizador concluído</string>
     <string name="alert_reminder">Lembrete</string>
+    <string name="settings_capture_button">Botão de captura</string>
+    <string name="settings_capture_button_sub">Inicie ou pare o assistente com o botão de captura dos óculos. Segure o botão para perguntar sobre o que você vê.</string>
+    <string name="input_channel">Botão de captura</string>
+    <string name="input_notification_title">O botão de captura está ativado</string>
+    <string name="input_notification_text">Pressione o botão de captura dos óculos para falar com a Veyra</string>
 </resources>

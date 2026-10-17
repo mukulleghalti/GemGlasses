@@ -406,6 +406,12 @@ class AgentViewModel @Inject constructor(
         }
     }
 
+    fun setCaptureButtonEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setCaptureButtonEnabled(enabled)
+        }
+    }
+
     /** True once the user has granted Google Home permissions. */
     val smartHomeConnected: StateFlow<Boolean> =
         smartHome.isConnected().stateInDefault(false)

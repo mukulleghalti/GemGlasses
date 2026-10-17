@@ -11,6 +11,7 @@ on:
       - Muse_ondevice-tokens
       - Muse_dat-1.0.0
       - Muse_mwdat-1.0.1
+      - Muse_inputs-spike
 
   workflow_dispatch:
     inputs:

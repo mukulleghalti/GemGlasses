@@ -259,4 +259,9 @@
     <string name="alert_channel_name">Timer &amp; Erinnerungen</string>
     <string name="alert_timer_done">Timer abgelaufen</string>
     <string name="alert_reminder">Erinnerung</string>
+    <string name="settings_capture_button">Aufnahmetaste</string>
+    <string name="settings_capture_button_sub">Starten oder stoppen Sie den Assistenten mit der Aufnahmetaste der Brille. Halten Sie die Taste gedrückt, um zu fragen, was Sie sehen.</string>
+    <string name="input_channel">Aufnahmetaste</string>
+    <string name="input_notification_title">Die Aufnahmetaste ist aktiv</string>
+    <string name="input_notification_text">Drücken Sie die Aufnahmetaste der Brille, um mit Veyra zu sprechen</string>
 </resources>

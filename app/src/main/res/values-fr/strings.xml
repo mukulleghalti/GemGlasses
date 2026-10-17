@@ -259,4 +259,9 @@
     <string name="alert_channel_name">Minuteurs et rappels</string>
     <string name="alert_timer_done">Minuteur terminé</string>
     <string name="alert_reminder">Rappel</string>
+    <string name="settings_capture_button">Bouton de capture</string>
+    <string name="settings_capture_button_sub">Démarrez ou arrêtez l\'assistant avec le bouton de capture des lunettes. Maintenez le bouton pour demander ce que vous voyez.</string>
+    <string name="input_channel">Bouton de capture</string>
+    <string name="input_notification_title">Le bouton de capture est activé</string>
+    <string name="input_notification_text">Appuyez sur le bouton de capture des lunettes pour parler à Veyra</string>
 </resources>

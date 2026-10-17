@@ -118,6 +118,7 @@ data class AgentPreferences(
     val ocrEnabled: Boolean,
     val smartHomeEnabled: Boolean,
     val lookPayEnabled: Boolean,
+    val captureButtonEnabled: Boolean,
     val liveModel: String,
     val aiProvider: AiProvider,
     val chatGptModel: String,
@@ -208,6 +209,7 @@ data class AgentPreferences(
             ocrEnabled = false,
             smartHomeEnabled = false,
             lookPayEnabled = false,
+            captureButtonEnabled = true,
             liveModel = DEFAULT_LIVE_MODEL,
             aiProvider = AiProvider.GEMINI,
             chatGptModel = DEFAULT_OPENAI_VOICE_MODEL,
@@ -422,6 +424,9 @@ class SettingsRepository @Inject constructor(
     private val lookPayEnabledKey =
         booleanPreferencesKey("look_pay_enabled")
 
+    private val captureButtonEnabledKey =
+        booleanPreferencesKey("capture_button_enabled")
+
     private val liveModelKey =
         stringPreferencesKey("live_model")
 
@@ -540,6 +545,10 @@ class SettingsRepository @Inject constructor(
                 lookPayEnabled =
                     prefs[lookPayEnabledKey]
                         ?: AgentPreferences.DEFAULT.lookPayEnabled,
+
+                captureButtonEnabled =
+                    prefs[captureButtonEnabledKey]
+                        ?: AgentPreferences.DEFAULT.captureButtonEnabled,
 
                 liveModel =
                     prefs[liveModelKey]
@@ -728,6 +737,14 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[lookPayEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setCaptureButtonEnabled(
+        enabled: Boolean,
+    ) {
+        context.dataStore.edit {
+            it[captureButtonEnabledKey] = enabled
         }
     }
 

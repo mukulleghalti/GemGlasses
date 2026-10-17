@@ -282,4 +282,9 @@
     <string name="alert_channel_name">Timers &amp; reminders</string>
     <string name="alert_timer_done">Timer done</string>
     <string name="alert_reminder">Reminder</string>
+    <string name="settings_capture_button">Capture button</string>
+    <string name="settings_capture_button_sub">Start or stop the assistant with the glasses capture button. Hold it to ask about what you see.</string>
+    <string name="input_channel">Capture button</string>
+    <string name="input_notification_title">Capture button is on</string>
+    <string name="input_notification_text">Press the glasses capture button to talk to Veyra</string>
 </resources>

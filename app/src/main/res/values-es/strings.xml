@@ -259,4 +259,9 @@
     <string name="alert_channel_name">Temporizadores y recordatorios</string>
     <string name="alert_timer_done">Temporizador terminado</string>
     <string name="alert_reminder">Recordatorio</string>
+    <string name="settings_capture_button">Botón de captura</string>
+    <string name="settings_capture_button_sub">Inicia o detén el asistente con el botón de captura de las gafas. Mantenlo pulsado para preguntar sobre lo que ves.</string>
+    <string name="input_channel">Botón de captura</string>
+    <string name="input_notification_title">El botón de captura está activado</string>
+    <string name="input_notification_text">Pulsa el botón de captura de las gafas para hablar con Veyra</string>
 </resources>

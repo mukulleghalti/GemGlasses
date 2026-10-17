@@ -43,6 +43,35 @@ enum class CameraPermission {
     NOT_DETERMINED,
 }
 
+/** The three presses the glasses capture button reports (DAT CapturePressType). */
+enum class CapturePress {
+    SHORT_PRESS,
+    HOLD,
+    DOUBLE_PRESS,
+}
+
+/**
+ * A physical input event from the glasses, mapped from the DAT Inputs
+ * capability into our own types so the rest of the app never depends on
+ * SDK classes.
+ */
+sealed interface GlassesInputEvent {
+
+    val timestampMs: Long
+
+    /** A capture-button press; [press] says which kind. */
+    data class Capture(
+        val press: CapturePress,
+        override val timestampMs: Long,
+    ) : GlassesInputEvent
+
+    /** Any other input (touchpad nav, drag, select, back) — spike logging only. */
+    data class Other(
+        val description: String,
+        override val timestampMs: Long,
+    ) : GlassesInputEvent
+}
+
 interface GlassesBackend {
 
     val registrationState: Flow<RegistrationState>
@@ -50,6 +79,10 @@ interface GlassesBackend {
     val connectionState: Flow<ConnectionState>
 
     val devices: Flow<List<GlassesDevice>>
+
+    /** Physical glasses input events (capture button, touchpad). */
+    val inputEvents: Flow<GlassesInputEvent>
+        get() = emptyFlow()
 
     fun initialize()
 

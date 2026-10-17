@@ -317,6 +317,16 @@ fun SettingsScreen(
                 )
             },
         )
+        SettingRow(
+            title = stringResource(R.string.settings_capture_button),
+            subtitle = stringResource(R.string.settings_capture_button_sub),
+            trailing = {
+                Switch(
+                    checked = prefs.captureButtonEnabled,
+                    onCheckedChange = { viewModel.setCaptureButtonEnabled(it) },
+                )
+            },
+        )
         if (prefs.smartHomeEnabled) {
             SettingRow(
                 title = stringResource(R.string.settings_connect_home),
