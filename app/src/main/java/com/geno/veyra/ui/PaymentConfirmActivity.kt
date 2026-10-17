@@ -1,11 +1,11 @@
 package com.geno.veyra.ui
 
-import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import androidx.activity.ComponentActivity
 import com.geno.veyra.R
 import com.geno.veyra.tools.LastScannedPayment
 import dagger.hilt.android.AndroidEntryPoint
@@ -22,7 +22,7 @@ import javax.inject.Inject
  * (two minutes from the scan).
  */
 @AndroidEntryPoint
-class PaymentConfirmActivity : Activity() {
+class PaymentConfirmActivity : ComponentActivity() {
 
     @Inject
     lateinit var lastScannedPayment: LastScannedPayment
