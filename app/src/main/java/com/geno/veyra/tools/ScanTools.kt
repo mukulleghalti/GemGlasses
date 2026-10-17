@@ -4,6 +4,7 @@ import android.graphics.BitmapFactory
 import com.geno.veyra.gemini.protocol.FunctionDeclaration
 import com.geno.veyra.glasses.GlassesCameraSource
 import com.geno.veyra.glasses.GlassesManager
+import com.geno.veyra.state.ConversationStore
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
@@ -25,15 +26,15 @@ import javax.inject.Inject
 private suspend fun captureImage(
     glasses: GlassesManager,
     camera: GlassesCameraSource,
-): Pair<InputImage?, String?> {
+): Triple<InputImage?, String?, ByteArray?> {
     if (!glasses.ensureCameraPermission()) {
-        return null to "Camera permission denied."
+        return Triple(null, "Camera permission denied.", null)
     }
     val jpeg = camera.captureFrame()
-        ?: return null to "Couldn't capture from the glasses camera."
+        ?: return Triple(null, "Couldn't capture from the glasses camera.", null)
     val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
-        ?: return null to "Couldn't decode the camera frame."
-    return InputImage.fromBitmap(bitmap, 0) to null
+        ?: return Triple(null, "Couldn't decode the camera frame.", null)
+    return Triple(InputImage.fromBitmap(bitmap, 0), null, jpeg)
 }
 
 private fun errorResult(message: String?): JsonObject =
@@ -91,7 +92,7 @@ class ScanBarcodeTool @Inject constructor(
     )
 
     override suspend fun execute(args: JsonObject): JsonObject {
-        val (image, error) = captureImage(glasses, camera)
+        val (image, error, _) = captureImage(glasses, camera)
         if (image == null) return errorResult(error)
 
         val scanner = BarcodeScanning.getClient()
@@ -155,7 +156,7 @@ class OcrTool @Inject constructor(
     )
 
     override suspend fun execute(args: JsonObject): JsonObject {
-        val (image, error) = captureImage(glasses, camera)
+        val (image, error, _) = captureImage(glasses, camera)
         if (image == null) return errorResult(error)
 
         val recognizer =
@@ -187,6 +188,7 @@ class OcrTool @Inject constructor(
 class TranslateViewTool @Inject constructor(
     private val glasses: GlassesManager,
     private val camera: GlassesCameraSource,
+    private val conversation: ConversationStore,
 ) : AgentTool {
 
     override val name = "translate_view"
@@ -212,8 +214,12 @@ class TranslateViewTool @Inject constructor(
     )
 
     override suspend fun execute(args: JsonObject): JsonObject {
-        val (image, error) = captureImage(glasses, camera)
+        val (image, error, jpeg) = captureImage(glasses, camera)
         if (image == null) return errorResult(error)
+
+        // Show the user what the tool saw, like the vision path does —
+        // a failed OCR is obvious when the photo is in the chat.
+        if (jpeg != null) conversation.addPhoto(jpeg)
 
         val recognizer =
             TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)

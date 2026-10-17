@@ -2192,6 +2192,11 @@ class RealGlassesBackend @Inject constructor(
             if (!awaitStreamStreaming(stream, label)) {
                 return null
             }
+            // Let auto-exposure settle before the still. The pre-1.0
+            // capture waited on the live stream for the same reason;
+            // without it the shot can be a dark, unsettled frame that
+            // OCR and the model can read nothing from.
+            delay(1_000)
         }
 
         val result =
