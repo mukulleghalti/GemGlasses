@@ -65,6 +65,10 @@ class LiveStreamManager @Inject constructor(
     private var videoCodec: VideoCodec? = null
 
     private var pendingFirstFrame: LiveFrame.Video? = null
+
+    private var sentVideoUnits = 0L
+    private var sentVideoBytes = 0L
+    private var loggedFirstUnit = false
     private var pendingVps: ByteArray? = null
     private var pendingSps: ByteArray? = null
     private var pendingPps: ByteArray? = null
@@ -107,6 +111,9 @@ class LiveStreamManager @Inject constructor(
         connectStarted = false
         videoCodec = null
         pendingFirstFrame = null
+        sentVideoUnits = 0L
+        sentVideoBytes = 0L
+        loggedFirstUnit = false
         pendingVps = null
         pendingSps = null
         pendingPps = null
@@ -228,8 +235,20 @@ class LiveStreamManager @Inject constructor(
                 0
             }
         }
-        runCatching {
+        val sent = runCatching {
             client?.sendVideo(ByteBuffer.wrap(data), info)
+        }.isSuccess
+        if (sent) {
+            sentVideoUnits++
+            sentVideoBytes += data.size
+            if (!loggedFirstUnit) {
+                loggedFirstUnit = true
+                Log.i(
+                    TAG,
+                    "first video unit sent: ${data.size} bytes " +
+                        "key=$keyFrame ptsUs=${info.presentationTimeUs}",
+                )
+            }
         }
     }
 
@@ -337,6 +356,16 @@ class LiveStreamManager @Inject constructor(
         pumpJob = null
         rtmpLive = false
         connectStarted = false
+        client?.let { c ->
+            Log.i(
+                TAG,
+                "rtmp stats: sentVideo=${c.sentVideoFrames} " +
+                    "sentAudio=${c.sentAudioFrames} " +
+                    "droppedVideo=${c.droppedVideoFrames} " +
+                    "droppedAudio=${c.droppedAudioFrames} " +
+                    "units=$sentVideoUnits bytes=$sentVideoBytes",
+            )
+        }
         runCatching { client?.disconnect() }
         client = null
         aac?.release()
@@ -353,8 +382,15 @@ class LiveStreamManager @Inject constructor(
     override fun onConnectionSuccess() {
         Log.i(TAG, "RTMP live")
         rtmpLive = true
-        pendingFirstFrame?.let { first ->
-            if (first.isCompressed) sendVideoFrame(first)
+        val stashed = pendingFirstFrame
+        if (stashed != null && stashed.isCompressed) {
+            Log.i(
+                TAG,
+                "flushing stashed keyframe: ${stashed.data.size} bytes",
+            )
+            sendVideoFrame(stashed)
+        } else {
+            Log.w(TAG, "no stashed keyframe to flush")
         }
         pendingFirstFrame = null
         aac?.start()
