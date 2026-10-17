@@ -313,4 +313,8 @@
     <string name="pay_confirm_open">Open</string>
     <string name="pay_confirm_to">To: %1$s</string>
     <string name="pay_confirm_amount">Amount: %1$s %2$s</string>
+    <string name="home_no_api_key">No API key set. Tap to add your key in Settings and start using the assistant.</string>
+    <string name="live_error_camera_permission">Camera permission was not granted, so the stream cannot start.</string>
+    <string name="camera_permission_granted">Camera permission: granted</string>
+    <string name="camera_permission_missing">Camera permission: not granted</string>
 </resources>

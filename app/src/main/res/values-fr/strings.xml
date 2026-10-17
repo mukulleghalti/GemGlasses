@@ -290,4 +290,8 @@
     <string name="pay_confirm_open">Ouvrir</string>
     <string name="pay_confirm_to">À : %1$s</string>
     <string name="pay_confirm_amount">Montant : %1$s %2$s</string>
+    <string name="home_no_api_key">Aucune clé API. Touchez pour ajouter votre clé dans les réglages et commencer à utiliser l\'assistant.</string>
+    <string name="live_error_camera_permission">L\'autorisation de la caméra n\'a pas été accordée, le flux ne peut donc pas démarrer.</string>
+    <string name="camera_permission_granted">Autorisation de la caméra : accordée</string>
+    <string name="camera_permission_missing">Autorisation de la caméra : non accordée</string>
 </resources>

@@ -290,4 +290,8 @@
     <string name="pay_confirm_open">Öffnen</string>
     <string name="pay_confirm_to">An: %1$s</string>
     <string name="pay_confirm_amount">Betrag: %1$s %2$s</string>
+    <string name="home_no_api_key">Kein API-Schlüssel gesetzt. Tippen, um den Schlüssel in den Einstellungen hinzuzufügen und den Assistenten zu starten.</string>
+    <string name="live_error_camera_permission">Die Kameraberechtigung wurde nicht erteilt, der Stream kann nicht starten.</string>
+    <string name="camera_permission_granted">Kameraberechtigung: erteilt</string>
+    <string name="camera_permission_missing">Kameraberechtigung: nicht erteilt</string>
 </resources>

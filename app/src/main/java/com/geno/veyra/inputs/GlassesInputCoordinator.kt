@@ -2,8 +2,6 @@ package com.geno.veyra.inputs
 
 import android.content.Context
 import android.util.Log
-import com.geno.veyra.agent.AgentController
-import com.geno.veyra.agent.AgentStatus
 import com.geno.veyra.glasses.GlassesManager
 import com.geno.veyra.glasses.RegistrationState
 import com.geno.veyra.settings.SettingsRepository
@@ -22,13 +20,17 @@ import javax.inject.Singleton
  * [com.geno.veyra.wakeword.WakeWordCoordinator]'s shape — the service
  * itself creates the DAT session, so unlike the wake-word listener this
  * does not wait for an existing connection.
+ *
+ * The toggle also drives the backend's Inputs attach/detach directly:
+ * off means sessions never claim the capture button (and a live session
+ * releases it via removeInputs), so Meta AI photo capture keeps
+ * working while the glasses are connected to Veyra.
  */
 @Singleton
 class GlassesInputCoordinator @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settings: SettingsRepository,
     private val glassesManager: GlassesManager,
-    private val controller: AgentController,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -49,18 +51,18 @@ class GlassesInputCoordinator @Inject constructor(
                     registration == RegistrationState.REGISTERED
             }.collect { shouldRun ->
                 Log.d(TAG, "capture-button listener=$shouldRun")
+                // Set the backend switch first, so a session the
+                // service is about to start attaches (or not)
+                // correctly, and a live session detaches Inputs
+                // immediately on toggle-off (the session itself stays
+                // up — Veyra remains connected, the button returns).
+                glassesManager.setCaptureButtonEnabled(shouldRun)
                 if (shouldRun && !serviceRunning) {
                     GlassesInputService.start(context)
                     serviceRunning = true
                 } else if (!shouldRun && serviceRunning) {
                     GlassesInputService.stop(context)
                     serviceRunning = false
-                    // Release the DAT session too, so the capture button
-                    // returns to its native behaviour. Skipped while an
-                    // assistant session is live — it shares the session.
-                    if (controller.status.value == AgentStatus.IDLE) {
-                        glassesManager.disconnect()
-                    }
                 }
             }
         }

@@ -28,9 +28,11 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Videocam
+import com.geno.veyra.settings.AiProvider
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -88,6 +90,18 @@ fun HomeScreen(
     // clock on each recomposition so it reflects token expiry too.
     val tokenTick by
         viewModel.hasLiveToken.collectAsStateWithLifecycle()
+
+    val prefs by
+        viewModel.preferences.collectAsStateWithLifecycle()
+
+    // No key for the active provider: the assistant cannot run, so say
+    // so up front instead of failing later (tap opens Settings).
+    val noKeySet =
+        if (prefs.aiProvider == AiProvider.OPENAI) {
+            viewModel.savedOpenAiKey == null
+        } else {
+            viewModel.savedApiKey == null
+        }
 
     /*
      * IMPORTANT:
@@ -168,6 +182,27 @@ fun HomeScreen(
             onConnectClick = viewModel::connectGlasses,
             onDisconnectClick = viewModel::disconnectGlasses,
         )
+
+        if (noKeySet) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSettingsClick() },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor =
+                        MaterialTheme.colorScheme.errorContainer,
+                ),
+            ) {
+                Text(
+                    text = stringResource(R.string.home_no_api_key),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color =
+                        MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(14.dp),
+                )
+            }
+        }
 
         AssistantHero(
             running = running,

@@ -116,6 +116,13 @@ interface GlassesBackend {
         requester: suspend () -> CameraPermission,
     ) {}
 
+    /**
+     * Capture-button listener switch. When false (the default), sessions
+     * never attach DAT Inputs, so the capture button stays with the
+     * glasses (native / Meta AI photos) while Veyra is connected.
+     */
+    suspend fun setCaptureButtonEnabled(enabled: Boolean) {}
+
     fun cameraFrames(): Flow<ByteArray>
 
     fun setActivity(activity: Activity)

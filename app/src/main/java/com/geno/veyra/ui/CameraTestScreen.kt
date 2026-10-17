@@ -44,6 +44,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno.veyra.R
+import com.geno.veyra.glasses.CameraPermission
 import com.meta.wearable.dat.camera.types.VideoFrame
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -277,6 +278,51 @@ fun CameraTestScreen(
                             stringResource(R.string.camera_grant),
                             color =
                                 MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
+            }
+        }
+
+        // Always-visible camera permission state when idle and no error
+        // banner is up: users should never have to guess whether the
+        // Meta camera permission is in place.
+        if (!uiState.streaming && uiState.error == null) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 96.dp)
+                    .background(
+                        Color.Black.copy(alpha = 0.55f),
+                        RoundedCornerShape(10.dp),
+                    )
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(
+                        if (
+                            uiState.cameraPermission ==
+                                CameraPermission.GRANTED
+                        ) {
+                            R.string.camera_permission_granted
+                        } else {
+                            R.string.camera_permission_missing
+                        },
+                    ),
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (
+                    uiState.cameraPermission !=
+                        CameraPermission.GRANTED
+                ) {
+                    TextButton(
+                        onClick = viewModel::retryCameraPermission,
+                    ) {
+                        Text(
+                            stringResource(R.string.camera_grant),
+                            color = Color.White,
                         )
                     }
                 }

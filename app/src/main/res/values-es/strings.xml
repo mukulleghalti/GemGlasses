@@ -290,4 +290,8 @@
     <string name="pay_confirm_open">Abrir</string>
     <string name="pay_confirm_to">Para: %1$s</string>
     <string name="pay_confirm_amount">Importe: %1$s %2$s</string>
+    <string name="home_no_api_key">No hay clave API. Toca para añadir tu clave en Ajustes y empezar a usar el asistente.</string>
+    <string name="live_error_camera_permission">No se concedió el permiso de cámara, así que el stream no puede empezar.</string>
+    <string name="camera_permission_granted">Permiso de cámara: concedido</string>
+    <string name="camera_permission_missing">Permiso de cámara: no concedido</string>
 </resources>

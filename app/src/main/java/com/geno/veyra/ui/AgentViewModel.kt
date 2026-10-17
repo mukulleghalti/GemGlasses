@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.geno.veyra.R
 import com.geno.veyra.agent.AgentController
 import com.geno.veyra.agent.AgentStatus
 import com.geno.veyra.audio.MicMuteController
@@ -446,6 +447,16 @@ class AgentViewModel @Inject constructor(
 
     fun startLive() {
         viewModelScope.launch {
+            _liveStartError.value = null
+            // Same Meta camera permission the Camera Test uses: prompt
+            // here if needed, so Go Live never dies silently on it.
+            if (!glassesManager.ensureCameraPermission()) {
+                _liveStartError.value =
+                    getApplication<Application>().getString(
+                        R.string.live_error_camera_permission,
+                    )
+                return@launch
+            }
             _liveStartError.value = liveStreamManager.start()
         }
     }

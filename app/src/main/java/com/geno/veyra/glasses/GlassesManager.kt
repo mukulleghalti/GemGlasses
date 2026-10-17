@@ -22,6 +22,10 @@ class GlassesManager @Inject constructor(
     val inputEvents: Flow<GlassesInputEvent> =
         backend.inputEvents
 
+    suspend fun setCaptureButtonEnabled(enabled: Boolean) {
+        backend.setCaptureButtonEnabled(enabled)
+    }
+
     fun initialize() {
         backend.initialize()
     }

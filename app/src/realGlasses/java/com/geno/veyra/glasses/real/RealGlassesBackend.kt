@@ -38,6 +38,7 @@ import com.meta.wearable.dat.core.types.ChargingState
 import com.meta.wearable.dat.core.types.Device
 import com.meta.wearable.dat.inputs.Inputs
 import com.meta.wearable.dat.inputs.addInputs
+import com.meta.wearable.dat.inputs.removeInputs
 import com.meta.wearable.dat.inputs.types.CapturePressType
 import com.meta.wearable.dat.inputs.types.InputEvent
 import com.meta.wearable.dat.inputs.types.InputSource
@@ -162,6 +163,10 @@ class RealGlassesBackend @Inject constructor(
     private var inputsSession: DeviceSession? = null
 
     private var inputsJob: Job? = null
+
+    /** Capture-button feature switch, driven by the Settings toggle. */
+    @Volatile
+    private var captureButtonWanted = false
 
     @Volatile
     private var initialized = false
@@ -653,7 +658,9 @@ class RealGlassesBackend @Inject constructor(
                                 _connectionState.value =
                                     ConnectionState.CONNECTED
 
-                                attachInputs(activeSession)
+                                if (captureButtonWanted) {
+                                    attachInputs(activeSession)
+                                }
                             }
                         }
 
@@ -809,8 +816,44 @@ class RealGlassesBackend @Inject constructor(
         inputs =
             null
 
+        // Release the capability on the session itself, so the capture
+        // button returns to the glasses even while the session stays
+        // alive. Best effort: on a stopped session this simply errors.
+        val attachedSession = inputsSession
         inputsSession =
             null
+
+        if (attachedSession != null) {
+            runCatching {
+                attachedSession.removeInputs()
+            }
+        }
+    }
+
+    /**
+     * Settings toggle for the capture-button listener. Turning it off
+     * detaches Inputs from the live session (the session itself stays
+     * up, so Veyra remains connected and Meta AI photos work again).
+     * Turning it on attaches to the live session, if one is running.
+     */
+    override suspend fun setCaptureButtonEnabled(
+        enabled: Boolean,
+    ) {
+        captureButtonWanted = enabled
+
+        val activeSession = session ?: sharedSession
+
+        if (enabled) {
+            if (
+                activeSession != null &&
+                activeSession.state.value ==
+                    DeviceSessionState.STARTED
+            ) {
+                attachInputs(activeSession)
+            }
+        } else {
+            detachInputs()
+        }
     }
 
     private fun mapInputEvent(

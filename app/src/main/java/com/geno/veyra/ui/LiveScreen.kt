@@ -10,11 +10,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,10 +68,22 @@ fun LiveScreen(
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
 
-        Text(
-            text = stringResource(R.string.live_title),
-            style = MaterialTheme.typography.headlineSmall,
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector =
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription =
+                        stringResource(R.string.camera_back),
+                )
+            }
+            Text(
+                text = stringResource(R.string.live_title),
+                style = MaterialTheme.typography.headlineSmall,
+            )
+        }
 
         val statusText = when (liveStatus.state) {
             LiveStreamManager.State.LIVE ->

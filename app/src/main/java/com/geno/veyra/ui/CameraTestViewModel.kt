@@ -63,6 +63,8 @@ data class CameraTestUiState(
     val capturedPhoto: android.graphics.Bitmap? = null,
     val savedVideoUri: android.net.Uri? = null,
     val error: CameraTestError? = null,
+    /** Last known Meta camera permission state, shown on the screen. */
+    val cameraPermission: CameraPermission = CameraPermission.NOT_DETERMINED,
 )
 
 @HiltViewModel
@@ -134,6 +136,7 @@ class CameraTestViewModel @Inject constructor(
         _uiState.value =
             if (result == CameraPermission.GRANTED) {
                 cur.copy(
+                    cameraPermission = result,
                     status =
                         if (
                             cur.status ==
@@ -152,6 +155,7 @@ class CameraTestViewModel @Inject constructor(
                 )
             } else {
                 cur.copy(
+                    cameraPermission = result,
                     status = CameraTestStatus.PermissionNeeded,
                     error = CameraTestError.PermissionNeeded,
                 )
@@ -230,6 +234,7 @@ class CameraTestViewModel @Inject constructor(
                                 status = CameraTestStatus.PermissionNeeded,
                                 error = CameraTestError.PermissionNeeded,
                                 streaming = false,
+                                cameraPermission = cameraPermission,
                             )
 
                         return@launch

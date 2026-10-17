@@ -93,7 +93,6 @@ fun SettingsScreen(
     var showChatGptModelDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showDiagnosticsDialog by remember { mutableStateOf(false) }
-    var advancedExpanded by remember { mutableStateOf(false) }
 
     val selectedVoice = VOICES.firstOrNull { it.name == prefs.voiceName }
     val voiceLabel = selectedVoice?.let {
@@ -241,6 +240,27 @@ fun SettingsScreen(
                 onClick = { showChatGptKeyDialog = true },
             )
         }
+        if (prefs.aiProvider != AiProvider.OPENAI) {
+            SettingRow(
+                title = stringResource(R.string.settings_api_key),
+                value = if (apiKeySet) stringResource(R.string.settings_api_key_set) else stringResource(R.string.settings_api_key_not_set),
+                onClick = { showApiKeyDialog = true },
+            )
+            SettingRow(
+                title = stringResource(R.string.settings_check_connection),
+                value = when (val state = apiKeyState) {
+                    is AgentViewModel.ApiKeyState.Checking -> stringResource(R.string.settings_conn_checking)
+                    is AgentViewModel.ApiKeyState.Valid -> stringResource(R.string.settings_conn_ok)
+                    is AgentViewModel.ApiKeyState.Invalid ->
+                        (state.message
+                            ?: stringResource(R.string.settings_conn_fallback)).take(40)
+
+                    is AgentViewModel.ApiKeyState.Missing -> stringResource(R.string.settings_conn_missing)
+                    is AgentViewModel.ApiKeyState.Unchecked -> stringResource(R.string.settings_conn_tap)
+                },
+                onClick = { viewModel.checkConnection() },
+            )
+        }
         SettingRow(
             title = stringResource(R.string.settings_web_search),
             subtitle = stringResource(R.string.settings_web_search_sub),
@@ -347,50 +367,6 @@ fun SettingsScreen(
                 onClick = {
                     viewModel.connectGoogleHome()
                 },
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { advancedExpanded = !advancedExpanded }
-                .padding(vertical = 13.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                stringResource(R.string.settings_section_advanced).uppercase(),
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp,
-                ),
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                if (advancedExpanded) "▾" else "▸",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        if (advancedExpanded) {
-            SettingRow(
-                title = stringResource(R.string.settings_api_key),
-                value = if (apiKeySet) stringResource(R.string.settings_api_key_set) else stringResource(R.string.settings_api_key_not_set),
-                onClick = { showApiKeyDialog = true },
-            )
-            SettingRow(
-                title = stringResource(R.string.settings_check_connection),
-                value = when (val state = apiKeyState) {
-                    is AgentViewModel.ApiKeyState.Checking -> stringResource(R.string.settings_conn_checking)
-                    is AgentViewModel.ApiKeyState.Valid -> stringResource(R.string.settings_conn_ok)
-                    is AgentViewModel.ApiKeyState.Invalid ->
-                        (state.message
-                            ?: stringResource(R.string.settings_conn_fallback)).take(40)
-
-                    is AgentViewModel.ApiKeyState.Missing -> stringResource(R.string.settings_conn_missing)
-                    is AgentViewModel.ApiKeyState.Unchecked -> stringResource(R.string.settings_conn_tap)
-                },
-                onClick = { viewModel.checkConnection() },
             )
         }
 
