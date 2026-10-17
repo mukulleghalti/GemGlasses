@@ -11,6 +11,7 @@ import com.pedro.common.ConnectChecker
 import com.pedro.common.VideoCodec
 import com.pedro.rtmp.rtmp.RtmpClient
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -125,6 +126,17 @@ class LiveStreamManager @Inject constructor(
                         }
                     }
                 }
+                // The camera flow ended without an exception. Never
+                // sit on CONNECTING (or LIVE) forever — surface it.
+                when (_status.value.state) {
+                    State.CONNECTING ->
+                        fail("Camera stream ended before going live.")
+                    State.LIVE ->
+                        fail("Camera stream ended.")
+                    else -> Unit
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "frame pump failed", e)
                 fail("Camera stream stopped: ${e.message}")
@@ -147,11 +159,17 @@ class LiveStreamManager @Inject constructor(
             )
         }
 
-        if (frame.isCodecConfig) {
+        // Connect as soon as SPS/PPS are known. DAT flags a
+        // codec-config frame on some builds; on others the SPS/PPS
+        // ride inside the first keyframe — scan every frame until
+        // connected, either way.
+        if (frame.isCodecConfig || (!connectStarted && frame.isCompressed)) {
             val spsPps = H264.extractSpsPps(frame.data)
             if (spsPps == null) {
-                Log.e(TAG, "codec config: no SPS/PPS found")
-                fail("Camera sent a codec config without SPS/PPS.")
+                if (frame.isCodecConfig) {
+                    Log.e(TAG, "codec config: no SPS/PPS found")
+                    fail("Camera sent a codec config without SPS/PPS.")
+                }
                 return
             }
             val (sps, pps) = spsPps

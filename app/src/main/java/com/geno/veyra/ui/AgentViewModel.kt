@@ -442,6 +442,7 @@ class AgentViewModel @Inject constructor(
         assistantStarter.start(
             initialText = "Translate the text in front of me. Use the " +
                 "translate_view tool and speak the translation.",
+            boostTranslateView = true,
         )
     }
 

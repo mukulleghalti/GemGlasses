@@ -22,6 +22,9 @@ data class ToolFlags(
     val webSearch: Boolean = false,
     val qrScan: Boolean = false,
     val ocr: Boolean = false,
+    /** Snap & Translate tile sessions: include translate_view even
+     *  when the OCR toggle is off — the tile tap is the consent. */
+    val translateView: Boolean = false,
     val smartHome: Boolean = false,
     val lookPay: Boolean = false,
     val liveStream: Boolean = false,
@@ -49,7 +52,7 @@ class ToolRegistry @Inject constructor(
                     when (tool.gate) {
                         ToolGate.ALWAYS -> true
                         ToolGate.QR_SCAN -> flags.qrScan
-                        ToolGate.OCR -> flags.ocr
+                        ToolGate.OCR -> flags.ocr || (flags.translateView && tool.name == "translate_view")
                         ToolGate.SMART_HOME -> flags.smartHome
                         ToolGate.LOOK_PAY -> flags.lookPay
                         ToolGate.LIVE_STREAM -> flags.liveStream
@@ -81,7 +84,7 @@ class ToolRegistry @Inject constructor(
                 when (tool.gate) {
                     ToolGate.ALWAYS -> true
                     ToolGate.QR_SCAN -> flags.qrScan
-                    ToolGate.OCR -> flags.ocr
+                    ToolGate.OCR -> flags.ocr || (flags.translateView && tool.name == "translate_view")
                     ToolGate.SMART_HOME -> flags.smartHome
                     ToolGate.LOOK_PAY -> flags.lookPay
                     ToolGate.LIVE_STREAM -> flags.liveStream
@@ -107,7 +110,7 @@ class ToolRegistry @Inject constructor(
                 when (tool.gate) {
                     ToolGate.ALWAYS -> true
                     ToolGate.QR_SCAN -> flags.qrScan
-                    ToolGate.OCR -> flags.ocr
+                    ToolGate.OCR -> flags.ocr || (flags.translateView && tool.name == "translate_view")
                     ToolGate.SMART_HOME -> flags.smartHome
                     ToolGate.LOOK_PAY -> flags.lookPay
                     ToolGate.LIVE_STREAM -> flags.liveStream

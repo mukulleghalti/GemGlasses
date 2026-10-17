@@ -30,9 +30,12 @@ class AssistantStarter @Inject constructor(
      *   assistant actually responds to the wake phrase).
      */
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    fun start(initialText: String? = null) {
+    fun start(
+        initialText: String? = null,
+        boostTranslateView: Boolean = false,
+    ) {
         conversation.clear()
         AgentForegroundService.start(context)
-        controller.start(initialText)
+        controller.start(initialText, boostTranslateView)
     }
 }

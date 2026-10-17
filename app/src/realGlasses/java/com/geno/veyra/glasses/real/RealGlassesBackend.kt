@@ -1436,16 +1436,19 @@ class RealGlassesBackend @Inject constructor(
                     true
                 } ?: false
 
+            var visionJpeg: ByteArray? = null
+
             if (!photoStarted) {
 
                 Log.e(
                     TAG,
                     "Gemini camera: Photo API did not reach STARTED " +
-                        "(state=${photo.state.value})"
+                        "(state=${photo.state.value}); " +
+                        "using the stream capture fallback"
                 )
-
-                return@channelFlow
             }
+
+            if (photoStarted) {
 
             Log.i(
                 TAG,
@@ -1550,7 +1553,7 @@ class RealGlassesBackend @Inject constructor(
                         jpeg.isNotEmpty()
                 ) {
 
-                    send(jpeg)
+                    visionJpeg = jpeg
 
                 } else {
 
@@ -1566,8 +1569,25 @@ class RealGlassesBackend @Inject constructor(
                 errorJob.cancel()
             }
 
-            // Legacy stream-based capture path removed — Photo API is the
-            // dedicated high-resolution path on DAT 1.0.0.
+            }
+
+            // Stream fallback: the standalone Photo API is one path to a
+            // still; if it produced nothing, capture from the video
+            // stream itself before giving up.
+            if (visionJpeg == null) {
+                visionJpeg =
+                    captureViaStream(activeCamera, "Gemini camera")
+            }
+
+            val finalJpeg = visionJpeg
+            if (finalJpeg != null) {
+                send(finalJpeg)
+            } else {
+                Log.e(
+                    TAG,
+                    "Gemini camera: capture failed on both paths"
+                )
+            }
 
         } finally {
 
@@ -2093,6 +2113,112 @@ class RealGlassesBackend @Inject constructor(
         }
     }
 
+    /**
+     * Waits until [stream] reaches STREAMING (bounded), bailing early on
+     * the first stream error. Returns true on STREAMING.
+     */
+    private suspend fun awaitStreamStreaming(
+        stream: com.meta.wearable.dat.camera.Stream,
+        label: String,
+        timeoutMs: Long = 10_000L,
+    ): Boolean {
+        val firstError =
+            AtomicReference<String?>(null)
+
+        val errorJob =
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    stream.errorStream.collect { error ->
+                        if (firstError.get() == null) {
+                            firstError.set(error.toString())
+                        }
+                    }
+                } catch (_: Exception) {
+                    // Stream ended.
+                }
+            }
+
+        try {
+            val deadline =
+                System.currentTimeMillis() + timeoutMs
+
+            while (System.currentTimeMillis() < deadline) {
+                val error = firstError.get()
+                if (error != null) {
+                    Log.e(
+                        TAG,
+                        "$label: stream error while waiting " +
+                            "for STREAMING: $error"
+                    )
+                    return false
+                }
+                if (stream.state.value == StreamState.STREAMING) {
+                    return true
+                }
+                delay(200)
+            }
+
+            Log.e(
+                TAG,
+                "$label: stream did not reach STREAMING " +
+                    "(state=${stream.state.value})"
+            )
+            return false
+        } finally {
+            errorJob.cancel()
+        }
+    }
+
+    /**
+     * One-shot still capture from the video stream itself
+     * (Stream.capturePhoto). Starts the stream first when needed and
+     * waits for STREAMING. Returns JPEG bytes or null.
+     */
+    private suspend fun captureViaStream(
+        activeCamera: com.meta.wearable.dat.camera.Camera,
+        label: String,
+    ): ByteArray? {
+        val stream = activeCamera.stream
+
+        if (stream.state.value != StreamState.STREAMING) {
+            try {
+                stream.start()
+            } catch (e: Exception) {
+                Log.w(TAG, "$label: stream.start() failed", e)
+            }
+            if (!awaitStreamStreaming(stream, label)) {
+                return null
+            }
+        }
+
+        val result =
+            try {
+                stream.capturePhoto()
+            } catch (e: Exception) {
+                Log.e(TAG, "$label: stream capturePhoto threw", e)
+                return null
+            }
+
+        val data = result.getOrNull()
+        if (data == null) {
+            Log.e(
+                TAG,
+                "$label: stream capture failed: " +
+                    (result.errorOrNull() ?: result.exceptionOrNull())
+            )
+            return null
+        }
+
+        val jpeg = photoDataToJpeg(data)
+        if (jpeg == null || jpeg.isEmpty()) {
+            Log.e(TAG, "$label: stream capture produced no JPEG")
+            return null
+        }
+
+        Log.i(TAG, "$label: stream capture OK (${jpeg.size} bytes)")
+        return jpeg
+    }
+
     // =========================================================================
     // CAMERA TEST - PHOTO CAPTURE
     // =========================================================================
@@ -2211,12 +2337,23 @@ class RealGlassesBackend @Inject constructor(
             Log.e(TAG, "Photo API capture threw", e)
             Result.failure(e)
         } finally {
-            // Restart the video stream for preview.
+            // Restart the video stream for preview and wait until it is
+            // actually STREAMING. A bare start() races the caller, which
+            // then sees a transitional CLOSED state and fails.
             try {
                 activeCamera.stream.start()
-                Log.i(TAG, "Photo API: video stream restarted")
+                val resumed =
+                    awaitStreamStreaming(
+                        activeCamera.stream,
+                        "Photo API",
+                    )
+                Log.i(
+                    TAG,
+                    "Photo API: video stream restarted " +
+                        "(streaming=$resumed)"
+                )
             } catch (e: Exception) {
-                Log.w(TAG, "Photo API: stream.start() failed", e)
+                Log.w(TAG, "Photo API: stream restart failed", e)
             }
         }
     }
@@ -2252,87 +2389,22 @@ class RealGlassesBackend @Inject constructor(
                 photoApiResult.exceptionOrNull()?.message
         )
 
-        if (
-            activeCamera.stream.state.value !=
-                StreamState.STREAMING
-        ) {
+        // The Photo API attempt stopped and restarted the stream (the
+        // restart is awaited there). Capture through the stream helper,
+        // which waits for STREAMING instead of failing on a
+        // transitional state.
+        val fallbackJpeg =
+            captureViaStream(activeCamera, "Camera Test")
 
-            return Result.failure(
+        return if (fallbackJpeg != null) {
+            Result.success(fallbackJpeg)
+        } else {
+            Result.failure(
                 IllegalStateException(
-                    "Camera stream is not STREAMING: " +
-                        activeCamera.stream.state.value
+                    "Photo capture failed: the Photo API and the " +
+                        "stream capture both returned no image"
                 )
             )
-        }
-
-        return try {
-
-            val captureResult =
-                activeCamera.stream.capturePhoto()
-
-            val photoData =
-                captureResult.getOrNull()
-
-            if (photoData == null) {
-
-                val exception =
-                    captureResult.exceptionOrNull()
-
-                val error =
-                    captureResult.errorOrNull()
-
-                Log.e(
-                    TAG,
-                    "Camera Test photo capture failed: " +
-                        (exception ?: error)
-                )
-
-                Result.failure(
-                    exception
-                        ?: IllegalStateException(
-                            "capturePhoto failed: $error"
-                        )
-                )
-
-            } else {
-
-                val jpeg =
-                    photoDataToJpeg(
-                        photoData
-                    )
-
-                if (
-                    jpeg == null ||
-                    jpeg.isEmpty()
-                ) {
-
-                    Result.failure(
-                        IllegalStateException(
-                            "Photo captured but JPEG conversion failed"
-                        )
-                    )
-
-                } else {
-
-                    Log.i(
-                        TAG,
-                        "Camera Test photo captured: " +
-                            "${jpeg.size} bytes"
-                    )
-
-                    Result.success(jpeg)
-                }
-            }
-
-        } catch (e: Exception) {
-
-            Log.e(
-                TAG,
-                "Camera Test capturePhoto() threw",
-                e
-            )
-
-            Result.failure(e)
         }
     }
 

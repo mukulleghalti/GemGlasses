@@ -148,12 +148,16 @@ class AgentController @Inject constructor(
      */
     @Volatile
     private var pendingInitialText: String? = null
+    private var pendingTranslateView: Boolean = false
 
     val running: Boolean
         get() = eventJob?.isActive == true
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    fun start(initialText: String? = null) {
+    fun start(
+        initialText: String? = null,
+        boostTranslateView: Boolean = false,
+    ) {
         if (running) return
 
         // Only one voice session may own the mic and speaker at a time.
@@ -161,6 +165,7 @@ class AgentController @Inject constructor(
         if (translation.running) translation.stop()
 
         pendingInitialText = initialText
+        pendingTranslateView = boostTranslateView
 
         _status.value = AgentStatus.CONNECTING
         _connectionError.value = null
@@ -244,6 +249,7 @@ class AgentController @Inject constructor(
                         webSearch = prefs.webSearchEnabled,
                         qrScan = prefs.qrScanEnabled,
                         ocr = prefs.ocrEnabled,
+                        translateView = pendingTranslateView,
                         smartHome = prefs.smartHomeEnabled,
                         lookPay = prefs.lookPayEnabled,
                         liveStream = prefs.liveStreamEnabled,
