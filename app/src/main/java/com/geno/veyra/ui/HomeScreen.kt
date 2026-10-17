@@ -4,7 +4,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -45,7 +48,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -288,7 +290,7 @@ fun HomeScreen(
 
 /*
  * ---------------------------------------------------------
- * Brand header: V monogram + wordmark, API-key pill at right.
+ * Brand header: Veyra logo + wordmark, API-key pill at right.
  * ---------------------------------------------------------
  */
 
@@ -302,57 +304,17 @@ private fun BrandHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
 
-        Box(
+        // The real Veyra logo (the launcher art, cropped
+        // full-bleed) — replaces the hand-drawn V stroke that
+        // used to sit here.
+        Image(
+            painter = painterResource(R.drawable.veyra_logo),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
             modifier = Modifier
                 .size(48.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            Color(0xFF3B6CFF),
-                            Color(0xFF8B5CF6),
-                        )
-                    )
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-
-            // Drawn V mark. Fixed colors only — no @Composable
-            // theme reads inside a DrawScope.
-            Canvas(
-                modifier = Modifier.size(26.dp)
-            ) {
-
-                val strokeWidth =
-                    3.2.dp.toPx()
-
-                drawPath(
-                    path = Path().apply {
-
-                        moveTo(
-                            size.width * 0.20f,
-                            size.height * 0.16f,
-                        )
-
-                        lineTo(
-                            size.width * 0.50f,
-                            size.height * 0.84f,
-                        )
-
-                        lineTo(
-                            size.width * 0.80f,
-                            size.height * 0.16f,
-                        )
-                    },
-                    color = Color.White,
-                    style = Stroke(
-                        width = strokeWidth,
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round,
-                    ),
-                )
-            }
-        }
+                .clip(RoundedCornerShape(16.dp)),
+        )
 
         Column(
             modifier = Modifier.padding(start = 12.dp),
