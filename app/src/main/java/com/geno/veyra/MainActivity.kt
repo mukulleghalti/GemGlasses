@@ -185,7 +185,7 @@ class MainActivity : ComponentActivity() {
 
     /*
      * ---------------------------------------------------------
-     * Meta Wearables CAMERA permission
+     * Meta Wearables permissions (CAMERA + MICROPHONE)
      * ---------------------------------------------------------
      */
 
@@ -207,7 +207,7 @@ class MainActivity : ComponentActivity() {
 
             Log.i(
                 TAG,
-                "Meta camera permission result = $status"
+                "Meta permission result = $status"
             )
 
             val mapped =
@@ -226,8 +226,9 @@ class MainActivity : ComponentActivity() {
             cameraPermissionContinuation = null
         }
 
-    private suspend fun requestMetaCameraPermission():
-        CameraPermission {
+    private suspend fun requestMetaPermission(
+        permission: Permission,
+    ): CameraPermission {
 
         return cameraPermissionMutex.withLock {
 
@@ -242,11 +243,11 @@ class MainActivity : ComponentActivity() {
 
                 Log.i(
                     TAG,
-                    "Launching Meta Wearables CAMERA permission"
+                    "Launching Meta Wearables permission: $permission"
                 )
 
                 cameraPermissionLauncher.launch(
-                    Permission.CAMERA
+                    permission
                 )
             }
         }
@@ -271,7 +272,11 @@ class MainActivity : ComponentActivity() {
         smartHomeController.registerForPermissions(this)
 
         glassesManager.setCameraPermissionRequester {
-            requestMetaCameraPermission()
+            requestMetaPermission(Permission.CAMERA)
+        }
+
+        glassesManager.setMicrophonePermissionRequester {
+            requestMetaPermission(Permission.MICROPHONE)
         }
 
         enableEdgeToEdge()

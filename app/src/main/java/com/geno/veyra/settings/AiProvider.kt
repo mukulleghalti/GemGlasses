@@ -13,11 +13,19 @@ package com.geno.veyra.settings
  * realtime protocol shape as OpenAI's; the key is managed by
  * [GrokKeyRepository], the models in `com.geno.veyra.grok.GrokModels`,
  * and the client in `com.geno.veyra.grok.realtime`.
+ *
+ * CLAUDE selects Claude via a cascade (Anthropic has no realtime
+ * voice API): on-device Vosk speech-to-text, the Messages API, and
+ * on-device text-to-speech. The key is managed by
+ * [ClaudeKeyRepository], the models in
+ * `com.geno.veyra.claude.ClaudeModels`, and the keeper in
+ * `com.geno.veyra.claude.realtime`.
  */
 enum class AiProvider(val id: String) {
     GEMINI("gemini"),
     OPENAI("openai"),
     GROK("grok"),
+    CLAUDE("claude"),
     ;
 
     companion object {

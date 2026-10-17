@@ -2,6 +2,7 @@ package com.geno.veyra.gemini
 
 import android.util.Log
 import com.geno.veyra.gemini.protocol.FunctionResponse
+import com.geno.veyra.claude.DEFAULT_CLAUDE_MODEL
 import com.geno.veyra.grok.DEFAULT_GROK_VOICE_MODEL
 import com.geno.veyra.openai.DEFAULT_OPENAI_VOICE_MODEL
 import com.geno.veyra.settings.DEFAULT_LIVE_MODEL
@@ -36,6 +37,11 @@ data class SessionConfig(
      * the Grok keeper; the other keepers ignore it.
      */
     val grokModel: String = DEFAULT_GROK_VOICE_MODEL,
+    /**
+     * Model id chosen in AI Settings (Claude Model). Only read by
+     * the Claude keeper; the other keepers ignore it.
+     */
+    val claudeModel: String = DEFAULT_CLAUDE_MODEL,
     /**
      * Whether talking over the assistant cuts it off. When false the
      * session is created with activityHandling=NO_INTERRUPTION, so the

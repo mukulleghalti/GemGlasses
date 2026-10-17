@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.geno.veyra.R
+import com.geno.veyra.claude.CLAUDE_MODELS
+import com.geno.veyra.claude.DEFAULT_CLAUDE_MODEL
 import com.geno.veyra.grok.DEFAULT_GROK_VOICE_MODEL
 import com.geno.veyra.grok.GROK_VOICE_MODELS
 import com.geno.veyra.openai.DEFAULT_OPENAI_VOICE_MODEL
@@ -128,6 +130,7 @@ data class AgentPreferences(
     val aiProvider: AiProvider,
     val chatGptModel: String,
     val grokModel: String,
+    val claudeModel: String,
 ) {
     /** Built here so the persona text stays in one place. */
     val systemInstruction: String
@@ -223,6 +226,7 @@ data class AgentPreferences(
             aiProvider = AiProvider.GEMINI,
             chatGptModel = DEFAULT_OPENAI_VOICE_MODEL,
             grokModel = DEFAULT_GROK_VOICE_MODEL,
+            claudeModel = DEFAULT_CLAUDE_MODEL,
         )
 
         /** Default wake phrase ("Hey Glasses"). Lowercase: Vosk decodes lowercase. */
@@ -458,6 +462,9 @@ class SettingsRepository @Inject constructor(
     private val grokModelKey =
         stringPreferencesKey("grok_model")
 
+    private val claudeModelKey =
+        stringPreferencesKey("claude_model")
+
     private val translateSourceLangKey =
         stringPreferencesKey("translate_source_lang")
 
@@ -607,6 +614,13 @@ class SettingsRepository @Inject constructor(
                             GROK_VOICE_MODELS.any { it.id == id }
                         }
                         ?: AgentPreferences.DEFAULT.grokModel,
+
+                claudeModel =
+                    prefs[claudeModelKey]
+                        ?.takeIf { id ->
+                            CLAUDE_MODELS.any { it.id == id }
+                        }
+                        ?: AgentPreferences.DEFAULT.claudeModel,
             )
         }
 
@@ -842,6 +856,14 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[grokModelKey] = modelId
+        }
+    }
+
+    suspend fun setClaudeModel(
+        modelId: String,
+    ) {
+        context.dataStore.edit {
+            it[claudeModelKey] = modelId
         }
     }
 }

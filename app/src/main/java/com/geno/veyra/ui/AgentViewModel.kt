@@ -17,6 +17,7 @@ import com.geno.veyra.glasses.GlassesDevice
 import com.geno.veyra.glasses.GlassesManager
 import com.geno.veyra.glasses.RegistrationState
 import com.geno.veyra.glasses.ConnectionState
+import com.geno.veyra.claude.ClaudeConnectionCheck
 import com.geno.veyra.grok.GrokConnectionCheck
 import com.geno.veyra.openai.OpenAiConnectionCheck
 import com.geno.veyra.service.AgentForegroundService
@@ -27,6 +28,7 @@ import com.geno.veyra.settings.AiProvider
 import com.geno.veyra.settings.AppLocaleStore
 import com.geno.veyra.settings.AudioOutput
 import com.geno.veyra.settings.GeminiKeyRepository
+import com.geno.veyra.settings.ClaudeKeyRepository
 import com.geno.veyra.settings.GrokKeyRepository
 import com.geno.veyra.settings.OpenAiKeyRepository
 import com.geno.veyra.settings.Memory
@@ -70,6 +72,8 @@ class AgentViewModel @Inject constructor(
     private val openAiConnectionCheck: OpenAiConnectionCheck,
     private val grokKeyRepository: GrokKeyRepository,
     private val grokConnectionCheck: GrokConnectionCheck,
+    private val claudeKeyRepository: ClaudeKeyRepository,
+    private val claudeConnectionCheck: ClaudeConnectionCheck,
     private val micMute: MicMuteController,
     private val memoryRepository: MemoryRepository,
     private val smartHome: SmartHomeController,
@@ -669,6 +673,47 @@ class AgentViewModel @Inject constructor(
     fun clearGrokKey() {
         grokKeyRepository.clearKey()
         _grokKeyState.value = ApiKeyState.Missing
+    }
+
+    fun setClaudeModel(modelId: String) {
+        viewModelScope.launch {
+            settings.setClaudeModel(modelId)
+        }
+    }
+
+    // --- Claude (Anthropic) API key ------------------------------------------
+
+    /** Status of the saved Claude key, verified against Anthropic's API. */
+    private val _claudeKeyState = MutableStateFlow<ApiKeyState>(
+        if (claudeKeyRepository.hasKey()) ApiKeyState.Unchecked else ApiKeyState.Missing,
+    )
+    val claudeKeyState: StateFlow<ApiKeyState> = _claudeKeyState
+
+    /** The saved Claude key, for prefilling the Settings field. */
+    val savedClaudeKey: String?
+        get() = claudeKeyRepository.getKey()
+
+    /**
+     * Saves the key verbatim (no format checks) and immediately verifies
+     * it against Anthropic's /v1/models endpoint, mirroring
+     * [saveOpenAiKey].
+     */
+    fun saveClaudeKey(key: String) {
+        viewModelScope.launch {
+            claudeKeyRepository.saveKey(key)
+            _claudeKeyState.value = ApiKeyState.Checking
+            _claudeKeyState.value = try {
+                claudeConnectionCheck.verifyKey(key)
+                ApiKeyState.Valid
+            } catch (e: Exception) {
+                ApiKeyState.Invalid(e.message)
+            }
+        }
+    }
+
+    fun clearClaudeKey() {
+        claudeKeyRepository.clearKey()
+        _claudeKeyState.value = ApiKeyState.Missing
     }
 
     /**

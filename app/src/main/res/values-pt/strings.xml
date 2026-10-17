@@ -244,6 +244,7 @@
     <string name="camera_status_video_saved_no_audio">Vídeo salvo (sem áudio)</string>
     <string name="camera_status_rec_stopped">Gravação parada</string>
     <string name="camera_error_permission">Conceda a permissão de câmera dos óculos Meta para usar o teste de câmera</string>
+    <string name="camera_error_microphone_permission">A transmissão da câmera também grava áudio. Conceda a permissão de microfone dos óculos Meta para usar o teste de câmera</string>
     <string name="camera_grant">Permitir</string>
     <string name="camera_error_jpeg">Foto capturada, mas não foi possível decodificar o JPEG</string>
     <string name="camera_error_no_video">Nenhum arquivo de vídeo foi criado</string>
@@ -302,4 +303,14 @@
     <string name="settings_grok_key_checking">Verificando a chave com a xAI…</string>
     <string name="settings_grok_model">Modelo do Grok</string>
     <string name="error_grok_key_missing">A chave API do Grok está faltando — adicione-a em Configurações → IA para usar a voz do Grok.</string>
+    <string name="settings_provider_claude">Claude</string>
+    <string name="settings_provider_claude_sub">Anthropic</string>
+    <string name="settings_claude_key">Chave API do Claude</string>
+    <string name="settings_claude_key_dialog_title">Chave API do Claude</string>
+    <string name="settings_claude_key_note">Crie uma chave em console.anthropic.com. Ela fica criptografada neste telefone e só é enviada à Anthropic.</string>
+    <string name="settings_claude_key_checking">Verificando a chave com a Anthropic…</string>
+    <string name="settings_claude_model">Modelo do Claude</string>
+    <string name="error_claude_key_missing">A chave API do Claude está faltando — adicione-a em Configurações → IA para usar a voz do Claude.</string>
+    <string name="error_claude_stt_unavailable">Não foi possível carregar o modelo de fala no dispositivo. Verifique sua conexão e tente novamente.</string>
+    <string name="error_claude_tts">A conversão de texto em fala não está disponível neste telefone, então o provedor Claude não pode falar.</string>
 </resources>

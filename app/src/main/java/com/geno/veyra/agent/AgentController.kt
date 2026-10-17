@@ -17,6 +17,7 @@ import com.geno.veyra.gemini.SessionEvent
 import com.geno.veyra.gemini.SessionKeeper
 import com.geno.veyra.gemini.ToolFlags
 import com.geno.veyra.gemini.VoiceSessionKeeper
+import com.geno.veyra.claude.realtime.ClaudeSessionKeeper
 import com.geno.veyra.grok.realtime.GrokSessionKeeper
 import com.geno.veyra.openai.realtime.RealtimeSessionKeeper
 import com.geno.veyra.settings.AiProvider
@@ -63,6 +64,7 @@ class AgentController @Inject constructor(
     private val sessionKeeper: SessionKeeper,
     private val realtimeKeeper: RealtimeSessionKeeper,
     private val grokKeeper: GrokSessionKeeper,
+    private val claudeKeeper: ClaudeSessionKeeper,
     private val toolRegistry: ToolRegistry,
     private val micStreamer: MicStreamer,
     private val speaker: SpeakerSink,
@@ -192,6 +194,11 @@ class AgentController @Inject constructor(
                         grokKeeper
                     }
 
+                    AiProvider.CLAUDE -> {
+                        Log.i(TAG, "Starting assistant with Claude (cascade: Vosk STT + Messages API + TTS)")
+                        claudeKeeper
+                    }
+
                     AiProvider.GEMINI -> sessionKeeper
                 }
             activeKeeper = keeper
@@ -244,6 +251,7 @@ class AgentController @Inject constructor(
                     model = prefs.liveModel,
                     openAiModel = prefs.chatGptModel,
                     grokModel = prefs.grokModel,
+                    claudeModel = prefs.claudeModel,
                 ),
             )
 

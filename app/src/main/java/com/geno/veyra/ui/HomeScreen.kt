@@ -100,6 +100,7 @@ fun HomeScreen(
         when (prefs.aiProvider) {
             AiProvider.OPENAI -> viewModel.savedOpenAiKey == null
             AiProvider.GROK -> viewModel.savedGrokKey == null
+            AiProvider.CLAUDE -> viewModel.savedClaudeKey == null
             AiProvider.GEMINI -> viewModel.savedApiKey == null
         }
 

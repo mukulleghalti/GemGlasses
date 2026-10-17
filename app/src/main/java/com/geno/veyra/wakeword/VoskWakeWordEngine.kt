@@ -109,11 +109,22 @@ class VoskWakeWordEngine @Inject constructor(
     }
 
     /**
+     * The downloaded speech model directory for the current language,
+     * or null when it has not been downloaded yet. Lets other features
+     * (the Claude provider's on-device dictation) share the wake
+     * word's model instead of downloading a second copy; fetch it with
+     * [downloadModel] when this returns null.
+     */
+    fun modelDirIfReady(): File? {
+        val dir = modelDirFor(resolveLanguage())
+        return if (isModelReady(dir)) dir else null
+    }
+
+    /**
      * Recomputes [modelState] for the current app language. Call when
      * Settings opens — the cached model may belong to another language.
      */
-    override fun refreshModelState() {
-        val dir = modelDirFor(resolveLanguage())
+    override fun refreshModelState() {        val dir = modelDirFor(resolveLanguage())
         _modelState.value =
             if (isModelReady(dir)) {
                 WakeWordModelState.Ready

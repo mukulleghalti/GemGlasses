@@ -241,6 +241,8 @@ fun CameraTestScreen(
                 when (error) {
                     CameraTestError.PermissionNeeded ->
                         stringResource(R.string.camera_error_permission)
+                    CameraTestError.MicrophonePermissionNeeded ->
+                        stringResource(R.string.camera_error_microphone_permission)
                     CameraTestError.JpegDecodeFailed ->
                         stringResource(R.string.camera_error_jpeg)
                     CameraTestError.NoVideoFile ->
@@ -270,7 +272,9 @@ fun CameraTestScreen(
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                if (error == CameraTestError.PermissionNeeded) {
+                if (error == CameraTestError.PermissionNeeded ||
+                    error == CameraTestError.MicrophonePermissionNeeded
+                ) {
                     TextButton(
                         onClick = viewModel::retryCameraPermission,
                     ) {

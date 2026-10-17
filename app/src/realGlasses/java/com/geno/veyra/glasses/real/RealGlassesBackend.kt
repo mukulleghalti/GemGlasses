@@ -50,12 +50,13 @@ import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.core.types.RegistrationState as MWDATRegistrationState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -130,6 +131,9 @@ class RealGlassesBackend @Inject constructor(
         com.meta.wearable.dat.camera.Camera? = null
 
     private var cameraPermissionRequester:
+        (suspend () -> CameraPermission)? = null
+
+    private var microphonePermissionRequester:
         (suspend () -> CameraPermission)? = null
 
     private val _registrationState =
@@ -232,6 +236,12 @@ class RealGlassesBackend @Inject constructor(
         requester: suspend () -> CameraPermission,
     ) {
         cameraPermissionRequester = requester
+    }
+
+    override fun setMicrophonePermissionRequester(
+        requester: suspend () -> CameraPermission,
+    ) {
+        microphonePermissionRequester = requester
     }
 
     // =========================================================================
@@ -1156,13 +1166,22 @@ class RealGlassesBackend @Inject constructor(
     // =========================================================================
 
     override suspend fun cameraPermission():
-        CameraPermission {
+        CameraPermission =
+        checkDatPermission(Permission.CAMERA)
+
+    override suspend fun microphonePermission():
+        CameraPermission =
+        checkDatPermission(Permission.MICROPHONE)
+
+    private suspend fun checkDatPermission(
+        permission: Permission,
+    ): CameraPermission {
 
         return try {
 
             val result =
                 Wearables.checkPermissionStatus(
-                    Permission.CAMERA
+                    permission
                 )
 
             val status =
@@ -1183,7 +1202,7 @@ class RealGlassesBackend @Inject constructor(
 
             Log.e(
                 TAG,
-                "Camera permission check failed",
+                "DAT permission check failed ($permission)",
                 e
             )
 
@@ -1225,6 +1244,47 @@ class RealGlassesBackend @Inject constructor(
             Log.e(
                 TAG,
                 "Camera permission request failed",
+                e
+            )
+
+            CameraPermission.NOT_DETERMINED
+        }
+    }
+
+    override suspend fun requestMicrophonePermission():
+        CameraPermission {
+
+        if (
+            microphonePermission() ==
+                CameraPermission.GRANTED
+        ) {
+            return CameraPermission.GRANTED
+        }
+
+        val requester =
+            microphonePermissionRequester
+
+        if (requester == null) {
+
+            Log.e(
+                TAG,
+                "Microphone permission requester is not registered"
+            )
+
+            return CameraPermission.NOT_DETERMINED
+        }
+
+        return try {
+
+            requester()
+
+            microphonePermission()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Microphone permission request failed",
                 e
             )
 
@@ -1300,6 +1360,20 @@ class RealGlassesBackend @Inject constructor(
             Log.e(
                 TAG,
                 "Gemini camera: camera permission not granted"
+            )
+
+            return@channelFlow
+        }
+
+        if (
+            microphonePermission() !=
+                CameraPermission.GRANTED
+        ) {
+
+            Log.e(
+                TAG,
+                "Gemini camera: microphone permission not granted " +
+                    "(DAT 1.0 camera streams always carry audio)"
             )
 
             return@channelFlow
@@ -1571,6 +1645,20 @@ class RealGlassesBackend @Inject constructor(
             return@channelFlow
         }
 
+        if (
+            microphonePermission() !=
+                CameraPermission.GRANTED
+        ) {
+
+            Log.e(
+                TAG,
+                "Camera Test: microphone permission not granted " +
+                    "(DAT 1.0 camera streams always carry audio)"
+            )
+
+            return@channelFlow
+        }
+
         if (camera != null) {
             stopCameraIfNeeded()
         }
@@ -1615,7 +1703,39 @@ class RealGlassesBackend @Inject constructor(
         camera =
             activeCamera
 
+        // Stream errors were previously invisible: a denied microphone
+        // permission (MICROPHONE_PERMISSION_DENIED) left the stream in
+        // STARTING with nothing in the log. Collect them for the whole
+        // stream lifetime and let the start wait bail on the first one.
+        val firstStreamError =
+            AtomicReference<String?>(null)
+
+        var streamErrorJob: Job? = null
+
         try {
+
+            streamErrorJob =
+                launch {
+
+                    try {
+
+                        activeCamera.stream.errorStream.collect { error ->
+
+                            Log.e(
+                                TAG,
+                                "Camera Test stream error: $error"
+                            )
+
+                            firstStreamError.compareAndSet(
+                                null,
+                                error.toString(),
+                            )
+                        }
+
+                    } catch (_: Exception) {
+                        // Stream is gone; the start/frame paths report.
+                    }
+                }
 
             activeCamera.stream
                 .start()
@@ -1634,12 +1754,16 @@ class RealGlassesBackend @Inject constructor(
                     CAMERA_STREAM_TIMEOUT_MS
                 ) {
 
-                    activeCamera.stream.state.first {
-                        it ==
-                            StreamState.STREAMING
+                    while (
+                        activeCamera.stream.state.value !=
+                            StreamState.STREAMING &&
+                        firstStreamError.get() == null
+                    ) {
+                        delay(200)
                     }
 
-                    true
+                    activeCamera.stream.state.value ==
+                        StreamState.STREAMING
 
                 } ?: false
 
@@ -1647,7 +1771,9 @@ class RealGlassesBackend @Inject constructor(
 
                 Log.e(
                     TAG,
-                    "Camera Test stream did not reach STREAMING"
+                    "Camera Test stream did not reach STREAMING " +
+                        "(state=${activeCamera.stream.state.value}, " +
+                        "firstError=${firstStreamError.get()})"
                 )
 
                 return@channelFlow
@@ -1672,6 +1798,8 @@ class RealGlassesBackend @Inject constructor(
             )
 
         } finally {
+
+            streamErrorJob?.cancel()
 
             stopCameraIfNeeded()
         }
@@ -1748,6 +1876,20 @@ class RealGlassesBackend @Inject constructor(
             return@channelFlow
         }
 
+        if (
+            microphonePermission() !=
+                CameraPermission.GRANTED
+        ) {
+
+            Log.e(
+                TAG,
+                "Live stream: microphone permission not granted " +
+                    "(DAT 1.0 camera streams always carry audio)"
+            )
+
+            return@channelFlow
+        }
+
         if (camera != null) {
             stopCameraIfNeeded()
         }
@@ -1792,7 +1934,38 @@ class RealGlassesBackend @Inject constructor(
         camera =
             activeCamera
 
+        // See cameraTestFrames: stream errors (notably
+        // MICROPHONE_PERMISSION_DENIED) must be visible, and the
+        // start wait bails on the first one instead of stalling.
+        val firstStreamError =
+            AtomicReference<String?>(null)
+
+        var streamErrorJob: Job? = null
+
         try {
+
+            streamErrorJob =
+                launch {
+
+                    try {
+
+                        activeCamera.stream.errorStream.collect { error ->
+
+                            Log.e(
+                                TAG,
+                                "Live stream error: $error"
+                            )
+
+                            firstStreamError.compareAndSet(
+                                null,
+                                error.toString(),
+                            )
+                        }
+
+                    } catch (_: Exception) {
+                        // Stream is gone; the start/frame paths report.
+                    }
+                }
 
             activeCamera.stream
                 .start()
@@ -1811,12 +1984,16 @@ class RealGlassesBackend @Inject constructor(
                     CAMERA_STREAM_TIMEOUT_MS
                 ) {
 
-                    activeCamera.stream.state.first {
-                        it ==
-                            StreamState.STREAMING
+                    while (
+                        activeCamera.stream.state.value !=
+                            StreamState.STREAMING &&
+                        firstStreamError.get() == null
+                    ) {
+                        delay(200)
                     }
 
-                    true
+                    activeCamera.stream.state.value ==
+                        StreamState.STREAMING
 
                 } ?: false
 
@@ -1824,7 +2001,9 @@ class RealGlassesBackend @Inject constructor(
 
                 Log.e(
                     TAG,
-                    "Live stream did not reach STREAMING"
+                    "Live stream did not reach STREAMING " +
+                        "(state=${activeCamera.stream.state.value}, " +
+                        "firstError=${firstStreamError.get()})"
                 )
 
                 return@channelFlow
@@ -1907,6 +2086,8 @@ class RealGlassesBackend @Inject constructor(
             )
 
         } finally {
+
+            streamErrorJob?.cancel()
 
             stopCameraIfNeeded()
         }

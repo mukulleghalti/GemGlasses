@@ -244,6 +244,7 @@
     <string name="camera_status_video_saved_no_audio">Video gespeichert (ohne Ton)</string>
     <string name="camera_status_rec_stopped">Aufnahme gestoppt</string>
     <string name="camera_error_permission">Erteile die Kameraberechtigung der Meta-Brille, um den Kameratest zu nutzen</string>
+    <string name="camera_error_microphone_permission">Der Kamerastream nimmt auch Audio auf. Erteilen Sie die Mikrofonberechtigung der Meta-Brille, um den Kameratest zu nutzen</string>
     <string name="camera_grant">Erlauben</string>
     <string name="camera_error_jpeg">Foto aufgenommen, aber JPEG konnte nicht dekodiert werden</string>
     <string name="camera_error_no_video">Es wurde keine Videodatei erstellt</string>
@@ -302,4 +303,14 @@
     <string name="settings_grok_key_checking">Schlüssel wird bei xAI geprüft…</string>
     <string name="settings_grok_model">Grok-Modell</string>
     <string name="error_grok_key_missing">Grok API-Schlüssel fehlt — fügen Sie ihn unter Einstellungen → KI hinzu, um die Grok-Stimme zu nutzen.</string>
+    <string name="settings_provider_claude">Claude</string>
+    <string name="settings_provider_claude_sub">Anthropic</string>
+    <string name="settings_claude_key">Claude API-Schlüssel</string>
+    <string name="settings_claude_key_dialog_title">Claude API-Schlüssel</string>
+    <string name="settings_claude_key_note">Erstellen Sie einen Schlüssel auf console.anthropic.com. Er wird verschlüsselt auf diesem Telefon gespeichert und nur an Anthropic gesendet.</string>
+    <string name="settings_claude_key_checking">Schlüssel wird bei Anthropic geprüft…</string>
+    <string name="settings_claude_model">Claude-Modell</string>
+    <string name="error_claude_key_missing">Claude API-Schlüssel fehlt — fügen Sie ihn unter Einstellungen → KI hinzu, um die Claude-Stimme zu nutzen.</string>
+    <string name="error_claude_stt_unavailable">Das Sprachmodell auf dem Gerät konnte nicht geladen werden. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.</string>
+    <string name="error_claude_tts">Text-to-Speech ist auf diesem Telefon nicht verfügbar, daher kann der Claude-Anbieter nicht sprechen.</string>
 </resources>

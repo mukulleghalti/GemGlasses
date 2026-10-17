@@ -117,6 +117,23 @@ interface GlassesBackend {
     ) {}
 
     /**
+     * DAT MICROPHONE permission. Since DAT 1.0 every camera stream
+     * carries glasses-mic audio (StreamConfiguration requires an
+     * audioCodec), no camera feature works without it: streams stall
+     * in STARTING with MICROPHONE_PERMISSION_DENIED. Defaults keep
+     * non-real backends (mock) permission-free.
+     */
+    suspend fun microphonePermission(): CameraPermission =
+        CameraPermission.GRANTED
+
+    suspend fun requestMicrophonePermission(): CameraPermission =
+        CameraPermission.GRANTED
+
+    fun setMicrophonePermissionRequester(
+        requester: suspend () -> CameraPermission,
+    ) {}
+
+    /**
      * Capture-button listener switch. When false (the default), sessions
      * never attach DAT Inputs, so the capture button stays with the
      * glasses (native / Meta AI photos) while Veyra is connected.

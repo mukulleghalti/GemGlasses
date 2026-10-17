@@ -244,6 +244,7 @@
     <string name="camera_status_video_saved_no_audio">Video guardado (sin audio)</string>
     <string name="camera_status_rec_stopped">Grabación detenida</string>
     <string name="camera_error_permission">Concede el permiso de cámara de las gafas Meta para usar la prueba de cámara</string>
+    <string name="camera_error_microphone_permission">La transmisión de la cámara también graba audio. Concede el permiso de micrófono de las gafas Meta para usar la prueba de cámara</string>
     <string name="camera_grant">Permitir</string>
     <string name="camera_error_jpeg">Foto capturada pero no se pudo decodificar el JPEG</string>
     <string name="camera_error_no_video">No se creó ningún archivo de video</string>
@@ -302,4 +303,14 @@
     <string name="settings_grok_key_checking">Verificando la clave con xAI…</string>
     <string name="settings_grok_model">Modelo de Grok</string>
     <string name="error_grok_key_missing">Falta la clave API de Grok — añádela en Ajustes → IA para usar la voz de Grok.</string>
+    <string name="settings_provider_claude">Claude</string>
+    <string name="settings_provider_claude_sub">Anthropic</string>
+    <string name="settings_claude_key">Clave API de Claude</string>
+    <string name="settings_claude_key_dialog_title">Clave API de Claude</string>
+    <string name="settings_claude_key_note">Crea una clave en console.anthropic.com. Se guarda cifrada en este teléfono y solo se envía a Anthropic.</string>
+    <string name="settings_claude_key_checking">Verificando la clave con Anthropic…</string>
+    <string name="settings_claude_model">Modelo de Claude</string>
+    <string name="error_claude_key_missing">Falta la clave API de Claude — añádela en Ajustes → IA para usar la voz de Claude.</string>
+    <string name="error_claude_stt_unavailable">No se pudo cargar el modelo de voz en el dispositivo. Revisa tu conexión e inténtalo de nuevo.</string>
+    <string name="error_claude_tts">La conversión de texto a voz no está disponible en este teléfono, así que el proveedor Claude no puede hablar.</string>
 </resources>
