@@ -294,4 +294,12 @@
     <string name="live_error_camera_permission">L\'autorisation de la caméra n\'a pas été accordée, le flux ne peut donc pas démarrer.</string>
     <string name="camera_permission_granted">Autorisation de la caméra : accordée</string>
     <string name="camera_permission_missing">Autorisation de la caméra : non accordée</string>
+    <string name="settings_provider_grok">Grok</string>
+    <string name="settings_provider_grok_sub">xAI</string>
+    <string name="settings_grok_key">Clé API Grok</string>
+    <string name="settings_grok_key_dialog_title">Clé API Grok</string>
+    <string name="settings_grok_key_note">Créez une clé sur console.x.ai. Elle est stockée chiffrée sur ce téléphone et envoyée uniquement à xAI.</string>
+    <string name="settings_grok_key_checking">Vérification de la clé auprès de xAI…</string>
+    <string name="settings_grok_model">Modèle Grok</string>
+    <string name="error_grok_key_missing">La clé API Grok est manquante — ajoutez-la dans Réglages → IA pour utiliser la voix Grok.</string>
 </resources>

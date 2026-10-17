@@ -294,4 +294,12 @@
     <string name="live_error_camera_permission">L\'autorizzazione della fotocamera non è stata concessa, quindi lo stream non può partire.</string>
     <string name="camera_permission_granted">Autorizzazione fotocamera: concessa</string>
     <string name="camera_permission_missing">Autorizzazione fotocamera: non concessa</string>
+    <string name="settings_provider_grok">Grok</string>
+    <string name="settings_provider_grok_sub">xAI</string>
+    <string name="settings_grok_key">Chiave API Grok</string>
+    <string name="settings_grok_key_dialog_title">Chiave API Grok</string>
+    <string name="settings_grok_key_note">Crea una chiave su console.x.ai. Viene salvata cifrata su questo telefono e inviata solo a xAI.</string>
+    <string name="settings_grok_key_checking">Verifica della chiave con xAI…</string>
+    <string name="settings_grok_model">Modello Grok</string>
+    <string name="error_grok_key_missing">Manca la chiave API Grok — aggiungila in Impostazioni → IA per usare la voce Grok.</string>
 </resources>

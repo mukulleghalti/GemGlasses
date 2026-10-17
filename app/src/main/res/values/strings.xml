@@ -317,4 +317,12 @@
     <string name="live_error_camera_permission">Camera permission was not granted, so the stream cannot start.</string>
     <string name="camera_permission_granted">Camera permission: granted</string>
     <string name="camera_permission_missing">Camera permission: not granted</string>
+    <string name="settings_provider_grok">Grok</string>
+    <string name="settings_provider_grok_sub">xAI</string>
+    <string name="settings_grok_key">Grok API key</string>
+    <string name="settings_grok_key_dialog_title">Grok API key</string>
+    <string name="settings_grok_key_note">Create a key at console.x.ai. It\'s stored encrypted on this phone and sent only to xAI.</string>
+    <string name="settings_grok_key_checking">Verifying key with xAI…</string>
+    <string name="settings_grok_model">Grok model</string>
+    <string name="error_grok_key_missing">Grok API key is missing — add it in Settings → AI to use Grok voice.</string>
 </resources>

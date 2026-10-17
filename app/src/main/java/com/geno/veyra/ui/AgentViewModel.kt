@@ -17,6 +17,7 @@ import com.geno.veyra.glasses.GlassesDevice
 import com.geno.veyra.glasses.GlassesManager
 import com.geno.veyra.glasses.RegistrationState
 import com.geno.veyra.glasses.ConnectionState
+import com.geno.veyra.grok.GrokConnectionCheck
 import com.geno.veyra.openai.OpenAiConnectionCheck
 import com.geno.veyra.service.AgentForegroundService
 import com.geno.veyra.live.LiveStreamManager
@@ -26,6 +27,7 @@ import com.geno.veyra.settings.AiProvider
 import com.geno.veyra.settings.AppLocaleStore
 import com.geno.veyra.settings.AudioOutput
 import com.geno.veyra.settings.GeminiKeyRepository
+import com.geno.veyra.settings.GrokKeyRepository
 import com.geno.veyra.settings.OpenAiKeyRepository
 import com.geno.veyra.settings.Memory
 import com.geno.veyra.settings.MemoryRepository
@@ -66,6 +68,8 @@ class AgentViewModel @Inject constructor(
     private val tokenProvider: TokenProvider,
     private val openAiKeyRepository: OpenAiKeyRepository,
     private val openAiConnectionCheck: OpenAiConnectionCheck,
+    private val grokKeyRepository: GrokKeyRepository,
+    private val grokConnectionCheck: GrokConnectionCheck,
     private val micMute: MicMuteController,
     private val memoryRepository: MemoryRepository,
     private val smartHome: SmartHomeController,
@@ -625,6 +629,46 @@ class AgentViewModel @Inject constructor(
     fun clearOpenAiKey() {
         openAiKeyRepository.clearKey()
         _openAiKeyState.value = ApiKeyState.Missing
+    }
+
+    fun setGrokModel(modelId: String) {
+        viewModelScope.launch {
+            settings.setGrokModel(modelId)
+        }
+    }
+
+    // --- Grok (xAI) API key --------------------------------------------------
+
+    /** Status of the saved Grok key, verified against xAI's API. */
+    private val _grokKeyState = MutableStateFlow<ApiKeyState>(
+        if (grokKeyRepository.hasKey()) ApiKeyState.Unchecked else ApiKeyState.Missing,
+    )
+    val grokKeyState: StateFlow<ApiKeyState> = _grokKeyState
+
+    /** The saved Grok key, for prefilling the Settings field. */
+    val savedGrokKey: String?
+        get() = grokKeyRepository.getKey()
+
+    /**
+     * Saves the key verbatim (no format checks) and immediately verifies
+     * it against xAI's /v1/models endpoint, mirroring [saveOpenAiKey].
+     */
+    fun saveGrokKey(key: String) {
+        viewModelScope.launch {
+            grokKeyRepository.saveKey(key)
+            _grokKeyState.value = ApiKeyState.Checking
+            _grokKeyState.value = try {
+                grokConnectionCheck.verifyKey(key)
+                ApiKeyState.Valid
+            } catch (e: Exception) {
+                ApiKeyState.Invalid(e.message)
+            }
+        }
+    }
+
+    fun clearGrokKey() {
+        grokKeyRepository.clearKey()
+        _grokKeyState.value = ApiKeyState.Missing
     }
 
     /**

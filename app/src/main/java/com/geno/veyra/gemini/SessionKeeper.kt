@@ -2,6 +2,7 @@ package com.geno.veyra.gemini
 
 import android.util.Log
 import com.geno.veyra.gemini.protocol.FunctionResponse
+import com.geno.veyra.grok.DEFAULT_GROK_VOICE_MODEL
 import com.geno.veyra.openai.DEFAULT_OPENAI_VOICE_MODEL
 import com.geno.veyra.settings.DEFAULT_LIVE_MODEL
 import kotlinx.coroutines.CoroutineScope
@@ -30,6 +31,11 @@ data class SessionConfig(
      * by the OpenAI keeper; the Gemini keeper ignores it.
      */
     val openAiModel: String = DEFAULT_OPENAI_VOICE_MODEL,
+    /**
+     * Voice model id chosen in AI Settings (Grok Model). Only read by
+     * the Grok keeper; the other keepers ignore it.
+     */
+    val grokModel: String = DEFAULT_GROK_VOICE_MODEL,
     /**
      * Whether talking over the assistant cuts it off. When false the
      * session is created with activityHandling=NO_INTERRUPTION, so the

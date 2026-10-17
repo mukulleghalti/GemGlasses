@@ -97,10 +97,10 @@ fun HomeScreen(
     // No key for the active provider: the assistant cannot run, so say
     // so up front instead of failing later (tap opens Settings).
     val noKeySet =
-        if (prefs.aiProvider == AiProvider.OPENAI) {
-            viewModel.savedOpenAiKey == null
-        } else {
-            viewModel.savedApiKey == null
+        when (prefs.aiProvider) {
+            AiProvider.OPENAI -> viewModel.savedOpenAiKey == null
+            AiProvider.GROK -> viewModel.savedGrokKey == null
+            AiProvider.GEMINI -> viewModel.savedApiKey == null
         }
 
     /*

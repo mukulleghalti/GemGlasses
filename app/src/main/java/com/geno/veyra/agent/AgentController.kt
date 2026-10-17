@@ -17,6 +17,7 @@ import com.geno.veyra.gemini.SessionEvent
 import com.geno.veyra.gemini.SessionKeeper
 import com.geno.veyra.gemini.ToolFlags
 import com.geno.veyra.gemini.VoiceSessionKeeper
+import com.geno.veyra.grok.realtime.GrokSessionKeeper
 import com.geno.veyra.openai.realtime.RealtimeSessionKeeper
 import com.geno.veyra.settings.AiProvider
 import com.geno.veyra.gemini.ToolRegistry
@@ -61,6 +62,7 @@ class AgentController @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val sessionKeeper: SessionKeeper,
     private val realtimeKeeper: RealtimeSessionKeeper,
+    private val grokKeeper: GrokSessionKeeper,
     private val toolRegistry: ToolRegistry,
     private val micStreamer: MicStreamer,
     private val speaker: SpeakerSink,
@@ -80,8 +82,9 @@ class AgentController @Inject constructor(
     private var micJob: Job? = null
 
     /**
-     * The keeper for the running session — [sessionKeeper] (Gemini) or
-     * [realtimeKeeper] (ChatGPT), chosen from the AI provider in
+     * The keeper for the running session — [sessionKeeper] (Gemini),
+     * [realtimeKeeper] (ChatGPT) or the Grok keeper, chosen from the AI
+     * provider in
      * Settings each time the assistant starts. Null when idle.
      */
     @Volatile
@@ -178,11 +181,18 @@ class AgentController @Inject constructor(
              * wake-word path lands here too.
              */
             val keeper: VoiceSessionKeeper =
-                if (prefs.aiProvider == AiProvider.OPENAI) {
-                    Log.i(TAG, "Starting assistant with ChatGPT (OpenAI Realtime)")
-                    realtimeKeeper
-                } else {
-                    sessionKeeper
+                when (prefs.aiProvider) {
+                    AiProvider.OPENAI -> {
+                        Log.i(TAG, "Starting assistant with ChatGPT (OpenAI Realtime)")
+                        realtimeKeeper
+                    }
+
+                    AiProvider.GROK -> {
+                        Log.i(TAG, "Starting assistant with Grok (xAI Speech to Speech)")
+                        grokKeeper
+                    }
+
+                    AiProvider.GEMINI -> sessionKeeper
                 }
             activeKeeper = keeper
 
@@ -233,6 +243,7 @@ class AgentController @Inject constructor(
                     ),
                     model = prefs.liveModel,
                     openAiModel = prefs.chatGptModel,
+                    grokModel = prefs.grokModel,
                 ),
             )
 

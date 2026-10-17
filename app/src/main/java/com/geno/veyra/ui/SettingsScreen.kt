@@ -65,6 +65,7 @@ import com.geno.veyra.settings.LIVE_MODELS
 import com.geno.veyra.settings.LocaleHelper
 import com.geno.veyra.settings.defaultWakePhrase
 import com.geno.veyra.settings.wakeBaseLanguage
+import com.geno.veyra.grok.GROK_VOICE_MODELS
 import com.geno.veyra.openai.OPENAI_VOICE_MODELS
 import com.geno.veyra.wakeword.WakeWordModelState
 
@@ -91,6 +92,8 @@ fun SettingsScreen(
     var showProviderDialog by remember { mutableStateOf(false) }
     var showChatGptKeyDialog by remember { mutableStateOf(false) }
     var showChatGptModelDialog by remember { mutableStateOf(false) }
+    var showGrokKeyDialog by remember { mutableStateOf(false) }
+    var showGrokModelDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showDiagnosticsDialog by remember { mutableStateOf(false) }
 
@@ -110,6 +113,7 @@ fun SettingsScreen(
     val apiKeySet = viewModel.savedApiKey != null
     val apiKeyState by viewModel.apiKeyState.collectAsStateWithLifecycle()
     val openAiKeySet = viewModel.savedOpenAiKey != null
+    val grokKeySet = viewModel.savedGrokKey != null
     val appLanguageTag by viewModel.appLanguage.collectAsStateWithLifecycle()
     val appLanguage = AppLanguage.fromTag(appLanguageTag)
     val activity = LocalContext.current as? Activity
@@ -221,10 +225,15 @@ fun SettingsScreen(
         SettingRow(
             title = stringResource(R.string.settings_ai_provider),
             value = stringResource(
-                if (prefs.aiProvider == AiProvider.OPENAI) {
-                    R.string.settings_provider_chatgpt
-                } else {
-                    R.string.settings_provider_gemini
+                when (prefs.aiProvider) {
+                    AiProvider.OPENAI ->
+                        R.string.settings_provider_chatgpt
+
+                    AiProvider.GROK ->
+                        R.string.settings_provider_grok
+
+                    AiProvider.GEMINI ->
+                        R.string.settings_provider_gemini
                 },
             ),
             onClick = { showProviderDialog = true },
@@ -240,7 +249,18 @@ fun SettingsScreen(
                 onClick = { showChatGptKeyDialog = true },
             )
         }
-        if (prefs.aiProvider != AiProvider.OPENAI) {
+        if (prefs.aiProvider == AiProvider.GROK) {
+            SettingRow(
+                title = stringResource(R.string.settings_grok_key),
+                value = if (grokKeySet) {
+                    stringResource(R.string.settings_api_key_set)
+                } else {
+                    stringResource(R.string.settings_api_key_not_set)
+                },
+                onClick = { showGrokKeyDialog = true },
+            )
+        }
+        if (prefs.aiProvider == AiProvider.GEMINI) {
             SettingRow(
                 title = stringResource(R.string.settings_api_key),
                 value = if (apiKeySet) stringResource(R.string.settings_api_key_set) else stringResource(R.string.settings_api_key_not_set),
@@ -271,21 +291,35 @@ fun SettingsScreen(
                 )
             },
         )
-        if (prefs.aiProvider == AiProvider.OPENAI) {
-            SettingRow(
-                title = stringResource(R.string.settings_chatgpt_model),
-                value = OPENAI_VOICE_MODELS.firstOrNull {
-                    it.id == prefs.chatGptModel
-                }?.label ?: prefs.chatGptModel,
-                onClick = { showChatGptModelDialog = true },
-            )
-        } else {
-            SettingRow(
-                title = stringResource(R.string.settings_gemini_model),
-                value = LIVE_MODELS.firstOrNull { it.id == prefs.liveModel }
-                    ?.label ?: prefs.liveModel,
-                onClick = { showModelDialog = true },
-            )
+        when (prefs.aiProvider) {
+            AiProvider.OPENAI -> {
+                SettingRow(
+                    title = stringResource(R.string.settings_chatgpt_model),
+                    value = OPENAI_VOICE_MODELS.firstOrNull {
+                        it.id == prefs.chatGptModel
+                    }?.label ?: prefs.chatGptModel,
+                    onClick = { showChatGptModelDialog = true },
+                )
+            }
+
+            AiProvider.GROK -> {
+                SettingRow(
+                    title = stringResource(R.string.settings_grok_model),
+                    value = GROK_VOICE_MODELS.firstOrNull {
+                        it.id == prefs.grokModel
+                    }?.label ?: prefs.grokModel,
+                    onClick = { showGrokModelDialog = true },
+                )
+            }
+
+            AiProvider.GEMINI -> {
+                SettingRow(
+                    title = stringResource(R.string.settings_gemini_model),
+                    value = LIVE_MODELS.firstOrNull { it.id == prefs.liveModel }
+                        ?.label ?: prefs.liveModel,
+                    onClick = { showModelDialog = true },
+                )
+            }
         }
         SettingRow(
             title = stringResource(R.string.settings_auto_titles),
@@ -428,6 +462,16 @@ fun SettingsScreen(
             onDismiss = { showChatGptModelDialog = false },
         )
     }
+    if (showGrokModelDialog) {
+        GrokModelDialog(
+            current = prefs.grokModel,
+            onSelect = {
+                viewModel.setGrokModel(it)
+                showGrokModelDialog = false
+            },
+            onDismiss = { showGrokModelDialog = false },
+        )
+    }
     if (showVoiceDialog) {
         VoiceDialog(
             current = prefs.voiceName,
@@ -480,6 +524,12 @@ fun SettingsScreen(
         ChatGptKeyDialog(
             viewModel = viewModel,
             onDismiss = { showChatGptKeyDialog = false },
+        )
+    }
+    if (showGrokKeyDialog) {
+        GrokKeyDialog(
+            viewModel = viewModel,
+            onDismiss = { showGrokKeyDialog = false },
         )
     }
     if (showDiagnosticsDialog) {
@@ -1214,6 +1264,11 @@ private fun ProviderDialog(
             R.string.settings_provider_chatgpt,
             R.string.settings_provider_chatgpt_sub,
         ),
+        Triple(
+            AiProvider.GROK,
+            R.string.settings_provider_grok,
+            R.string.settings_provider_grok_sub,
+        ),
     )
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1434,6 +1489,189 @@ private fun ChatGptKeyDialog(
                 )
                 Text(
                     stringResource(R.string.settings_chatgpt_key_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
+        },
+    )
+}
+
+/**
+ * Picks the Grok voice model used by the Grok provider.
+ * Mirrors [ChatGptModelDialog].
+ */
+@Composable
+private fun GrokModelDialog(
+    current: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_grok_model)) },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 420.dp),
+            ) {
+                items(GROK_VOICE_MODELS) { model ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(model.id) }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween,
+                        verticalAlignment =
+                            Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            model.label,
+                            style =
+                                MaterialTheme.typography.bodyLarge,
+                        )
+                        RadioButton(
+                            selected = model.id == current,
+                            onClick = { onSelect(model.id) },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
+        },
+    )
+}
+
+/**
+ * Manages the user's own xAI API key. Mirrors [ChatGptKeyDialog]:
+ * the key is stored verbatim and verified against xAI's /v1/models
+ * endpoint on save.
+ */
+@Composable
+private fun GrokKeyDialog(
+    viewModel: AgentViewModel,
+    onDismiss: () -> Unit,
+) {
+    val grokKeyState by viewModel.grokKeyState.collectAsStateWithLifecycle()
+    var keyInput by remember {
+        mutableStateOf(viewModel.savedGrokKey.orEmpty())
+    }
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_grok_key_dialog_title)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(
+                    rememberScrollState(),
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedTextField(
+                    value = keyInput,
+                    onValueChange = { keyInput = it },
+                    label = { Text(stringResource(R.string.settings_apikey_label)) },
+                    singleLine = true,
+                    visualTransformation =
+                        if (passwordVisible) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                passwordVisible = !passwordVisible
+                            },
+                        ) {
+                            Icon(
+                                imageVector =
+                                    if (passwordVisible) {
+                                        Icons.Filled.VisibilityOff
+                                    } else {
+                                        Icons.Filled.Visibility
+                                    },
+                                contentDescription =
+                                    if (passwordVisible) {
+                                        stringResource(R.string.settings_apikey_hide)
+                                    } else {
+                                        stringResource(R.string.settings_apikey_show)
+                                    },
+                            )
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (keyInput.isNotBlank()) {
+                                viewModel.saveGrokKey(keyInput)
+                            }
+                        },
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Button(
+                        onClick = { viewModel.saveGrokKey(keyInput) },
+                        enabled = keyInput.isNotBlank() &&
+                            grokKeyState !=
+                            AgentViewModel.ApiKeyState.Checking,
+                    ) {
+                        Text(stringResource(R.string.settings_apikey_save_test))
+                    }
+                    if (viewModel.savedGrokKey != null) {
+                        TextButton(
+                            onClick = {
+                                viewModel.clearGrokKey()
+                                keyInput = ""
+                            },
+                        ) {
+                            Text(stringResource(R.string.settings_apikey_remove))
+                        }
+                    }
+                }
+
+                val statusText = when (val state = grokKeyState) {
+                    AgentViewModel.ApiKeyState.Unchecked ->
+                        stringResource(R.string.settings_apikey_unchecked)
+                    AgentViewModel.ApiKeyState.Checking ->
+                        stringResource(R.string.settings_grok_key_checking)
+                    AgentViewModel.ApiKeyState.Valid ->
+                        stringResource(R.string.settings_apikey_valid)
+                    is AgentViewModel.ApiKeyState.Invalid ->
+                        stringResource(
+                        R.string.settings_apikey_invalid,
+                        state.message
+                            ?: stringResource(R.string.settings_conn_fallback),
+                    )
+                    AgentViewModel.ApiKeyState.Missing ->
+                        stringResource(R.string.settings_apikey_missing)
+                }
+                val statusColor =
+                    if (grokKeyState is AgentViewModel.ApiKeyState.Invalid) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                Text(
+                    statusText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = statusColor,
+                )
+                Text(
+                    stringResource(R.string.settings_grok_key_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

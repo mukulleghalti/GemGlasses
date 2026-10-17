@@ -294,4 +294,12 @@
     <string name="live_error_camera_permission">A permissão da câmera não foi concedida, então a transmissão não pode começar.</string>
     <string name="camera_permission_granted">Permissão da câmera: concedida</string>
     <string name="camera_permission_missing">Permissão da câmera: não concedida</string>
+    <string name="settings_provider_grok">Grok</string>
+    <string name="settings_provider_grok_sub">xAI</string>
+    <string name="settings_grok_key">Chave API do Grok</string>
+    <string name="settings_grok_key_dialog_title">Chave API do Grok</string>
+    <string name="settings_grok_key_note">Crie uma chave em console.x.ai. Ela fica criptografada neste telefone e só é enviada à xAI.</string>
+    <string name="settings_grok_key_checking">Verificando a chave com a xAI…</string>
+    <string name="settings_grok_model">Modelo do Grok</string>
+    <string name="error_grok_key_missing">A chave API do Grok está faltando — adicione-a em Configurações → IA para usar a voz do Grok.</string>
 </resources>

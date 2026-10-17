@@ -294,4 +294,12 @@
     <string name="live_error_camera_permission">Die Kameraberechtigung wurde nicht erteilt, der Stream kann nicht starten.</string>
     <string name="camera_permission_granted">Kameraberechtigung: erteilt</string>
     <string name="camera_permission_missing">Kameraberechtigung: nicht erteilt</string>
+    <string name="settings_provider_grok">Grok</string>
+    <string name="settings_provider_grok_sub">xAI</string>
+    <string name="settings_grok_key">Grok API-Schlüssel</string>
+    <string name="settings_grok_key_dialog_title">Grok API-Schlüssel</string>
+    <string name="settings_grok_key_note">Erstellen Sie einen Schlüssel auf console.x.ai. Er wird verschlüsselt auf diesem Telefon gespeichert und nur an xAI gesendet.</string>
+    <string name="settings_grok_key_checking">Schlüssel wird bei xAI geprüft…</string>
+    <string name="settings_grok_model">Grok-Modell</string>
+    <string name="error_grok_key_missing">Grok API-Schlüssel fehlt — fügen Sie ihn unter Einstellungen → KI hinzu, um die Grok-Stimme zu nutzen.</string>
 </resources>

@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.geno.veyra.R
+import com.geno.veyra.grok.DEFAULT_GROK_VOICE_MODEL
+import com.geno.veyra.grok.GROK_VOICE_MODELS
 import com.geno.veyra.openai.DEFAULT_OPENAI_VOICE_MODEL
 import com.geno.veyra.openai.OPENAI_VOICE_MODELS
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -125,6 +127,7 @@ data class AgentPreferences(
     val liveModel: String,
     val aiProvider: AiProvider,
     val chatGptModel: String,
+    val grokModel: String,
 ) {
     /** Built here so the persona text stays in one place. */
     val systemInstruction: String
@@ -219,6 +222,7 @@ data class AgentPreferences(
             liveModel = DEFAULT_LIVE_MODEL,
             aiProvider = AiProvider.GEMINI,
             chatGptModel = DEFAULT_OPENAI_VOICE_MODEL,
+            grokModel = DEFAULT_GROK_VOICE_MODEL,
         )
 
         /** Default wake phrase ("Hey Glasses"). Lowercase: Vosk decodes lowercase. */
@@ -451,6 +455,9 @@ class SettingsRepository @Inject constructor(
     private val chatGptModelKey =
         stringPreferencesKey("chatgpt_model")
 
+    private val grokModelKey =
+        stringPreferencesKey("grok_model")
+
     private val translateSourceLangKey =
         stringPreferencesKey("translate_source_lang")
 
@@ -593,6 +600,13 @@ class SettingsRepository @Inject constructor(
                             OPENAI_VOICE_MODELS.any { it.id == id }
                         }
                         ?: AgentPreferences.DEFAULT.chatGptModel,
+
+                grokModel =
+                    prefs[grokModelKey]
+                        ?.takeIf { id ->
+                            GROK_VOICE_MODELS.any { it.id == id }
+                        }
+                        ?: AgentPreferences.DEFAULT.grokModel,
             )
         }
 
@@ -820,6 +834,14 @@ class SettingsRepository @Inject constructor(
     ) {
         context.dataStore.edit {
             it[chatGptModelKey] = modelId
+        }
+    }
+
+    suspend fun setGrokModel(
+        modelId: String,
+    ) {
+        context.dataStore.edit {
+            it[grokModelKey] = modelId
         }
     }
 }

@@ -8,10 +8,16 @@ package com.geno.veyra.settings
  * on-device OpenAI key is managed by [OpenAiKeyRepository], the voice
  * models are listed in `com.geno.veyra.openai.OpenAiModels`, and the
  * live-voice client lives in `com.geno.veyra.openai.realtime`.
+ *
+ * GROK selects Grok voice via xAI's Speech to Speech API — the same
+ * realtime protocol shape as OpenAI's; the key is managed by
+ * [GrokKeyRepository], the models in `com.geno.veyra.grok.GrokModels`,
+ * and the client in `com.geno.veyra.grok.realtime`.
  */
 enum class AiProvider(val id: String) {
     GEMINI("gemini"),
     OPENAI("openai"),
+    GROK("grok"),
     ;
 
     companion object {
