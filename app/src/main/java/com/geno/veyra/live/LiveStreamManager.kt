@@ -62,6 +62,14 @@ class LiveStreamManager @Inject constructor(
     private var connectStarted = false
 
     @Volatile
+    private var videoCodec: VideoCodec? = null
+
+    private var pendingFirstFrame: LiveFrame.Video? = null
+    private var pendingVps: ByteArray? = null
+    private var pendingSps: ByteArray? = null
+    private var pendingPps: ByteArray? = null
+
+    @Volatile
     private var rtmpLive = false
 
     @Volatile
@@ -97,13 +105,20 @@ class LiveStreamManager @Inject constructor(
         _status.value = Status(State.CONNECTING)
         basePtsUs = -1L
         connectStarted = false
+        videoCodec = null
+        pendingFirstFrame = null
+        pendingVps = null
+        pendingSps = null
+        pendingPps = null
         rtmpLive = false
         loggedFirstFrame = false
 
         LiveForegroundService.start(context)
 
         val rtmp = RtmpClient(this)
-        rtmp.setVideoCodec(VideoCodec.H264)
+        // No setVideoCodec yet: the camera codec is detected from the
+        // first parameter sets (the glasses send HEVC, not H264) and
+        // set in handlePreConnect, before connect.
         rtmp.setAudioCodec(AudioCodec.AAC)
         rtmp.setAudioInfo(SAMPLE_RATE, false)
         client = rtmp
@@ -159,43 +174,28 @@ class LiveStreamManager @Inject constructor(
             )
         }
 
-        // Connect as soon as SPS/PPS are known. DAT flags a
-        // codec-config frame on some builds; on others the SPS/PPS
-        // ride inside the first keyframe — scan every frame until
-        // connected, either way.
-        if (frame.isCodecConfig || (!connectStarted && frame.isCompressed)) {
-            val spsPps = H264.extractSpsPps(frame.data)
-            if (spsPps == null) {
-                if (frame.isCodecConfig) {
-                    Log.e(TAG, "codec config: no SPS/PPS found")
-                    fail("Camera sent a codec config without SPS/PPS.")
-                }
-                return
-            }
-            val (sps, pps) = spsPps
-            val rtmp = client ?: return
-            rtmp.setVideoInfo(
-                ByteBuffer.wrap(sps),
-                ByteBuffer.wrap(pps),
-                null,
-            )
-            rtmp.setVideoResolution(frame.width, frame.height)
-            if (!connectStarted) {
-                connectStarted = true
-                Log.i(TAG, "connecting RTMP")
-                rtmp.connect(fullUrl)
-            }
+        if (!connectStarted) {
+            handlePreConnect(frame, fullUrl)
             return
         }
 
         if (!rtmpLive) return
         if (!frame.isCompressed) return
 
+        sendVideoFrame(frame)
+    }
+
+    private fun sendVideoFrame(frame: LiveFrame.Video) {
+        val isKey = when (videoCodec) {
+            VideoCodec.H265 -> H265.isKeyFrame(frame.data)
+            else -> H264.isKeyFrame(frame.data)
+        }
+
         val info = MediaCodec.BufferInfo().apply {
             offset = 0
             size = frame.data.size
             presentationTimeUs = rebased(frame.ptsUs)
-            flags = if (H264.isKeyFrame(frame.data)) {
+            flags = if (isKey) {
                 MediaCodec.BUFFER_FLAG_KEY_FRAME
             } else {
                 0
@@ -204,6 +204,83 @@ class LiveStreamManager @Inject constructor(
         runCatching {
             client?.sendVideo(ByteBuffer.wrap(frame.data), info)
         }
+    }
+
+    /**
+     * Pre-connect frame handling. Detects the camera codec from the
+     * parameter sets — the glasses send HEVC (VPS/SPS/PPS), older
+     * assumptions said H.264 (SPS/PPS) — buffers the sets across
+     * frames, and connects RTMP as soon as the set is complete.
+     * Frames before connect are dropped; nothing can be sent yet.
+     */
+    private fun handlePreConnect(frame: LiveFrame.Video, fullUrl: String) {
+        if (!frame.isCompressed && !frame.isCodecConfig) return
+
+        val hevc = H265.extractParameterSets(frame.data)
+        val h264 = if (hevc.sps == null && hevc.vps == null) {
+            H264.extractSpsPps(frame.data)
+        } else {
+            null
+        }
+
+        if (videoCodec == null) {
+            val detected = when {
+                hevc.sps != null || hevc.vps != null -> VideoCodec.H265
+                h264 != null -> VideoCodec.H264
+                else -> return
+            }
+            videoCodec = detected
+            Log.i(TAG, "camera codec detected: $detected")
+            client?.setVideoCodec(detected)
+        }
+
+        when (videoCodec) {
+            VideoCodec.H265 -> {
+                if (hevc.vps != null) pendingVps = hevc.vps
+                if (hevc.sps != null) pendingSps = hevc.sps
+                if (hevc.pps != null) pendingPps = hevc.pps
+            }
+            else -> {
+                val pair = h264 ?: H264.extractSpsPps(frame.data)
+                if (pair != null) {
+                    pendingSps = pair.first
+                    pendingPps = pair.second
+                }
+            }
+        }
+
+        // The frame carrying the parameter sets usually also
+        // carries the first IDR slice. Stash it and send it once
+        // RTMP is live, so the stream starts with a keyframe.
+        if (
+            hevc.vps != null || hevc.sps != null || hevc.pps != null ||
+            h264 != null ||
+            H265.isKeyFrame(frame.data) || H264.isKeyFrame(frame.data)
+        ) {
+            pendingFirstFrame = frame
+        }
+
+        val sps = pendingSps ?: return
+        val pps = pendingPps ?: return
+        val rtmp = client ?: return
+        if (videoCodec == VideoCodec.H265) {
+            val vps = pendingVps ?: return
+            rtmp.setVideoInfo(
+                ByteBuffer.wrap(sps),
+                ByteBuffer.wrap(pps),
+                ByteBuffer.wrap(vps),
+            )
+        } else {
+            rtmp.setVideoInfo(
+                ByteBuffer.wrap(sps),
+                ByteBuffer.wrap(pps),
+                null,
+            )
+        }
+        rtmp.setVideoResolution(frame.width, frame.height)
+        connectStarted = true
+        Log.i(TAG, "connecting RTMP ($videoCodec)")
+        rtmp.connect(fullUrl)
     }
 
     private fun rebased(ptsUs: Long): Long {
@@ -243,6 +320,10 @@ class LiveStreamManager @Inject constructor(
     override fun onConnectionSuccess() {
         Log.i(TAG, "RTMP live")
         rtmpLive = true
+        pendingFirstFrame?.let { first ->
+            if (first.isCompressed) sendVideoFrame(first)
+        }
+        pendingFirstFrame = null
         aac?.start()
         _status.value = Status(
             State.LIVE,
