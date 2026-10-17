@@ -1421,10 +1421,22 @@ class RealGlassesBackend @Inject constructor(
 
         try {
 
-            // Use the DAT 1.0.0 standalone Photo API directly — dedicated
-            // high-resolution capture (FULL / HIGH) without starting a
-            // video stream. This is a one-shot vision capture; the camera
-            // is stopped in the finally block below.
+            // Stream capture FIRST: it is the fast, proven path (this
+            // is how vision worked before DAT 1.0, and how Camera Test
+            // succeeds now). The standalone Photo API can take tens of
+            // seconds (STARTED wait + FULL/HIGH transfer), which
+            // overruns the vision burst window — the burst then ends
+            // with zero frames and the user sees no picture in chat.
+            var visionJpeg: ByteArray? =
+                captureViaStream(activeCamera, "Gemini camera")
+
+            if (visionJpeg == null) {
+
+            // Photo API fallback — dedicated high-resolution capture
+            // (FULL / HIGH). The stream is stopped first: Photo and
+            // Stream compete for the camera hardware.
+            runCatching { activeCamera.stream.stop() }
+
             val photo =
                 activeCamera.photo
 
@@ -1436,15 +1448,12 @@ class RealGlassesBackend @Inject constructor(
                     true
                 } ?: false
 
-            var visionJpeg: ByteArray? = null
-
             if (!photoStarted) {
 
                 Log.e(
                     TAG,
                     "Gemini camera: Photo API did not reach STARTED " +
-                        "(state=${photo.state.value}); " +
-                        "using the stream capture fallback"
+                        "(state=${photo.state.value})"
                 )
             }
 
@@ -1571,12 +1580,6 @@ class RealGlassesBackend @Inject constructor(
 
             }
 
-            // Stream fallback: the standalone Photo API is one path to a
-            // still; if it produced nothing, capture from the video
-            // stream itself before giving up.
-            if (visionJpeg == null) {
-                visionJpeg =
-                    captureViaStream(activeCamera, "Gemini camera")
             }
 
             val finalJpeg = visionJpeg
